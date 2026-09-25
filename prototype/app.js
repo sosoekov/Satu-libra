@@ -22,7 +22,6 @@
   function pluralN(n, forms) { return n + ' ' + plural(n, forms); }
   var W_DAYS = ['день', 'дня', 'дней'];
   var W_TRAINEES = ['стажёр', 'стажёра', 'стажёров'];
-  var W_TASKS = ['задача', 'задачи', 'задач'];
 
   function parseISO(s) {
     var p = s.slice(0, 10).split('-');
@@ -389,6 +388,7 @@
     checklistFilter: null,       // 'overdue' — из плашки «Показать»
     checklistSel: null,          // выбранный пункт для ↑ ↓
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
+    markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
     toasts: []
   };
 
@@ -919,7 +919,7 @@
     m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
   }
 
-  // Вкладки стажёра: содержимое — фазы 3 и 4
+  // Вкладки стажёра: «Адаптационная программа» и «Подготовка к выходу»
   function renderTraineePages(t) {
     var tabs = [
       { id: 'program', text: 'Адаптационная программа', name: 'СтраницаАдаптационнаяПрограмма' },
@@ -1144,8 +1144,8 @@
     var selected = !!state.selectedTasks[x.id];
     var late = v === 'overdue' ? diffDays(x.deadline, D.TODAY) : 0;
     var rev = x.reviewerId
-      ? '<span>' + esc(userShort(x.reviewerId)) + '</span>'
-      : '<span class="muted" title="Проверяющий по умолчанию из АП">' + esc(userShort(program.defaultReviewerId)) + ' <span class="text-s">по умолч.</span></span>';
+      ? '<span title="' + esc(user(x.reviewerId).fullName) + '">' + esc(userShort(x.reviewerId)) + '</span>'
+      : '<span class="muted" title="' + esc(user(program.defaultReviewerId).fullName + ' — проверяющий по умолчанию из АП') + '">' + esc(userShort(program.defaultReviewerId)) + ' <span class="text-s">по умолч.</span></span>';
     var obs = observersOf(program, x);
     var obsText = obs.slice(0, 2).map(userShort).join(', ') + (obs.length > 2 ? ' +' + (obs.length - 2) : '');
     var obsHtml = '<span class="' + (x.observerIds.length ? '' : 'muted') + '" title="' + esc(obs.map(function (id) { return user(id).fullName; }).join(', ')) + '">' +
@@ -1408,6 +1408,9 @@
             a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоЭтап_' + s.code) + '>' + (t.stage === s.code ? '● ' : '○ ') + esc(s.title) + '</button>';
         }).join('') + '</div>';
     }
+    if (state.markup) {
+      html += '<span class="markup-flag"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ИндикаторРежимаРазметки') + '>Режим разметки 1С · Shift+D — выключить</span>';
+    }
     html += '<button type="button" class="btn demo-btn" data-action="demoToggle"' +
       (t ? ' title="Сменить этап: ' + esc(t.fullName) + '"' : ' disabled title="Выберите стажёра, чтобы сменить этап"') +
       a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</button>';
@@ -1618,7 +1621,7 @@
     };
   }
 
-  /* ---------- Диалоги фазы 3: задачи и создание АП ---------- */
+  /* ---------- Диалоги: задачи и создание АП ---------- */
 
   function dlgCtx() { return state.dialog.ctx || {}; }
   function dlgRO() { return !!state.dialog.readOnly; }
@@ -1949,7 +1952,7 @@
     }
   };
 
-  /* ---------- Диалоги фазы 4: чек-лист подготовки ---------- */
+  /* ---------- Диалоги: чек-лист подготовки ---------- */
 
   var requestSeq = 124;
   function checklistItemById(id) { return byId(D.checklist, id); }
@@ -2042,7 +2045,6 @@
 
   function openDialog(type, traineeId, ctx) {
     var def = DIALOGS[type];
-    if (!def) { toast('Диалог появится в следующей фазе прототипа'); return; }
     var t = trainee(traineeId);
     ctx = ctx || {};
     var lock = editLock(t);
@@ -2396,6 +2398,13 @@
       e.preventDefault();
       t.click();
     }
+    // НЕ_ПЕРЕНОСИТЬ: Shift+D — режим разметки 1С (не срабатывает при вводе текста)
+    if (e.shiftKey && (e.code === 'KeyD' || e.key === 'D' || e.key === 'В') && !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) {
+      state.markup = !state.markup;
+      document.body.classList.toggle('markup-1c', state.markup);
+      renderDemo();
+      return;
+    }
     if (e.key === 'Escape') {
       if (state.dialog) closeDialog();
       else if (state.openMenu) { state.openMenu = null; renderCenter(); }
@@ -2428,6 +2437,13 @@
     };
   };
   window.plural = plural;
+
+  // НЕ_ПЕРЕНОСИТЬ: элементы без атрибутов соответствия 1С (раздел 7.9)
+  window.check1c = function () {
+    return Array.prototype.filter.call(document.querySelectorAll('button, input, select, table, [data-tab]'), function (x) {
+      return !x.getAttribute('data-1c') || !x.getAttribute('data-1c-name');
+    });
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
