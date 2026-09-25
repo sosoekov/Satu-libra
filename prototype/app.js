@@ -65,7 +65,7 @@
     return null;
   }
   function user(id) { return byId(D.users, id); }
-  function userShort(id) { var u = user(id); return u ? u.shortName : '—'; }
+  function userName(id) { var u = user(id); return u ? u.fullName : '—'; }
   function dept(id) { return byId(D.departments, id); }
   function trainee(id) { return byId(D.trainees, id); }
   function programOf(t) {
@@ -366,12 +366,13 @@
       (opts.disabled ? ' disabled' : '') +
       a1c('Гиперссылка', opts.name || 'ДекорацияСсылка') + '>' + esc(text) + '</button>';
   }
-  // Тумблер: items [{value, text}]
+  // Тумблер: items [{value, text, name, cls, risk}]
   function toggle(name, action, items, current, cls) {
     return '<div class="toggle' + (cls ? ' ' + cls : '') + '"' + a1c('Тумблер', name) + ' role="group">' +
       items.map(function (it) {
-        return '<button type="button" class="' + (it.value === current ? 'on' : '') + '" data-action="' + action +
-          '" data-value="' + esc(it.value) + '"' + a1c('Тумблер', name + 'Вариант' + it.name) + '>' + esc(it.text) + '</button>';
+        var cls = (it.value === current ? 'on' : '') + (it.cls ? ' ' + it.cls : '');
+        return '<button type="button" class="' + cls.trim() + '" data-action="' + action +
+          '" data-value="' + esc(it.value) + '"' + a1c('Тумблер', name + 'Вариант' + it.name, it.risk) + '>' + esc(it.text) + '</button>';
       }).join('') + '</div>';
   }
 
@@ -396,8 +397,7 @@
     openMenu: null,              // открытое подменю
     dialog: null,                // открытый диалог (верхний)
     dialogStack: [],             // формы-владельцы под открытым диалогом
-    taskFilter: null,            // фильтр таблицы задач: 'done' | 'progress' | 'overdue' | 'todo' | 'undone'
-    taskBlock: 'all',            // 'all' | 'corp' | 'spec'
+    taskFilter: null,            // тумблер статусов таблицы задач: null («Все») | 'overdue' | 'progress' | 'todo' | 'done'
     taskSort: { key: null, dir: 1 },
     selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
     collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
@@ -790,7 +790,7 @@
   function isClosed(t) { return t.stage === 'closed'; }
 
   function renderTraineeCard(t) {
-    return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
+    return '<div class="col gap-3 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
       renderHeader(t) +
       renderNextStepRow(t) +
@@ -1031,7 +1031,6 @@
       }).join('') + '</div>' + body + '</div>';
   }
 
-  var TASK_FILTER_TITLES = { done: 'Выполнено', progress: 'В работе', overdue: 'Просрочено', todo: 'Не начато', undone: 'Невыполненные' };
 
   /* ---------------------------------------------------------------------
    * Вкладка «Адаптационная программа» (раздел 7.5)
@@ -1047,7 +1046,7 @@
     { id: 'corp', title: 'Корпоративный блок', short: 'Корпоративный', name: 'Корпоративный' },
     { id: 'spec', title: 'Специальный блок',   short: 'Специальный',   name: 'Специальный' }
   ];
-  // Фильтр по счётчику прогресса → статус для показа
+  // Вариант тумблера статусов → статус задачи
   var FILTER_STATUS = { done: 'done', progress: 'in_progress', overdue: 'overdue', todo: 'not_started' };
 
   function blockMeta(id) { return id === 'spec' ? BLOCKS[1] : BLOCKS[0]; }
@@ -1067,13 +1066,12 @@
 
   function taskMatchesFilter(task, f) {
     if (!f) return true;
-    if (f === 'undone') return task.status !== 'done';
     return viewStatus(task) === FILTER_STATUS[f];
   }
-  // Задачи для таблицы: блок, фильтр, сортировка (по умолчанию — порядок задач в АП)
+  // Задачи для таблицы: фильтр по статусу, сортировка (по умолчанию — порядок задач в АП)
   function visibleTasks(t) {
     var list = tasksOf(programOf(t)).filter(function (x) {
-      return (state.taskBlock === 'all' || x.block === state.taskBlock) && taskMatchesFilter(x, state.taskFilter);
+      return taskMatchesFilter(x, state.taskFilter);
     });
     var s = state.taskSort;
     if (s.key) {
@@ -1093,90 +1091,91 @@
   function reviewerOf(program, task) { return task.reviewerId || program.defaultReviewerId; }
   function observersOf(program, task) { return task.observerIds.length ? task.observerIds : program.defaultObserverIds; }
 
+  // ФИО через запятую; если больше max — «ФИО и ещё N» (фаза 8, раздел 5)
+  function namesBrief(ids, max) {
+    if (ids.length <= max) return ids.map(userName).join(', ');
+    return userName(ids[0]) + ' и ещё ' + (ids.length - 1);
+  }
+  function sameIds(a, b) { return a.length === b.length && a.every(function (id) { return b.indexOf(id) >= 0; }); }
+
+  // Счётчики тумблера статусов; выбранный вариант, ставший нулевым, сбрасывается на «Все» (8.4, 5.2)
+  var STATUS_VARIANTS = [
+    { f: 'overdue', text: 'Просрочено', name: 'Просрочено', cls: 'tv-danger', risk: 'check' },
+    { f: 'progress', text: 'В работе', name: 'ВРаботе' },
+    { f: 'todo', text: 'Не начато', name: 'НеНачато' },
+    { f: 'done', text: 'Выполнено', name: 'Выполнено' }
+  ];
+  function syncTaskFilter(all) {
+    var f = state.taskFilter;
+    if (f && !all.some(function (x) { return taskMatchesFilter(x, f); })) state.taskFilter = null;
+  }
+
   function renderProgramTab(t) {
     var program = programOf(t);
     if (!program) return renderProgramEmpty(t);
     var all = tasksOf(program);
     var lock = editLock(t);
-    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
-      (all.length ? renderProgress(t, all) : '') +
+    syncTaskFilter(all);
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
+      renderDefaultsRow(t, program) +
       (lock ? '<div class="note note-' + (t.stage === 'approval' ? 'info' : 'neutral') + '"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
         '<span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
       renderTaskCommandBar(t, all) +
-      (state.taskFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЗадач') + '>' +
-        '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЗадач') + '>Показаны: <b>' + esc(TASK_FILTER_TITLES[state.taskFilter]) + '</b></span>' +
-        button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'taskFilter', data: { value: '' }, name: 'КнопкаСброситьФильтрЗадач' }) +
-        '</div>' : '') +
       renderTaskTable(t, all) +
       '</div>';
   }
 
-  // Блок прогресса (7.5.1)
-  function renderProgress(t, all) {
-    var st = taskStats(all);
-    function pct(n) { return Math.round(n / st.total * 100); }
-    function seg(cls, n) { return n ? '<span class="' + cls + '" style="width:' + (n / st.total * 100) + '%"></span>' : ''; }
-    var counters = [
-      { f: 'done', n: st.done, text: 'Выполнено', dot: 'success' },
-      { f: 'progress', n: st.progress, text: 'В работе', dot: 'info' },
-      { f: 'overdue', n: st.overdue, text: 'Просрочено', dot: 'danger' },
-      { f: 'todo', n: st.todo, text: 'Не начато', dot: 'neutral' }
-    ].filter(function (c) { return c.n > 0; });
-    var byBlock = BLOCKS.map(function (b) {
-      var list = all.filter(function (x) { return x.block === b.id; });
-      var done = list.filter(function (x) { return x.status === 'done'; }).length;
-      return '<div class="col gap-1"' + a1c('ГруппаВертикальная', 'ГруппаПрогресс' + b.name) + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияПрогресс' + b.name) + '>' + b.title + ': <b>' + done + ' из ' + list.length + '</b></span>' +
-        '<div class="indicator-wrap">' + indicator(list.length ? done / list.length * 100 : 0, 'ИндикаторПрогресс' + b.name, 'success') + '</div></div>';
-    }).join('');
-    return '<div class="panel row top gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаПрогресс') + '>' +
-      '<div class="col gap-3 grow"' + a1c('ГруппаВертикальная', 'ГруппаПрогрессОбщий') + '>' +
-        '<div class="h-block"' + a1c('Надпись', 'ДекорацияПрогрессПоЗадачам') + '>Прогресс по задачам</div>' +
-        '<div class="indicator stacked"' + a1c('Индикатор', 'ПолосаПрогрессаСоставная', 'high') +
-          ' title="' + esc(counters.map(function (c) { return c.text + ': ' + c.n; }).join(', ')) + '">' +
-          seg('seg-done', st.done) + seg('seg-progress', st.progress) + seg('seg-overdue', st.overdue) + seg('seg-todo', st.todo) + '</div>' +
-        '<div class="row wrap gap-4"' + a1c('ГруппаГоризонтальная', 'ГруппаСчетчикиЗадач') + '>' +
-          counters.map(function (c) {
-            var on = state.taskFilter === c.f;
-            return '<span class="row gap-1"><span class="dot dot-' + c.dot + '"></span>' +
-              link(c.text + ' ' + c.n + ' (' + pct(c.n) + '%)', { cls: on ? 'on' : '', action: 'taskFilter', data: { value: on ? '' : c.f },
-                title: on ? 'Сбросить фильтр' : 'Показать задачи: ' + c.text.toLowerCase(), name: 'ГиперссылкаСчетчик' + n1c(c.f) }) + '</span>';
-          }).join('') +
-        '</div>' +
-      '</div>' +
-      '<div class="col gap-3 progress-blocks"' + a1c('ГруппаВертикальная', 'ГруппаПрогрессПоБлокам') + '>' + byBlock + '</div>' +
+  // Строка умолчаний (8.4, 5.1): проверяющий и наблюдатели по умолчанию, «Изменить»
+  function renderDefaultsRow(t, program) {
+    var lock = editLock(t);
+    var rev = program.defaultReviewerId;
+    var obs = program.defaultObserverIds || [];
+    var edit = isClosed(t) ? '' : link(rev ? 'Изменить' : 'Назначить', {
+      action: 'openDialog', data: { dialog: 'reviewers' }, disabled: !!lock,
+      title: lock || 'Проверяющий и наблюдатели по умолчанию для задач АП', name: 'ГиперссылкаИзменитьУмолчания'
+    });
+    return '<div class="row wrap gap-5 defaults-row"' + a1c('ГруппаГоризонтальная', 'ГруппаУмолчания') + '>' +
+      (rev
+        ? '<span class="row gap-1"><span class="muted"' + a1c('Надпись', 'ДекорацияПроверяющийПоУмолчаниюЗаголовок') + '>Проверяющий по умолчанию:</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияПроверяющийПоУмолчанию') + '>' + esc(userName(rev)) + '</span></span>'
+        : '<span class="c-warning"' + a1c('Надпись', 'ДекорацияПроверяющийНеНазначен') + '>Проверяющий по умолчанию не назначен</span>') +
+      '<span class="row gap-1"><span class="muted"' + a1c('Надпись', 'ДекорацияНаблюдателиПоУмолчаниюЗаголовок') + '>Наблюдатели по умолчанию:</span>' +
+        '<span' + (obs.length > 2 ? ' title="' + esc(namesOf(obs)) + '"' : '') + a1c('Надпись', 'ДекорацияНаблюдателиПоУмолчанию') + '>' +
+          (obs.length ? esc(namesBrief(obs, 2)) : '<span class="muted">не назначены</span>') + '</span></span>' +
+      edit +
       '</div>';
   }
 
-  // Командная панель таблицы (7.5.2)
+  // Командная панель таблицы (8.4, 5.2): тумблер статусов, «Добавить», действия с выбранными
   function renderTaskCommandBar(t, all) {
     var lock = editLock(t);
     var sel = selectedTaskIds(t).length;
-    var corp = all.filter(function (x) { return x.block === 'corp'; }).length;
-    var massTitle = lock || (sel ? '' : 'Отметьте задачи флажками');
-    var mass = function (text, action, dialog, name) {
-      return button(text, { action: action, data: dialog ? { dialog: dialog } : null, disabled: !!massTitle, title: massTitle, name: name });
-    };
-    return '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
-      toggle('ТумблерБлокЗадач', 'taskBlock', [
-        { value: 'all', text: 'Все (' + all.length + ')', name: 'Все' },
-        { value: 'corp', text: 'Корпоративный (' + corp + ')', name: 'Корпоративный' },
-        { value: 'spec', text: 'Специальный (' + (all.length - corp) + ')', name: 'Специальный' }
-      ], state.taskBlock) +
+    var items = [{ value: 'all', text: 'Все ' + all.length, name: 'Все' }].concat(STATUS_VARIANTS.map(function (v) {
+      var n = all.filter(function (x) { return taskMatchesFilter(x, v.f); }).length;
+      return n ? { value: v.f, text: v.text + ' ' + n, name: v.name, cls: v.cls, risk: v.risk } : null;
+    }).filter(Boolean));
+    return '<div class="row wrap command-bar command-bar-flat task-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
+      toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
       submenu('addTask', 'ПодменюДобавитьЗадачу', [
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
-      '<span class="bar-sep"></span>' +
-      (sel ? '<span class="bold"' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' : '') +
-      mass('Назначить проверяющего', 'openDialog', 'massReviewer', 'КнопкаНазначитьПроверяющего') +
-      mass('Наблюдатели', 'openDialog', 'massObservers', 'КнопкаНаблюдатели') +
-      mass('Перенести срок', 'openDialog', 'massDeadline', 'КнопкаПеренестиСрок') +
-      mass('Удалить', 'openDialog', 'deleteTasks', 'КнопкаУдалитьЗадачи') +
+      (sel ? '<span class="grow"></span>' +
+        '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
+          '<span class="bold"' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
+          submenu('massActions', 'ПодменюДействияСВыбранными', [
+            menuItem('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего'),
+            menuItem('Наблюдатели', 'openDialog', { dialog: 'massObservers' }, 'КнопкаНаблюдатели'),
+            menuItem('Перенести срок', 'openDialog', { dialog: 'massDeadline' }, 'КнопкаПеренестиСрок'),
+            '<div class="menu-sep"></div>',
+            menuItem('Удалить', 'openDialog', { dialog: 'deleteTasks' }, 'КнопкаУдалитьЗадачи', 'danger-text')
+          ], { text: 'Действия с выбранными ▾' }) +
+          link('Снять выделение', { action: 'clearTaskSelection', name: 'ГиперссылкаСнятьВыделение' }) +
+        '</span>' : '') +
       '</div>';
   }
 
-  // Таблица задач (7.5.3)
+  // Таблица задач (8.4, 5.3–5.4): всегда сгруппирована по блокам
   function renderTaskTable(t, all) {
     var program = programOf(t);
     var lock = editLock(t);
@@ -1191,11 +1190,7 @@
         (lock ? '' : '<div class="row">' + link('Добавить задачу', { action: 'openDialog', data: { dialog: 'task' }, name: 'ГиперссылкаДобавитьЗадачу' }) +
           link('Добавить из шаблона', { action: 'openDialog', data: { dialog: 'addFromTemplate' }, name: 'ГиперссылкаДобавитьИзШаблона' }) + '</div>') +
         '</div></td></tr>';
-    } else if (!list.length) {
-      body = '<tr><td colspan="' + cols + '"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадачСФильтром') + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияНетЗадачСФильтром') + '>Нет задач с таким статусом</span>' +
-        link('Сбросить фильтр', { action: 'taskFilter', data: { value: '' }, name: 'ГиперссылкаСброситьФильтрЗадач' }) + '</div></td></tr>';
-    } else if (state.taskBlock === 'all') {
+    } else {
       body = BLOCKS.map(function (b) {
         var rows = list.filter(function (x) { return x.block === b.id; });
         if (!rows.length) return '';
@@ -1204,12 +1199,14 @@
         var open = !state.collapsedBlocks[b.id];
         return '<tr class="group-row" tabindex="0" data-action="toggleBlockGroup" data-block="' + b.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
           a1c('ТаблицаФормы', 'ТаблицаЗадачАПГруппа' + b.name, 'check') + '>' +
-          '<td colspan="' + cols + '"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') +
-          '<b>' + b.title + '</b><span class="muted">— выполнено ' + done + ' из ' + blockAll.length + '</span></span></td></tr>' +
+          '<td colspan="' + cols + '"><span class="row gap-3">' +
+            '<span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') + '<b>' + b.title + '</b></span>' +
+            '<span class="muted">выполнено ' + done + ' из ' + blockAll.length + '</span>' +
+            '<span class="group-indicator">' + indicator(done / blockAll.length * 100, 'ТаблицаЗадачАПГруппа' + b.name + 'Индикатор', 'success')
+              .replace('data-1c-name="ТаблицаЗадачАПГруппа' + b.name + 'Индикатор"', 'data-1c-name="ТаблицаЗадачАПГруппа' + b.name + 'Индикатор" data-1c-risk="check"') + '</span>' +
+          '</span></td></tr>' +
           (open ? rows.map(function (x) { return taskRow(t, program, x, selectable); }).join('') : '');
       }).join('');
-    } else {
-      body = list.map(function (x) { return taskRow(t, program, x, selectable); }).join('');
     }
 
     var ids = list.map(function (x) { return x.id; });
@@ -1228,31 +1225,28 @@
           (ids.length && selCount === ids.length ? ' checked' : '') + (ids.length ? '' : ' disabled') +
           (selCount && selCount < ids.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаЗадачАПВыбратьВсе') + '></th>' : '') +
         '<th>Задача</th>' + thSort('Статус', 'status') + thSort('Срок', 'deadline') +
-        '<th>Проверяющий</th><th>Наблюдатели</th><th>Результат</th><th></th>' +
+        '<th title="Пусто — проверяющий по умолчанию">Проверяющий</th><th title="Пусто — наблюдатели по умолчанию">Наблюдатели</th><th>Результат</th><th></th>' +
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
+  // Строка задачи: проверяющий и наблюдатели — только если отличаются от умолчаний (8.4, 5.4)
   function taskRow(t, program, x, selectable) {
     var v = viewStatus(x);
     var sm = STATUS_META[v];
     var selected = !!state.selectedTasks[x.id];
     var late = v === 'overdue' ? diffDays(x.deadline, D.TODAY) : 0;
-    var rev = x.reviewerId
-      ? '<span title="' + esc(user(x.reviewerId).fullName) + '">' + esc(userShort(x.reviewerId)) + '</span>'
-      : '<span class="muted" title="' + esc(user(program.defaultReviewerId).fullName + ' — проверяющий по умолчанию из АП') + '">' + esc(userShort(program.defaultReviewerId)) + ' <span class="text-s">по умолч.</span></span>';
-    var obs = observersOf(program, x);
-    var obsText = obs.slice(0, 2).map(userShort).join(', ') + (obs.length > 2 ? ' +' + (obs.length - 2) : '');
-    var obsHtml = '<span class="' + (x.observerIds.length ? '' : 'muted') + '" title="' + esc(obs.map(function (id) { return user(id).fullName; }).join(', ')) + '">' +
-      esc(obsText) + (x.observerIds.length ? '' : ' <span class="text-s">по умолч.</span>') + '</span>';
+    var rev = x.reviewerId && x.reviewerId !== program.defaultReviewerId
+      ? '<span title="' + esc(userName(x.reviewerId)) + '">' + esc(userName(x.reviewerId)) + '</span>' : '';
+    var obs = x.observerIds.length && !sameIds(x.observerIds, program.defaultObserverIds || [])
+      ? '<span title="' + esc(namesOf(x.observerIds)) + '">' + esc(namesBrief(x.observerIds, 1)) + '</span>' : '';
     return '<tr class="task-row' + (selected ? ' selected' : '') + '" data-task-id="' + x.id + '" title="Двойной клик — открыть карточку задачи">' +
       (selectable ? '<td><input type="checkbox" data-select-task="' + x.id + '"' + (selected ? ' checked' : '') +
         ' title="Выбрать задачу" aria-label="Выбрать задачу «' + esc(x.name) + '»"' + a1c('Флажок', 'ТаблицаЗадачАПВыбрана') + '></td>' : '') +
-      '<td><div class="ellipsis" title="' + esc(x.name) + '">' + esc(x.name) + '</div>' +
-        (x.description ? '<div class="muted text-s ellipsis" title="' + esc(x.description) + '">' + esc(trunc(x.description, 80)) + '</div>' : '') + '</td>' +
+      '<td><div class="ellipsis" title="' + esc(x.name) + '">' + esc(x.name) + '</div></td>' +
       '<td>' + badge(sm.tone, sm.text, 'ТаблицаЗадачАПСтатус') + '</td>' +
-      '<td class="nowrap">' + (late ? '<span class="danger-text">' + fmtDate(x.deadline) + '</span><div class="text-s danger-text">(−' + late + ' дн.)</div>' : fmtDate(x.deadline)) + '</td>' +
+      '<td class="nowrap">' + (late ? '<span class="danger-text" title="' + esc('Просрочена на ' + pluralN(late, ['день', 'дня', 'дней'])) + '">' + fmtDate(x.deadline) + ' (−' + late + ' дн.)</span>' : fmtDate(x.deadline)) + '</td>' +
       '<td><div class="ellipsis">' + rev + '</div></td>' +
-      '<td><div class="ellipsis">' + obsHtml + '</div></td>' +
+      '<td><div class="ellipsis">' + obs + '</div></td>' +
       '<td class="nowrap"><span class="row gap-1">' +
         (x.result ? '<span class="icon-cell" title="' + esc('Результат: ' + x.result) + '"' + a1c('Картинка', 'ТаблицаЗадачАПЕстьРезультат') + '>' + icon('comment') + '</span>' : '<span class="icon-cell"></span>') +
         button('', { cls: 'btn-icon btn-flat btn-small', icon: 'link', title: 'Открыть в Forus Team', action: 'openForus', name: 'ТаблицаЗадачАПОткрытьForusTeam' }) +
@@ -1336,7 +1330,6 @@
     });
     state.traineeTab = 'program';
     state.taskFilter = null;
-    state.taskBlock = 'all';
     toast('АП создана');
   }
   var newTaskSeq = 1;
@@ -1460,10 +1453,10 @@
       '<td><input type="checkbox" data-cl-done="' + c.id + '"' + (c.done ? ' checked' : '') + (lock || auto ? ' disabled' : '') +
         ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистВыполнено') + '></td>' +
       '<td><div class="ellipsis" title="' + esc(c.name) + '">' + esc(c.name) + '</div></td>' +
-      '<td><div>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div><div class="muted text-s">' + esc(userShort(c.responsibleId)) + '</div></td>' +
+      '<td><div>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div><div class="muted text-s">' + esc(userName(c.responsibleId)) + '</div></td>' +
       '<td class="nowrap"><div class="' + (st.tone === 'danger' ? 'danger-text' : '') + '">' + fmtDate(date) + '</div><div class="muted text-s">' + offsetText(c.offsetDays) + '</div></td>' +
       '<td>' + badge(st.tone, st.text, 'ТаблицаЧекЛистСтатус') +
-        (c.done && c.doneBy ? '<div class="muted text-s">' + esc(userShort(c.doneBy)) + ', ' + fmtDate(c.doneAt).slice(0, 5) + '</div>' : '') + '</td>' +
+        (c.done && c.doneBy ? '<div class="muted text-s">' + esc(userName(c.doneBy)) + ', ' + fmtDate(c.doneAt).slice(0, 5) + '</div>' : '') + '</td>' +
       '<td>' + action + '</td>' +
       '</tr>';
   }
@@ -1683,7 +1676,7 @@
       body: function (t) {
         var program = programOf(t);
         var rows = program.history.slice().reverse().map(function (h) {
-          return '<tr><td class="nowrap">' + fmtDateTime(h.at) + '</td><td class="nowrap">' + esc(userShort(h.userId)) + '</td><td>' + esc(h.action) + '</td></tr>';
+          return '<tr><td class="nowrap">' + fmtDateTime(h.at) + '</td><td class="nowrap">' + esc(userName(h.userId)) + '</td><td>' + esc(h.action) + '</td></tr>';
         }).join('');
         return '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаИсторияИзменений') + '>' +
           '<thead><tr><th>Дата и время</th><th>Пользователь</th><th>Действие</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
@@ -1709,8 +1702,8 @@
           if (!c.done && c.responsibleRole === role) c.responsibleId = v.userId;
         });
         var program = programOf(t);
-        if (program) addHistory(program, personName(role) + ' изменён: ' + userShort(old) + ' → ' + userShort(v.userId));
-        toast(personName(role) + ' изменён: ' + userShort(v.userId));
+        if (program) addHistory(program, personName(role) + ' изменён: ' + userName(old) + ' → ' + userName(v.userId));
+        toast(personName(role) + ' изменён: ' + userName(v.userId));
       }
     };
   }
@@ -1746,7 +1739,7 @@
           esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
       }).join('') + '</div>';
   }
-  function namesOf(ids) { return ids.map(userShort).join(', '); }
+  function namesOf(ids) { return ids.map(userName).join(', '); }
   function sameList(a, b) { return a.slice().sort().join() === b.slice().sort().join(); }
 
   // Карточка задачи — форма «Задача адаптационной программы» (FT_2).
@@ -1801,7 +1794,7 @@
       var links = function (list) { return (list || []).map(function (l) { return { url: l.url, comment: l.comment, sel: false }; }); };
       if (tt) return { name: tt.name, block: tt.block, description: tt.description, deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
         reviewerId: '', obsInherit: true, observers: [], result: '', type: tt.type, required: tt.required, links: links(tt.links) };
-      if (!x) return { name: '', block: state.taskBlock === 'spec' ? 'spec' : 'corp', description: '', deadline: '', status: 'not_started',
+      if (!x) return { name: '', block: 'corp', description: '', deadline: '', status: 'not_started',
         reviewerId: '', obsInherit: true, observers: [], result: '', type: 'task', required: false, links: [] };
       return { name: x.name, block: x.block, description: x.description, deadline: x.deadline, status: x.status,
         reviewerId: x.reviewerId || '', obsInherit: !x.observerIds.length, observers: x.observerIds.slice(), result: x.result || '',
@@ -1819,7 +1812,7 @@
       var reviewerId = dlgValue('reviewerId') || program.defaultReviewerId;
       var obs = dlgValue('obsInherit') ? [] : state.dialog.values.observers;
       var obsDefault = 'По умолчанию (' + namesOf(program.defaultObserverIds) + ')';
-      var obsText = obs.slice(0, 3).map(userShort).join(', ') + (obs.length > 3 ? ' +' + (obs.length - 3) : '');
+      var obsText = namesBrief(obs, 2);
       var obsTitle = obs.length ? obs.map(function (id) { return user(id).fullName; }).join(', ') : obsDefault;
       // Наблюдатели: поле со списком через запятую, выбор — форма с флажками, «✕» — вернуть «по умолчанию»
       var observersField = fromTemplate || dlgRO()
@@ -1839,7 +1832,7 @@
           tfField('Проверяющий', '<div class="row gap-2">' +
               (fromTemplate
                 ? '<input type="text" class="input grow" disabled value="Назначается в АП (по умолчанию — наставник)"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
-                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('По умолчанию (' + userShort(program.defaultReviewerId) + ')'))) +
+                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('По умолчанию (' + userName(program.defaultReviewerId) + ')'))) +
               (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard',
                 title: 'Открыть карточку сотрудника: ' + user(reviewerId).fullName, name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
             { forId: 'f_reviewerId' }) +
@@ -1954,9 +1947,9 @@
     apply: function (t, v) {
       var list = targetTasks(t);
       list.forEach(function (x) { x.reviewerId = v.userId; });
-      programChanged(t, 'Назначен проверяющий ' + userShort(v.userId) + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
+      programChanged(t, 'Назначен проверяющий ' + userName(v.userId) + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
       state.selectedTasks = {};
-      toast('Проверяющий назначен: ' + userShort(v.userId));
+      toast('Проверяющий назначен: ' + userName(v.userId));
     }
   };
 
@@ -2052,7 +2045,7 @@
     apply: function (t, v) {
       var p = programOf(t);
       var changed = [];
-      if (p.defaultReviewerId !== v.reviewerId) changed.push('проверяющий по умолчанию: ' + userShort(v.reviewerId));
+      if (p.defaultReviewerId !== v.reviewerId) changed.push('проверяющий по умолчанию: ' + userName(v.reviewerId));
       if (!sameList(p.defaultObserverIds, v.observers)) changed.push('наблюдатели по умолчанию: ' + namesOf(v.observers));
       p.defaultReviewerId = v.reviewerId;
       p.defaultObserverIds = v.observers.slice();
@@ -2350,7 +2343,6 @@
     state.traineeTab = t.stage === 'found' ? 'prepare' : 'program';
     state.notesExpanded = false;
     state.taskFilter = null;
-    state.taskBlock = 'all';
     state.openMenu = null;
     state.taskSort = { key: null, dir: 1 };
     state.selectedTasks = {};
@@ -2426,7 +2418,6 @@
       else if (n.action === 'startClosing') openDialog('close', t.id);
       else if (n.action === 'showTasksOverdue' || n.action === 'showTasksUndone') {
         state.traineeTab = 'program';
-        state.taskBlock = 'all';
         state.selectedTasks = {};
         state.collapsedBlocks = {};
         state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'progress'; // отставание — «В работе»
@@ -2469,12 +2460,12 @@
 
     // Таблица задач
     taskFilter: function (btn) {
-      state.taskFilter = btn.getAttribute('data-value') || null;
+      var v = btn.getAttribute('data-value');
+      state.taskFilter = v && v !== 'all' ? v : null;
       state.selectedTasks = {};
       renderCenter();
     },
-    taskBlock: function (btn) {
-      state.taskBlock = btn.getAttribute('data-value');
+    clearTaskSelection: function () {
       state.selectedTasks = {};
       renderCenter();
     },
