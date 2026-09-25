@@ -510,3 +510,10 @@ body.markup-1c table[data-1c]::before {
   height: 24px; padding: 0 0 0 var(--sp-2); border-radius: var(--radius);
   background: var(--c-bg-selected); color: var(--c-primary); font-size: var(--fs-s);
 }
+
+/* ================= Фаза 7: цвета этапов (раздел 4) ================= */
+.badge-stage-found, .badge-stage-draft { background: var(--c-neutral-bg); color: var(--c-text-secondary); }
+.badge-stage-approval { background: var(--c-info-bg); color: var(--c-info); }
+.badge-stage-active { background: var(--c-success-bg); color: var(--c-success); }
+.badge-stage-closing { background: var(--c-stage-closing-bg); color: var(--c-stage-closing); }
+.badge-stage-closed { background: var(--c-bg); color: var(--c-text-secondary); border: 1px solid var(--c-border); padding: 0 5px; line-height: 16px; }

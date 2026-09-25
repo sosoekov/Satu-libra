@@ -124,12 +124,12 @@
    * ===================================================================== */
 
   var STAGES = [
-    { code: 'found',    title: 'Подготовка к выходу', tone: 'warning' },
-    { code: 'draft',    title: 'Черновик АП',         tone: 'warning' },
-    { code: 'approval', title: 'Согласование',        tone: 'info' },
-    { code: 'active',   title: 'Стажировка',          tone: 'success' },
-    { code: 'closing',  title: 'Закрытие',            tone: 'warning' },
-    { code: 'closed',   title: 'Закрыта',             tone: 'neutral' }
+    { code: 'found',    title: 'Подготовка к выходу' },
+    { code: 'draft',    title: 'Черновик АП' },
+    { code: 'approval', title: 'Согласование' },
+    { code: 'active',   title: 'Стажировка' },
+    { code: 'closing',  title: 'Закрытие' },
+    { code: 'closed',   title: 'Закрыта' }
   ];
   function stageMeta(code) { return STAGES[stageIndex(code)]; }
   function stageIndex(code) {
@@ -335,7 +335,8 @@
     var m = stageMeta(t.stage);
     var text = m.title;
     if (t.stage === 'closed' && t.closeKind === 'cancelled') text = 'Отменена';
-    return badge(m.tone, text, name || 'ДекорацияЭтапСтажировки');
+    // Цвет бейджа означает только этап (фаза 7, раздел 4): классы badge-stage-*
+    return badge('stage-' + t.stage, text, name || 'ДекорацияЭтапСтажировки');
   }
   function indicator(pct, name, tone) {
     return '<div class="indicator' + (tone ? ' ' + tone : '') + '"' + a1c('Индикатор', name) + '>' +
