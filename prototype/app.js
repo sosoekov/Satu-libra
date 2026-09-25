@@ -791,10 +791,11 @@
   function isClosed(t) { return t.stage === 'closed'; }
 
   function renderTraineeCard(t) {
-    return '<div class="col gap-3 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
+    // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажёры», карточка, блок процесса, вкладки
+    return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
       renderHeader(t) +
-      renderNextStepRow(t) +
+      renderProcess(t) +
       renderTraineePages(t) +
       '</div>';
   }
@@ -810,57 +811,55 @@
     });
   }
 
-  // Карточка стажёра (фаза 8, раздел 2): одна рамка, сверху — имя, ответственные, сроки; снизу — степпер
+  // Карточка стажёра (фаза 9, раздел 3.2): только данные о человеке и стажировке, единственный блок с рамкой
   function renderHeader(t) {
     var st = statsOf(t);
     var right = '<div class="tcard-line"' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</div>';
     function bar(label, pct, text, name, textName) {
-      return '<div class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
-        '<span class="tcard-lbl muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
+      return '<span class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
         indicator(pct, 'Индикатор' + name) +
-        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></div>';
+        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></span>';
     }
     if (isClosed(t)) {
       var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
-      right += '<div class="tcard-line bold"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
+      right += '<div class="tcard-line"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
         (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</div>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
-      right += '<div class="tcard-line bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+      right += '<div class="tcard-line' + (ds <= 3 ? ' c-warning' : '') + '"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
         (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>';
     } else {
-      right += bar('Срок', timePct(t), 'день ' + dayNo(t) + ' из ' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
-        (st ? bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') : '');
-      // Вывод — только при отклонении от графика
-      if (lag(t)) right += '<div class="tcard-line c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Отстаёт от графика</div>';
-      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) right += '<div class="tcard-line muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Опережает график</div>';
+      // Две компактные полосы в строку; при нехватке места «Задачи» переносятся третьей строкой
+      var dev = '';
+      if (lag(t)) dev = '<span class="c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, отстаёт от графика</span>';
+      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) dev = '<span class="muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, опережает график</span>';
+      right += '<div class="row tcard-bars"' + a1c('ГруппаГоризонтальная', 'ГруппаПолосы') + '>' +
+        bar('Срок', timePct(t), dayNo(t) + '/' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
+        (st ? '<span class="row gap-0">' + bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') + dev + '</span>' : '') +
+        '</div>';
     }
 
-    return '<div class="panel tcard"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажераШапка') + '>' +
-      '<div class="row top tcard-top"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаСтажера') + '>' +
-        // 1. Аватар и имя
-        '<div class="row top gap-2 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
-          '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
-          '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
-            '<div class="text-xl bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-            '<div class="muted"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
-          '</div>' +
+    return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка') + '>' +
+      // 1. Аватар, ФИО и должность
+      '<div class="row gap-3 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
+        '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
+        '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
+          '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
+          '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
         '</div>' +
-        // 2. Наставник и руководитель — сразу после имени
-        '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
-          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
-          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
-        '</div>' +
-        '<span class="grow"></span>' +
-        // 3. Даты и полосы — прижаты вправо
-        '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
       '</div>' +
-      '<div class="tcard-sep"></div>' +
-      renderStepper(t) +
+      // 2. Наставник и руководитель
+      '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
+        '<div class="tcard-line" title="' + esc('Наставник: ' + user(t.mentorId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
+        '<div class="tcard-line" title="' + esc('Руководитель: ' + user(t.headId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
+      '</div>' +
+      // 3. Даты и вторая строка по этапу — прижаты вправо
+      '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
       '</div>';
   }
 
-  // Степпер этапов внутри карточки. Подписи: текущий шаг — «с даты» (для found — «выход»),
+  // Степпер этапов (блок процесса). Подписи: текущий шаг — «с даты» (для found — «выход»),
   // «Закрытие» в будущем при active — дата доступности закрытия, «Закрыта» — дата закрытия или отмены
   function renderStepper(t) {
     var cur = stageIndex(t.stage);
@@ -878,11 +877,10 @@
           '<span class="step-mark">' + (state_ === 'done' ? icon('check') : (i + 1)) + '</span>' +
           '<span class="col gap-0 step-text"><span class="step-title">' + esc(s.title) + '</span>' +
           (sub ? '<span class="step-sub muted">' + esc(sub) + '</span>' : '') +
-          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line' + (state_ === 'done' ? ' done' : '') + '"></span>' : '');
+          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line"></span>' : '');
       }).join('') + '</div></div>';
   }
 
-  var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
   // Что делает кнопка action-уведомления
   var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
     changed_after_approval: 'sendToApproval', close_soon: 'startClosing' };
@@ -922,29 +920,9 @@
     }
     return list;
   }
-  function getNextStep(t) {
-    var list = processNotifications(t);
-    return { main: list[0] || null, rest: list.slice(1) };
-  }
 
-  // Строка следующего шага: слева — главное уведомление с кнопкой, справа — второстепенные действия
-  function renderNextStepRow(t) {
-    var step = getNextStep(t);
-    var m = step.main;
-    var left = '';
-    if (m) {
-      var primary = m.kind === 'action';
-      left = '<div class="next-step note-' + m.severity + '"' + a1c('ГруппаГоризонтальная', 'ГруппаСледующийШаг') + '>' +
-        '<span class="tone-' + m.severity + '"' + a1c('Картинка', 'КартинкаСледующийШаг') + '>' + icon(NOTE_ICONS[m.severity]) + '</span>' +
-        '<span class="next-step-text" title="' + esc(m.text) + '"' + a1c('Надпись', 'ДекорацияСледующийШаг') + '>' + esc(m.text) + '</span>' +
-        (m.buttonText ? button(m.buttonText, { cls: primary ? 'btn-primary' : '', action: 'noteAction', data: { key: m.id },
-          name: 'КнопкаСледующийШаг' }) : '') +
-        (step.rest.length ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + step.rest.length, { action: 'toggleNotes',
-          title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '') +
-        '</div>';
-    }
-
-    // Правая часть: позиция не зависит от левой
+  // Второстепенные действия стажировки (состав — фаза 8, 3.2): справа на первой строке блока процесса
+  function renderTraineeActions(t) {
     var program = programOf(t);
     var s_ = t.stage;
     var parts = [];
@@ -960,29 +938,44 @@
       if (menuItems.length) menuItems.push('<div class="menu-sep"></div>');
       menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
     }
-    var right = '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
+    return '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
       parts.join('') +
       (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
       button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
         title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправка' }) +
       '</div>';
+  }
 
-    // «ещё N» раскрывает под строкой группу с остальными уведомлениями — одна строка на уведомление
-    var more = step.rest.length && state.notesExpanded
-      ? '<div class="col gap-1 more-notes"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' +
-        step.rest.map(function (n) {
-          return '<div class="more-note note-' + n.severity + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.id)) + '>' +
-            '<span class="tone-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.id)) + '>' + icon(NOTE_ICONS[n.severity]) + '</span>' +
-            '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.id)) + '>' + esc(n.text) + '</span>' +
-            (n.buttonText ? button(n.buttonText, { cls: 'btn-small-text', action: 'noteAction', data: { key: n.id },
-              name: 'КнопкаУведомление' + n1c(n.id) }) : '') +
-            '</div>';
-        }).join('') + '</div>'
-      : '';
-
-    return '<div class="col gap-1"' + a1c('ГруппаВертикальная', 'ГруппаСледующийШагИДействия') + '>' +
-      '<div class="row next-step-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаСледующегоШага') + '>' + left + right + '</div>' +
-      more + '</div>';
+  // Блок процесса (фаза 9, раздел 3.3): без рамки и фона. Степпер; через 8px — строки уведомлений.
+  // Видны первые две строки; основная кнопка — у первого action среди видимых строк; «ещё N» — в конце второй строки.
+  // В 1С строки — заранее созданные группы-слоты ГруппаСтрокаУведомления1…N, содержимое задаётся программно.
+  var NOTES_VISIBLE = 2;
+  function renderProcess(t) {
+    var list = processNotifications(t);
+    var hidden = Math.max(0, list.length - NOTES_VISIBLE);
+    var shown = state.notesExpanded ? list : list.slice(0, NOTES_VISIBLE);
+    var primary = shown.filter(function (n) { return n.kind === 'action'; })[0] || null;
+    function row(n, i) {
+      var k = i + 1;
+      var more = i === NOTES_VISIBLE - 1 && hidden ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + hidden, { action: 'toggleNotes',
+        title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '';
+      return '<div class="row note-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаУведомления' + k) + '>' +
+        '<span class="note-icon c-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомления' + k) + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
+        '<span class="note-text" title="' + esc(n.text) + '"' + a1c('Надпись', 'ДекорацияУведомления' + k) + '>' + esc(n.text) + '</span>' +
+        button(n.buttonText, { cls: n === primary ? 'btn-primary' : '', action: 'noteAction', data: { key: n.id }, name: 'КнопкаУведомления' + k }) +
+        more + '</div>';
+    }
+    var rows = shown.map(row);
+    return '<div class="col gap-2 process"' + a1c('ГруппаВертикальная', 'ГруппаПроцесс') + '>' +
+      renderStepper(t) +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаУведомленияИДействия') + '>' +
+        '<div class="row process-first"' + a1c('ГруппаГоризонтальная', 'ГруппаПерваяСтрокаПроцесса') + '>' +
+          (rows[0] || '<span class="grow"></span>') + renderTraineeActions(t) +
+        '</div>' +
+        (rows[1] || '') +
+        (rows.length > NOTES_VISIBLE ? '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' + rows.slice(NOTES_VISIBLE).join('') + '</div>' : '') +
+      '</div>' +
+      '</div>';
   }
 
   function menuItem(text, action, data, name, cls) {
