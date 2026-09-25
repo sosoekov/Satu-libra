@@ -180,6 +180,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dot-warning { background: var(--c-warning); }
 .dot-info { background: var(--c-info); }
 .dot-neutral { background: var(--c-text-secondary); }
+.dot-danger { background: var(--c-danger); }
 
 /* ================= Индикатор ================= */
 .indicator { flex: 1 1 auto; height: 6px; border-radius: var(--radius); background: var(--c-neutral-bg); overflow: hidden; min-width: 60px; display: flex; }
@@ -361,7 +362,7 @@ th.num, td.num { text-align: right; }
 }
 .step-text { padding-top: 2px; }
 .step { min-width: min-content; }
-.trainee-card { container-type: inline-size; }
+.stepper-wrap { container-type: inline-size; }
 /* Узкая центральная область (открыта справка при 1366px): подписи только у текущего шага, у остальных — в title */
 @container (max-width: 760px) {
   .step:not(.step-current) .step-text { display: none; }
@@ -418,3 +419,38 @@ th.num, td.num { text-align: right; }
 .req { color: var(--c-danger); }
 .field-error { color: var(--c-danger); font-size: var(--fs-s); }
 [aria-invalid="true"], .toggle.invalid { border-color: var(--c-danger); }
+
+/* ================= Вкладка «Адаптационная программа» ================= */
+.progress-blocks { flex: 0 0 260px; }
+.link.on { font-weight: bold; text-decoration: underline; }
+.note-neutral { background: var(--c-neutral-bg); }
+.command-bar-flat { border-top: none; padding-top: 0; }
+.bar-sep { width: 1px; height: 20px; background: var(--c-border); margin: 0 var(--sp-1); }
+
+.task-table { table-layout: fixed; }
+.task-table .w-check { width: 36px; }
+.task-table .w-status { width: 104px; }
+.task-table .w-deadline { width: 96px; }
+.task-table .w-person { width: 128px; }
+.task-table .w-observers { width: 150px; }
+.task-table .w-result { width: 64px; }
+.task-table .w-menu { width: 40px; }
+.task-table td { vertical-align: middle; }
+.task-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
+.task-row.selected td { background: var(--c-bg-selected); }
+.group-row td { background: var(--c-bg-panel); cursor: pointer; }
+.group-row:hover td { background: var(--c-neutral-bg); }
+.icon-cell { display: inline-flex; width: 16px; color: var(--c-text-secondary); }
+.btn-small { height: 24px; width: 24px; }
+.menu-float { position: fixed; z-index: 90; }
+.table-box { background: var(--c-bg); }
+
+.create-options { align-items: stretch; }
+.create-option { flex: 1 1 0; min-width: 0; }
+
+/* Диалоги фазы 3 */
+.check-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; padding: var(--sp-2); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.check-list.invalid { border-color: var(--c-danger); }
+.input-num { width: 100px; }
+.dlg-list { margin: 0; padding-left: var(--sp-5); }
+.modal-wide .field-label { flex-basis: 170px; }

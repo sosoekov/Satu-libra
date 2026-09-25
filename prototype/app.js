@@ -236,10 +236,12 @@
     return getNotifications(t).some(function (n) { return n.tone === 'danger' || n.tone === 'warning'; });
   }
   // Самый важный маркер для дерева и списка
+  // Порядок важности маркеров: сначала то, что требует действия руководителя с АП, затем просрочки
+  var MARKER_ORDER = ['rejected', 'changed', 'tasksOverdue', 'checklistOverdue', 'noProgram', 'draftStale', 'onApproval', 'closeSoon'];
   function topMarker(t) {
-    var list = getNotifications(t);
-    for (var i = 0; i < list.length; i++) if (list[i].marker) return list[i];
-    return null;
+    var list = getNotifications(t).filter(function (n) { return n.marker; });
+    list.sort(function (a, b) { return MARKER_ORDER.indexOf(a.key) - MARKER_ORDER.indexOf(b.key); });
+    return list[0] || null;
   }
 
   /* =====================================================================
@@ -379,6 +381,9 @@
     dialog: null,                // открытый диалог
     taskFilter: null,            // фильтр таблицы задач: 'done' | 'progress' | 'overdue' | 'todo' | 'undone'
     taskBlock: 'all',            // 'all' | 'corp' | 'spec'
+    taskSort: { key: null, dir: 1 },
+    selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
+    collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     toasts: []
   };
@@ -637,6 +642,8 @@
   function renderCenter() {
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
     el('centerZone').innerHTML = t ? renderTraineeCard(t) : renderSummary();
+    Array.prototype.forEach.call(el('centerZone').querySelectorAll('[data-indeterminate]'), function (x) { x.indeterminate = true; });
+    placeFloatingMenu();
   }
 
   // Сводная таблица (раздел 7.3)
@@ -790,7 +797,7 @@
   function renderStepper(t) {
     var cur = stageIndex(t.stage);
     var allDone = isClosed(t);
-    return '<div class="stepper"' + a1c('ГруппаГоризонтальная', 'ГруппаСтеппер', 'check') + '>' +
+    return '<div class="stepper-wrap"><div class="stepper"' + a1c('ГруппаГоризонтальная', 'ГруппаСтеппер', 'check') + '>' +
       STAGES.map(function (s, i) {
         var state_ = allDone || i < cur ? 'done' : i === cur ? 'current' : 'future';
         var title = s.title;
@@ -802,7 +809,7 @@
           '<span class="col gap-0 step-text"><span class="step-title">' + esc(title) + '</span>' +
           (state_ === 'current' || (allDone && s.code === 'closed') ? '<span class="text-s muted">' + (date ? 'с ' + fmtDate(date) : '') + '</span>' : '') +
           '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line' + (state_ === 'done' ? ' done' : '') + '"></span>' : '');
-      }).join('') + '</div>';
+      }).join('') + '</div></div>';
   }
 
   var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
@@ -856,7 +863,8 @@
     }
     if (program) {
       parts.push(button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }));
-      if (!isClosed(t)) parts.push(button('Проверяющие и наблюдатели', { icon: 'users', action: 'openDialog', data: { dialog: 'reviewers' }, name: 'КнопкаПроверяющиеИНаблюдатели' }));
+      if (!isClosed(t)) parts.push(button('Проверяющие и наблюдатели', { icon: 'users', action: 'openDialog', data: { dialog: 'reviewers' },
+        disabled: !!editLock(t), title: editLock(t) || '', name: 'КнопкаПроверяющиеИНаблюдатели' }));
     }
 
     var menuItems = [];
@@ -883,12 +891,28 @@
     if (data) for (var k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
     return '<button type="button" data-action="' + action + '"' + attrs + (cls ? ' class="' + cls + '"' : '') + a1c('Кнопка', name) + '>' + esc(text) + '</button>';
   }
-  function submenu(id, name, items) {
-    var open = state.openMenu === id;
+  // Подменю. opts: {text, icon, small, float, disabled, title, type}
+  function submenu(id, name, items, opts) {
+    opts = opts || {};
+    var open = state.openMenu === id && !opts.disabled;
+    var type = opts.type || 'Подменю';
     return '<div class="menu-host">' +
-      button('', { cls: 'btn-icon', icon: 'more', title: 'Ещё', action: 'toggleMenu', data: { menu: id }, type: 'Подменю', name: name }) +
-      (open ? '<div class="menu menu-pop"' + a1c('Подменю', name + 'Список') + '>' + items.join('') + '</div>' : '') +
+      button(opts.text || '', {
+        cls: opts.text ? '' : 'btn-icon' + (opts.small ? ' btn-flat btn-small' : ''), icon: opts.icon || (opts.text ? null : 'more'),
+        title: opts.title || (opts.text ? '' : 'Ещё'), action: 'toggleMenu', data: { menu: id }, type: type, name: name, disabled: opts.disabled
+      }) +
+      (open ? '<div class="menu ' + (opts.float ? 'menu-float' : 'menu-pop') + '"' + a1c(type, name + 'Список') + '>' + items.join('') + '</div>' : '') +
       '</div>';
+  }
+  // Меню строки таблицы — поверх прокручиваемого контейнера, координаты от кнопки
+  function placeFloatingMenu() {
+    var m = document.querySelector('.menu-float');
+    if (!m) return;
+    var r = m.parentNode.querySelector('button').getBoundingClientRect();
+    var top = r.bottom + 4;
+    if (top + m.offsetHeight > window.innerHeight - 8) top = r.top - m.offsetHeight - 4;
+    m.style.top = top + 'px';
+    m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
   }
 
   // Вкладки стажёра: содержимое — фазы 3 и 4
@@ -899,8 +923,7 @@
     ];
     var body;
     if (state.traineeTab === 'program') {
-      var f = state.taskFilter ? ' Активный фильтр: ' + TASK_FILTER_TITLES[state.taskFilter] + '.' : '';
-      body = '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаВкладкиАП') + '>Вкладка «Адаптационная программа» появится в фазе 3.' + esc(f) + '</div>';
+      body = renderProgramTab(t);
     } else {
       body = '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаВкладкиПодготовка') + '>Вкладка «Подготовка к выходу» появится в фазе 4.</div>';
     }
@@ -911,6 +934,321 @@
       }).join('') + '</div>' + body + '</div>';
   }
   var TASK_FILTER_TITLES = { done: 'Выполнено', progress: 'В работе', overdue: 'Просрочено', todo: 'Не начато', undone: 'Невыполненные' };
+
+  /* ---------------------------------------------------------------------
+   * Вкладка «Адаптационная программа» (раздел 7.5)
+   * --------------------------------------------------------------------- */
+
+  var STATUS_META = {
+    overdue:     { text: 'Просрочена', tone: 'danger',  order: 0 },
+    in_progress: { text: 'В работе',   tone: 'info',    order: 1 },
+    not_started: { text: 'Не начата',  tone: 'neutral', order: 2 },
+    done:        { text: 'Выполнена',  tone: 'success', order: 3 }
+  };
+  var BLOCKS = [
+    { id: 'corp', title: 'Корпоративный блок', short: 'Корпоративный', name: 'Корпоративный' },
+    { id: 'spec', title: 'Специальный блок',   short: 'Специальный',   name: 'Специальный' }
+  ];
+  // Фильтр по счётчику прогресса → статус для показа
+  var FILTER_STATUS = { done: 'done', progress: 'in_progress', overdue: 'overdue', todo: 'not_started' };
+
+  function blockMeta(id) { return id === 'spec' ? BLOCKS[1] : BLOCKS[0]; }
+  function trunc(s, n) { s = s || ''; return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; }
+
+  // Причина, по которой задачи АП менять нельзя (раздел 7.5.4); null — можно
+  function editLock(t) {
+    if (t.stage === 'approval') return 'АП на согласовании. Чтобы изменить задачи, отзовите её с согласования';
+    if (t.stage === 'closed') return 'Стажировка закрыта — АП доступна только для просмотра';
+    return null;
+  }
+  // Изменение АП: запись в историю; изменение согласованной АП требует повторного согласования
+  function programChanged(t, action) {
+    addHistory(programOf(t), action);
+    if (D.REAPPROVAL_ON_CHANGE && (t.stage === 'active' || t.stage === 'closing')) t.changedAfterApproval = true;
+  }
+
+  function taskMatchesFilter(task, f) {
+    if (!f) return true;
+    if (f === 'undone') return task.status !== 'done';
+    return viewStatus(task) === FILTER_STATUS[f];
+  }
+  // Задачи для таблицы: блок, фильтр, сортировка (по умолчанию — порядок задач в АП)
+  function visibleTasks(t) {
+    var list = tasksOf(programOf(t)).filter(function (x) {
+      return (state.taskBlock === 'all' || x.block === state.taskBlock) && taskMatchesFilter(x, state.taskFilter);
+    });
+    var s = state.taskSort;
+    if (s.key) {
+      list.sort(function (a, b) {
+        var x = s.key === 'status' ? STATUS_META[viewStatus(a)].order : a.deadline;
+        var y = s.key === 'status' ? STATUS_META[viewStatus(b)].order : b.deadline;
+        return (x < y ? -1 : x > y ? 1 : 0) * s.dir;
+      });
+    }
+    return list;
+  }
+  function selectedTaskIds(t) {
+    var ids = tasksOf(programOf(t)).map(function (x) { return x.id; });
+    return Object.keys(state.selectedTasks).filter(function (id) { return state.selectedTasks[id] && ids.indexOf(id) >= 0; });
+  }
+  function taskById(id) { return byId(D.tasks, id); }
+  function reviewerOf(program, task) { return task.reviewerId || program.defaultReviewerId; }
+  function observersOf(program, task) { return task.observerIds.length ? task.observerIds : program.defaultObserverIds; }
+
+  function renderProgramTab(t) {
+    var program = programOf(t);
+    if (!program) return renderProgramEmpty(t);
+    var all = tasksOf(program);
+    var lock = editLock(t);
+    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
+      (all.length ? renderProgress(t, all) : '') +
+      (lock ? '<div class="note note-' + (t.stage === 'approval' ? 'info' : 'neutral') + '"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
+        '<span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
+      renderTaskCommandBar(t, all) +
+      (state.taskFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЗадач') + '>' +
+        '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЗадач') + '>Показаны: <b>' + esc(TASK_FILTER_TITLES[state.taskFilter]) + '</b></span>' +
+        button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'taskFilter', data: { value: '' }, name: 'КнопкаСброситьФильтрЗадач' }) +
+        '</div>' : '') +
+      renderTaskTable(t, all) +
+      '</div>';
+  }
+
+  // Блок прогресса (7.5.1)
+  function renderProgress(t, all) {
+    var st = taskStats(all);
+    function pct(n) { return Math.round(n / st.total * 100); }
+    function seg(cls, n) { return n ? '<span class="' + cls + '" style="width:' + (n / st.total * 100) + '%"></span>' : ''; }
+    var counters = [
+      { f: 'done', n: st.done, text: 'Выполнено', dot: 'success' },
+      { f: 'progress', n: st.progress, text: 'В работе', dot: 'info' },
+      { f: 'overdue', n: st.overdue, text: 'Просрочено', dot: 'danger' },
+      { f: 'todo', n: st.todo, text: 'Не начато', dot: 'neutral' }
+    ].filter(function (c) { return c.n > 0; });
+    var byBlock = BLOCKS.map(function (b) {
+      var list = all.filter(function (x) { return x.block === b.id; });
+      var done = list.filter(function (x) { return x.status === 'done'; }).length;
+      return '<div class="col gap-1"' + a1c('ГруппаВертикальная', 'ГруппаПрогресс' + b.name) + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияПрогресс' + b.name) + '>' + b.title + ': <b>' + done + ' из ' + list.length + '</b></span>' +
+        '<div class="indicator-wrap">' + indicator(list.length ? done / list.length * 100 : 0, 'ИндикаторПрогресс' + b.name, 'success') + '</div></div>';
+    }).join('');
+    return '<div class="panel row top gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаПрогресс') + '>' +
+      '<div class="col gap-3 grow"' + a1c('ГруппаВертикальная', 'ГруппаПрогрессОбщий') + '>' +
+        '<div class="h-block"' + a1c('Надпись', 'ДекорацияПрогрессПоЗадачам') + '>Прогресс по задачам</div>' +
+        '<div class="indicator stacked"' + a1c('Индикатор', 'ПолосаПрогрессаСоставная', 'high') +
+          ' title="' + esc(counters.map(function (c) { return c.text + ': ' + c.n; }).join(', ')) + '">' +
+          seg('seg-done', st.done) + seg('seg-progress', st.progress) + seg('seg-overdue', st.overdue) + seg('seg-todo', st.todo) + '</div>' +
+        '<div class="row wrap gap-4"' + a1c('ГруппаГоризонтальная', 'ГруппаСчетчикиЗадач') + '>' +
+          counters.map(function (c) {
+            var on = state.taskFilter === c.f;
+            return '<span class="row gap-1"><span class="dot dot-' + c.dot + '"></span>' +
+              link(c.text + ' ' + c.n + ' (' + pct(c.n) + '%)', { cls: on ? 'on' : '', action: 'taskFilter', data: { value: on ? '' : c.f },
+                title: on ? 'Сбросить фильтр' : 'Показать задачи: ' + c.text.toLowerCase(), name: 'ГиперссылкаСчетчик' + c.f }) + '</span>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
+      '<div class="col gap-3 progress-blocks"' + a1c('ГруппаВертикальная', 'ГруппаПрогрессПоБлокам') + '>' + byBlock + '</div>' +
+      '</div>';
+  }
+
+  // Командная панель таблицы (7.5.2)
+  function renderTaskCommandBar(t, all) {
+    var lock = editLock(t);
+    var sel = selectedTaskIds(t).length;
+    var corp = all.filter(function (x) { return x.block === 'corp'; }).length;
+    var massTitle = lock || (sel ? '' : 'Отметьте задачи флажками');
+    var mass = function (text, action, dialog, name) {
+      return button(text, { action: action, data: dialog ? { dialog: dialog } : null, disabled: !!massTitle, title: massTitle, name: name });
+    };
+    return '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
+      toggle('ТумблерБлокЗадач', 'taskBlock', [
+        { value: 'all', text: 'Все (' + all.length + ')', name: 'Все' },
+        { value: 'corp', text: 'Корпоративный (' + corp + ')', name: 'Корпоративный' },
+        { value: 'spec', text: 'Специальный (' + (all.length - corp) + ')', name: 'Специальный' }
+      ], state.taskBlock) +
+      submenu('addTask', 'ПодменюДобавитьЗадачу', [
+        menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
+        menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
+      ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
+      '<span class="bar-sep"></span>' +
+      (sel ? '<span class="bold"' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' : '') +
+      mass('Назначить проверяющего', 'openDialog', 'massReviewer', 'КнопкаНазначитьПроверяющего') +
+      mass('Наблюдатели', 'openDialog', 'massObservers', 'КнопкаНаблюдатели') +
+      mass('Перенести срок', 'openDialog', 'massDeadline', 'КнопкаПеренестиСрок') +
+      mass('Удалить', 'openDialog', 'deleteTasks', 'КнопкаУдалитьЗадачи') +
+      '</div>';
+  }
+
+  // Таблица задач (7.5.3)
+  function renderTaskTable(t, all) {
+    var program = programOf(t);
+    var lock = editLock(t);
+    var selectable = !lock;
+    var list = visibleTasks(t);
+    var cols = selectable ? 8 : 7;
+    var body;
+
+    if (!all.length) {
+      body = '<tr><td colspan="' + cols + '"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадач') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияНетЗадач') + '>В программе пока нет задач</span>' +
+        (lock ? '' : '<div class="row">' + link('Добавить задачу', { action: 'openDialog', data: { dialog: 'task' }, name: 'ГиперссылкаДобавитьЗадачу' }) +
+          link('Добавить из шаблона', { action: 'openDialog', data: { dialog: 'addFromTemplate' }, name: 'ГиперссылкаДобавитьИзШаблона' }) + '</div>') +
+        '</div></td></tr>';
+    } else if (!list.length) {
+      body = '<tr><td colspan="' + cols + '"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадачСФильтром') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияНетЗадачСФильтром') + '>Нет задач с таким статусом</span>' +
+        link('Сбросить фильтр', { action: 'taskFilter', data: { value: '' }, name: 'ГиперссылкаСброситьФильтрЗадач' }) + '</div></td></tr>';
+    } else if (state.taskBlock === 'all') {
+      body = BLOCKS.map(function (b) {
+        var rows = list.filter(function (x) { return x.block === b.id; });
+        if (!rows.length) return '';
+        var blockAll = all.filter(function (x) { return x.block === b.id; });
+        var done = blockAll.filter(function (x) { return x.status === 'done'; }).length;
+        var open = !state.collapsedBlocks[b.id];
+        return '<tr class="group-row" tabindex="0" data-action="toggleBlockGroup" data-block="' + b.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
+          a1c('ТаблицаФормы', 'ТаблицаЗадачАПГруппа' + b.name, 'check') + '>' +
+          '<td colspan="' + cols + '"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') +
+          '<b>' + b.title + '</b><span class="muted">— выполнено ' + done + ' из ' + blockAll.length + '</span></span></td></tr>' +
+          (open ? rows.map(function (x) { return taskRow(t, program, x, selectable); }).join('') : '');
+      }).join('');
+    } else {
+      body = list.map(function (x) { return taskRow(t, program, x, selectable); }).join('');
+    }
+
+    var ids = list.map(function (x) { return x.id; });
+    var selCount = ids.filter(function (id) { return state.selectedTasks[id]; }).length;
+    function thSort(text, key) {
+      var on = state.taskSort.key === key;
+      return '<th aria-sort="' + (on ? (state.taskSort.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
+        '<button type="button" class="th-sort' + (on ? ' on' : '') + '" data-action="sortTasks" data-key="' + key + '" title="Сортировать по колонке «' + text + '»"' +
+        a1c('ТаблицаФормы', 'ТаблицаЗадачАПСортировка' + key) + '>' + text + (on ? (state.taskSort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
+    }
+    return '<div class="table-box">' +
+      '<table class="grid task-table"' + a1c('ТаблицаФормы', 'ТаблицаЗадачАП') + '>' +
+      '<colgroup>' + (selectable ? '<col class="w-check">' : '') + '<col><col class="w-status"><col class="w-deadline"><col class="w-person"><col class="w-observers"><col class="w-result"><col class="w-menu"></colgroup>' +
+      '<thead><tr>' +
+        (selectable ? '<th><input type="checkbox" data-select-all="1" title="Выбрать все видимые задачи"' +
+          (ids.length && selCount === ids.length ? ' checked' : '') + (ids.length ? '' : ' disabled') +
+          (selCount && selCount < ids.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаЗадачАПВыбратьВсе') + '></th>' : '') +
+        '<th>Задача</th>' + thSort('Статус', 'status') + thSort('Срок', 'deadline') +
+        '<th>Проверяющий</th><th>Наблюдатели</th><th>Результат</th><th></th>' +
+      '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  }
+
+  function taskRow(t, program, x, selectable) {
+    var v = viewStatus(x);
+    var sm = STATUS_META[v];
+    var selected = !!state.selectedTasks[x.id];
+    var late = v === 'overdue' ? diffDays(x.deadline, D.TODAY) : 0;
+    var rev = x.reviewerId
+      ? '<span>' + esc(userShort(x.reviewerId)) + '</span>'
+      : '<span class="muted" title="Проверяющий по умолчанию из АП">' + esc(userShort(program.defaultReviewerId)) + ' <span class="text-s">по умолч.</span></span>';
+    var obs = observersOf(program, x);
+    var obsText = obs.slice(0, 2).map(userShort).join(', ') + (obs.length > 2 ? ' +' + (obs.length - 2) : '');
+    var obsHtml = '<span class="' + (x.observerIds.length ? '' : 'muted') + '" title="' + esc(obs.map(function (id) { return user(id).fullName; }).join(', ')) + '">' +
+      esc(obsText) + (x.observerIds.length ? '' : ' <span class="text-s">по умолч.</span>') + '</span>';
+    return '<tr class="task-row' + (selected ? ' selected' : '') + '" data-task-id="' + x.id + '" title="Двойной клик — открыть карточку задачи">' +
+      (selectable ? '<td><input type="checkbox" data-select-task="' + x.id + '"' + (selected ? ' checked' : '') +
+        ' title="Выбрать задачу" aria-label="Выбрать задачу «' + esc(x.name) + '»"' + a1c('Флажок', 'ТаблицаЗадачАПВыбрана') + '></td>' : '') +
+      '<td><div class="ellipsis" title="' + esc(x.name) + '">' + esc(x.name) + '</div>' +
+        (x.description ? '<div class="muted text-s ellipsis" title="' + esc(x.description) + '">' + esc(trunc(x.description, 80)) + '</div>' : '') + '</td>' +
+      '<td>' + badge(sm.tone, sm.text, 'ТаблицаЗадачАПСтатус') + '</td>' +
+      '<td class="nowrap">' + (late ? '<span class="danger-text">' + fmtDate(x.deadline) + '</span><div class="text-s danger-text">(−' + late + ' дн.)</div>' : fmtDate(x.deadline)) + '</td>' +
+      '<td><div class="ellipsis">' + rev + '</div></td>' +
+      '<td><div class="ellipsis">' + obsHtml + '</div></td>' +
+      '<td class="nowrap"><span class="row gap-1">' +
+        (x.result ? '<span class="icon-cell" title="' + esc('Результат: ' + x.result) + '"' + a1c('Картинка', 'ТаблицаЗадачАПЕстьРезультат') + '>' + icon('comment') + '</span>' : '<span class="icon-cell"></span>') +
+        button('', { cls: 'btn-icon btn-flat btn-small', icon: 'link', title: 'Открыть в Forus Team', action: 'openForus', name: 'ТаблицаЗадачАПОткрытьForusTeam' }) +
+      '</span></td>' +
+      '<td>' + taskRowMenu(t, x) + '</td>' +
+      '</tr>';
+  }
+
+  // Контекстное меню строки
+  function taskRowMenu(t, x) {
+    var lock = editLock(t);
+    var sorted = !!state.taskSort.key;
+    var siblings = tasksOf(programOf(t)).filter(function (y) { return y.block === x.block; });
+    var idx = siblings.indexOf(x);
+    function item(text, action, data, name, reason, cls) {
+      var attrs = '';
+      if (data) for (var k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
+      return '<button type="button" data-action="' + action + '"' + attrs + (cls ? ' class="' + cls + '"' : '') +
+        (reason ? ' disabled title="' + esc(reason) + '"' : '') + a1c('Кнопка', name) + '>' + esc(text) + '</button>';
+    }
+    var orderReason = lock || (sorted ? 'Сбросьте сортировку, чтобы менять порядок задач' : '');
+    return submenu('row:' + x.id, 'КонтекстноеМенюЗадачи', [
+      item(lock ? 'Открыть' : 'Изменить', 'openDialog', { dialog: 'task', task: x.id }, 'КонтекстноеМенюЗадачиИзменить'),
+      item('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer', task: x.id }, 'КонтекстноеМенюЗадачиНазначитьПроверяющего', lock),
+      item('Перенести срок', 'openDialog', { dialog: 'massDeadline', task: x.id }, 'КонтекстноеМенюЗадачиПеренестиСрок', lock),
+      item('Выше', 'moveTask', { task: x.id, dir: -1 }, 'КонтекстноеМенюЗадачиВыше', orderReason || (idx === 0 ? 'Задача уже первая в блоке' : '')),
+      item('Ниже', 'moveTask', { task: x.id, dir: 1 }, 'КонтекстноеМенюЗадачиНиже', orderReason || (idx === siblings.length - 1 ? 'Задача уже последняя в блоке' : '')),
+      '<div class="menu-sep"></div>',
+      item('Удалить', 'openDialog', { dialog: 'deleteTasks', task: x.id }, 'КонтекстноеМенюЗадачиУдалить', lock, 'danger-text')
+    ], { small: true, float: true, type: 'КонтекстноеМеню', title: 'Действия с задачей' });
+  }
+
+  // Пустое состояние: АП нет (7.5.5)
+  function recommendedTemplate(t) {
+    for (var i = 0; i < D.templates.length; i++) if (D.templates[i].position === t.position) return D.templates[i];
+    return null;
+  }
+  function renderProgramEmpty(t) {
+    if (isClosed(t)) {
+      return '<div class="empty"' + a1c('Надпись', 'ДекорацияАПНеСоздавалась') + '>Адаптационная программа не создавалась</div>';
+    }
+    var rec = recommendedTemplate(t);
+    var ds = daysToStart(t);
+    function option(title, text, extra, btnText, dialog, name) {
+      return '<div class="panel col gap-2 create-option"' + a1c('ГруппаВертикальная', 'ГруппаСоздание' + name) + '>' +
+        '<div class="bold"' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
+        '<div class="muted grow"' + a1c('Надпись', 'ДекорацияСоздание' + name + 'Пояснение') + '>' + esc(text) + '</div>' +
+        (extra || '') +
+        '<div>' + button(btnText, { action: 'openDialog', data: { dialog: dialog }, name: 'КнопкаСоздание' + name }) + '</div>' +
+        '</div>';
+    }
+    return '<div class="col gap-4"' + a1c('ГруппаВертикальная', 'ГруппаАПНеСоздана') + '>' +
+      '<div class="col gap-1">' +
+        '<div class="h-block"' + a1c('Надпись', 'ДекорацияАПНеСоздана') + '>Адаптационная программа ещё не создана</div>' +
+        '<div' + a1c('Надпись', 'ДекорацияАПНеСозданаПояснение') + '>' +
+          (ds >= 0 ? 'Выход стажёра ' + fmtDate(t.startDate) + '. Программу нужно создать и согласовать до выхода.'
+                   : 'Стажёр вышел ' + fmtDate(t.startDate) + '. Программу нужно создать и согласовать как можно скорее.') + '</div>' +
+      '</div>' +
+      '<div class="row gap-3 create-options"' + a1c('ГруппаГоризонтальная', 'ГруппаСпособыСоздания') + '>' +
+        option('По шаблону', 'Задачи и сроки подставятся из шаблона должности',
+          rec ? '<div>' + badge('success', 'Подходит для должности «' + rec.position + '»', 'ДекорацияШаблонПодходит') + '</div>' : '',
+          'Выбрать шаблон', 'createFromTemplate', 'ПоШаблону') +
+        option('Скопировать у другого стажёра', 'Возьмите АП коллеги на похожей должности', '', 'Выбрать стажёра', 'createCopy', 'Копированием') +
+        option('С нуля', 'Пустая программа, задачи добавите сами', '', 'Создать пустую АП', 'createEmpty', 'СНуля') +
+      '</div></div>';
+  }
+
+  // Создание АП любым из трёх способов (7.5.5)
+  function createProgram(t, templateId, historyText, taskSpecs) {
+    var program = {
+      id: 'pr-' + t.id + '-' + Date.now(), traineeId: t.id, templateId: templateId,
+      defaultReviewerId: t.mentorId, defaultObserverIds: [t.headId], history: []
+    };
+    D.programs.push(program);
+    taskSpecs.forEach(function (s) { D.tasks.push(newTask(program, s)); });
+    addHistory(program, historyText);
+    setStage(t, 'draft');
+    t.draftSince = D.TODAY;
+    checklistOf(t).forEach(function (c) {
+      if (c.linkedDocType === 'program' && !c.done) { c.done = true; c.doneBy = D.CURRENT_USER_ID; c.doneAt = D.TODAY; }
+    });
+    state.traineeTab = 'program';
+    state.taskFilter = null;
+    state.taskBlock = 'all';
+    toast('АП создана');
+  }
+  var newTaskSeq = 1;
+  function newTask(program, s) {
+    return {
+      id: 'task-new-' + (newTaskSeq++), programId: program.id, block: s.block, name: s.name, description: s.description || '',
+      status: s.status || 'not_started', deadline: s.deadline, reviewerId: s.reviewerId || null,
+      observerIds: s.observerIds || [], result: s.result || null, externalUrl: 'forus-team:task/new'
+    };
+  }
 
   /* ---------------------------------------------------------------------
    * Справка (раздел 7.8)
@@ -1015,11 +1353,11 @@
   }
   function inputDate(name, oneC, min) {
     return '<input type="date" class="input" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
-      (min ? ' min="' + min + '"' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
+      (min ? ' min="' + min + '"' : '') + (state.dialog.readOnly ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
   }
   function textarea(name, oneC) {
     return '<textarea class="textarea grow" rows="3" id="f_' + name + '" data-field="' + name + '"' +
-      (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' + esc(dlgValue(name)) + '</textarea>';
+      (state.dialog.readOnly ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' + esc(dlgValue(name)) + '</textarea>';
   }
   function selectUser(name, oneC) {
     return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + a1c('ПолеВвода', oneC) + '>' +
@@ -1156,12 +1494,351 @@
     };
   }
 
-  function openDialog(type, traineeId) {
+  /* ---------- Диалоги фазы 3: задачи и создание АП ---------- */
+
+  function dlgCtx() { return state.dialog.ctx || {}; }
+  function dlgRO() { return !!state.dialog.readOnly; }
+  function ro() { return dlgRO() ? ' disabled' : ''; }
+  // Задачи, к которым применяется массовое действие: из строки или выбранные флажками
+  function targetTasks(t) {
+    var ids = dlgCtx().taskIds || selectedTaskIds(t);
+    return ids.map(taskById).filter(Boolean);
+  }
+  function selectOptions(name, oneC, options, attrs) {
+    return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + (attrs || '') + ro() +
+      (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' +
+      options.map(function (o) {
+        return '<option value="' + esc(o.value) + '"' + (String(dlgValue(name)) === String(o.value) ? ' selected' : '') + '>' + esc(o.text) + '</option>';
+      }).join('') + '</select>';
+  }
+  function userOptions(emptyText) {
+    var list = D.users.map(function (u) { return { value: u.id, text: u.fullName + ' — ' + u.role }; });
+    return emptyText ? [{ value: '', text: emptyText }].concat(list) : list;
+  }
+  // Список пользователей с флажками (наблюдатели)
+  function userCheckList(name, oneC) {
+    var cur = state.dialog.values[name] || [];
+    return '<div class="check-list' + (state.dialog.errors[name] ? ' invalid' : '') + '"' + a1c('ТаблицаФормы', oneC) + '>' +
+      D.users.map(function (u) {
+        return '<label class="check"><input type="checkbox" data-field-list="' + name + '" value="' + u.id + '"' +
+          (cur.indexOf(u.id) >= 0 ? ' checked' : '') + ro() + a1c('Флажок', oneC + 'Пометка') + '> ' +
+          esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
+      }).join('') + '</div>';
+  }
+  function namesOf(ids) { return ids.map(userShort).join(', '); }
+  function sameList(a, b) { return a.slice().sort().join() === b.slice().sort().join(); }
+
+  // Карточка задачи: новая или существующая
+  DIALOGS.task = {
+    form: 'ФормаЗадачаАП', submit: 'Сохранить', wide: true,
+    titleFn: function () { return dlgCtx().taskId ? (dlgRO() ? 'Задача' : 'Изменить задачу') : 'Новая задача'; },
+    init: function (t, ctx) {
+      var x = ctx.taskId ? taskById(ctx.taskId) : null;
+      if (!x) return { name: '', block: state.taskBlock === 'spec' ? 'spec' : 'corp', description: '', deadline: '', status: 'not_started',
+        reviewerId: '', obsInherit: true, observers: [], result: '' };
+      return { name: x.name, block: x.block, description: x.description, deadline: x.deadline, status: x.status,
+        reviewerId: x.reviewerId || '', obsInherit: !x.observerIds.length, observers: x.observerIds.slice(), result: x.result || '' };
+    },
+    body: function (t) {
+      var program = programOf(t);
+      var e = state.dialog.errors;
+      var lockNote = dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>' : '';
+      return lockNote +
+        field('Наименование', inputText('name', 'ПолеНаименование', ro()), { required: true, error: e.name, forId: 'f_name', name: 'Наименование' }) +
+        field('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block' }) +
+        field('Описание', textarea('description', 'ПолеОписание'), { forId: 'f_description' }) +
+        field('Срок', inputDate('deadline', 'ПолеСрок'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'Срок' }) +
+        field('Статус', selectOptions('status', 'ПолеСтатус', [
+          { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status' }) +
+        field('Проверяющий', selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('По умолчанию (' + userShort(program.defaultReviewerId) + ')')), { forId: 'f_reviewerId' }) +
+        field('Наблюдатели',
+          '<label class="check"><input type="checkbox" data-field="obsInherit" data-rerender="1"' + (dlgValue('obsInherit') ? ' checked' : '') + ro() +
+            a1c('Флажок', 'ПолеНаблюдателиКакВАП') + '> Как в АП <span class="muted">(' + esc(namesOf(program.defaultObserverIds)) + ')</span></label>' +
+          (dlgValue('obsInherit') ? '' : userCheckList('observers', 'ТаблицаНаблюдатели')),
+          { error: e.observers, name: 'Наблюдатели' }) +
+        field('Результат', textarea('result', 'ПолеРезультат'), { forId: 'f_result' });
+    },
+    validate: function (t, v) {
+      var e = {};
+      if (!required(v.name)) e.name = 'Укажите наименование задачи';
+      if (!required(v.deadline)) e.deadline = 'Укажите срок';
+      if (!v.obsInherit && !(v.observers || []).length) e.observers = 'Выберите наблюдателей или отметьте «Как в АП»';
+      return e;
+    },
+    apply: function (t, v) {
+      var program = programOf(t);
+      var spec = {
+        name: v.name.trim(), block: v.block, description: (v.description || '').trim(), deadline: v.deadline, status: v.status,
+        reviewerId: v.reviewerId || null, observerIds: v.obsInherit ? [] : v.observers.slice(), result: required(v.result) ? v.result.trim() : null
+      };
+      var x = dlgCtx().taskId ? taskById(dlgCtx().taskId) : null;
+      if (!x) {
+        D.tasks.push(newTask(program, spec));
+        programChanged(t, 'Добавлена задача «' + spec.name + '»');
+        toast('Задача добавлена');
+        return;
+      }
+      // Изменением АП считаются наименование, срок, блок, проверяющий и наблюдатели; статус и результат — нет
+      var changed = [];
+      if (x.name !== spec.name) changed.push('наименование');
+      if (x.deadline !== spec.deadline) changed.push('срок ' + fmtDate(x.deadline) + ' → ' + fmtDate(spec.deadline));
+      if (x.block !== spec.block) changed.push('блок');
+      if ((x.reviewerId || null) !== spec.reviewerId) changed.push('проверяющий');
+      if (!sameList(x.observerIds, spec.observerIds)) changed.push('наблюдатели');
+      var oldName = x.name;
+      for (var k in spec) x[k] = spec[k];
+      if (changed.length) programChanged(t, 'Изменена задача «' + oldName + '»: ' + changed.join(', '));
+      toast('Задача сохранена');
+    }
+  };
+
+  DIALOGS.massReviewer = {
+    title: 'Назначить проверяющего', form: 'ФормаНазначитьПроверяющего', submit: 'Назначить',
+    init: function (t) { return { userId: '' }; },
+    body: function (t) {
+      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
+        field('Проверяющий', selectOptions('userId', 'ПолеПроверяющий', userOptions('Выберите сотрудника')),
+          { required: true, error: state.dialog.errors.userId, forId: 'f_userId', name: 'Проверяющий' });
+    },
+    validate: function (t, v) { return required(v.userId) ? {} : { userId: 'Выберите проверяющего' }; },
+    apply: function (t, v) {
+      var list = targetTasks(t);
+      list.forEach(function (x) { x.reviewerId = v.userId; });
+      programChanged(t, 'Назначен проверяющий ' + userShort(v.userId) + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
+      state.selectedTasks = {};
+      toast('Проверяющий назначен: ' + userShort(v.userId));
+    }
+  };
+
+  DIALOGS.massObservers = {
+    title: 'Наблюдатели', form: 'ФормаНаблюдатели', submit: 'Сохранить',
+    init: function () { return { mode: 'add', observers: [] }; },
+    body: function (t) {
+      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
+        field('Действие', choice('mode', 'ПолеСпособИзменения', [
+          { value: 'add', text: 'Добавить к текущим', name: 'Добавить' }, { value: 'replace', text: 'Заменить', name: 'Заменить' }])) +
+        field('Наблюдатели', userCheckList('observers', 'ТаблицаНаблюдатели'), { required: true, error: state.dialog.errors.observers, name: 'Наблюдатели' });
+    },
+    validate: function (t, v) { return v.observers.length ? {} : { observers: 'Выберите хотя бы одного наблюдателя' }; },
+    apply: function (t, v) {
+      var program = programOf(t);
+      var list = targetTasks(t);
+      list.forEach(function (x) {
+        if (v.mode === 'replace') x.observerIds = v.observers.slice();
+        else {
+          var cur = observersOf(program, x).slice();
+          v.observers.forEach(function (id) { if (cur.indexOf(id) < 0) cur.push(id); });
+          x.observerIds = cur;
+        }
+      });
+      programChanged(t, (v.mode === 'replace' ? 'Заменены' : 'Добавлены') + ' наблюдатели (' + namesOf(v.observers) + '): задач ' + list.length);
+      state.selectedTasks = {};
+      toast('Наблюдатели изменены');
+    }
+  };
+
+  DIALOGS.massDeadline = {
+    title: 'Перенести срок', form: 'ФормаПеренестиСрок', submit: 'Перенести срок',
+    init: function () { return { mode: 'days', days: '7', date: '' }; },
+    body: function (t) {
+      var e = state.dialog.errors;
+      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
+        field('Способ', choice('mode', 'ПолеСпособПереноса', [
+          { value: 'days', text: 'На N дней', name: 'НаДни' }, { value: 'date', text: 'На дату', name: 'НаДату' }])) +
+        (dlgValue('mode') === 'days'
+          ? field('Дней', '<input type="number" step="1" class="input input-num" id="f_days" data-field="days" value="' + esc(dlgValue('days')) + '"' +
+              (e.days ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеДней') + '>' +
+              '<div class="muted text-s">Отрицательное число переносит срок на более раннюю дату</div>', { required: true, error: e.days, forId: 'f_days', name: 'Дней' })
+          : field('Новый срок', inputDate('date', 'ПолеНовыйСрок'), { required: true, error: e.date, forId: 'f_date', name: 'НовыйСрок' }));
+    },
+    validate: function (t, v) {
+      if (v.mode === 'days') {
+        var n = Number(v.days);
+        return v.days !== '' && Math.round(n) === n && n !== 0 ? {} : { days: 'Укажите целое число дней, не равное нулю' };
+      }
+      return required(v.date) ? {} : { date: 'Укажите новый срок' };
+    },
+    apply: function (t, v) {
+      var list = targetTasks(t);
+      list.forEach(function (x) { x.deadline = v.mode === 'days' ? addDays(x.deadline, Number(v.days)) : v.date; });
+      var how = v.mode === 'days' ? 'на ' + pluralN(Math.abs(Number(v.days)), W_DAYS) + (Number(v.days) < 0 ? ' раньше' : '') : 'на ' + fmtDate(v.date);
+      programChanged(t, 'Перенесён срок ' + how + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
+      state.selectedTasks = {};
+      toast('Срок перенесён');
+    }
+  };
+
+  DIALOGS.deleteTasks = {
+    title: 'Удалить задачи', form: 'ФормаУдалитьЗадачи', submit: 'Удалить', danger: true,
+    body: function (t) {
+      var list = targetTasks(t);
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросУдаления') + '>Удалить задач: ' + list.length + '?</p>' +
+        (list.length <= 5 ? '<ul class="dlg-list">' + list.map(function (x) { return '<li>' + esc(x.name) + '</li>'; }).join('') + '</ul>' : '');
+    },
+    apply: function (t) {
+      var list = targetTasks(t);
+      D.tasks = D.tasks.filter(function (x) { return list.indexOf(x) < 0; });
+      programChanged(t, list.length === 1 ? 'Удалена задача «' + list[0].name + '»' : 'Удалено задач: ' + list.length);
+      state.selectedTasks = {};
+      toast('Удалено задач: ' + list.length);
+    }
+  };
+
+  DIALOGS.reviewers = {
+    title: 'Проверяющие и наблюдатели', form: 'ФормаПроверяющиеИНаблюдатели', submit: 'Сохранить',
+    init: function (t) {
+      var p = programOf(t);
+      return { reviewerId: p.defaultReviewerId, observers: p.defaultObserverIds.slice(), replaceAll: false };
+    },
+    body: function (t) {
+      return '<p class="dlg-text muted">Применяются к задачам, у которых проверяющий и наблюдатели не заданы явно.</p>' +
+        field('Проверяющий по умолчанию', selectOptions('reviewerId', 'ПолеПроверяющийПоУмолчанию', userOptions()), { required: true, forId: 'f_reviewerId' }) +
+        field('Наблюдатели по умолчанию', userCheckList('observers', 'ТаблицаНаблюдателиПоУмолчанию'),
+          { required: true, error: state.dialog.errors.observers, name: 'НаблюдателиПоУмолчанию' }) +
+        field('', '<label class="check"><input type="checkbox" data-field="replaceAll"' + (dlgValue('replaceAll') ? ' checked' : '') +
+          a1c('Флажок', 'ПолеЗаменитьУЗадачСДругимПроверяющим') + '> Заменить также у задач с другим проверяющим</label>');
+    },
+    validate: function (t, v) { return v.observers.length ? {} : { observers: 'Выберите хотя бы одного наблюдателя' }; },
+    apply: function (t, v) {
+      var p = programOf(t);
+      var changed = [];
+      if (p.defaultReviewerId !== v.reviewerId) changed.push('проверяющий по умолчанию: ' + userShort(v.reviewerId));
+      if (!sameList(p.defaultObserverIds, v.observers)) changed.push('наблюдатели по умолчанию: ' + namesOf(v.observers));
+      p.defaultReviewerId = v.reviewerId;
+      p.defaultObserverIds = v.observers.slice();
+      if (v.replaceAll) {
+        var n = 0;
+        tasksOf(p).forEach(function (x) { if (x.reviewerId) { x.reviewerId = null; n++; } });
+        if (n) changed.push('проверяющий заменён у задач: ' + n);
+      }
+      if (changed.length) programChanged(t, 'Изменено: ' + changed.join('; '));
+      toast('Проверяющие и наблюдатели сохранены');
+    }
+  };
+
+  // Выбор шаблона для создания АП
+  function templateTable(field_, oneC) {
+    var rec = recommendedTemplate(trainee(state.dialog.traineeId));
+    return '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', oneC) + '>' +
+      '<thead><tr><th></th><th>Шаблон</th><th>Должность</th><th class="num">Корп. / спец. задач</th></tr></thead><tbody>' +
+      D.templates.map(function (tp) {
+        var on = dlgValue(field_) === tp.id;
+        var corpN = tp.tasks.filter(function (x) { return x.block === 'corp'; }).length;
+        return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="dlgChoose" data-field="' + field_ + '" data-value="' + tp.id + '">' +
+          '<td><input type="radio" name="' + field_ + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(tp.name) + '"' + a1c('Флажок', oneC + 'Выбран') + '></td>' +
+          '<td>' + esc(tp.name) + (rec && rec.id === tp.id ? ' ' + badge('success', 'Подходит для должности', 'ДекорацияРекомендуемыйШаблон') : '') + '</td>' +
+          '<td>' + esc(tp.position || 'Для всех должностей') + '</td>' +
+          '<td class="num">' + corpN + ' / ' + (tp.tasks.length - corpN) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function templateTasksFor(t, tp) {
+    return tp.tasks.map(function (x) {
+      return { block: x.block, name: x.name, description: x.description, deadline: addDays(t.startDate, x.offsetDays) };
+    });
+  }
+
+  DIALOGS.createFromTemplate = {
+    title: 'Выбор шаблона', form: 'ФормаВыборШаблона', submit: 'Создать АП', wide: true,
+    init: function (t) {
+      var rec = recommendedTemplate(t) || byId(D.templates, 'tpl-base');
+      return { template: rec.id };
+    },
+    body: function (t) {
+      return '<p class="dlg-text">Сроки задач посчитаются от даты выхода стажёра ' + fmtDate(t.startDate) + '.</p>' +
+        templateTable('template', 'ТаблицаШаблоны') +
+        (state.dialog.errors.template ? '<div class="field-error">' + esc(state.dialog.errors.template) + '</div>' : '');
+    },
+    validate: function (t, v) { return v.template ? {} : { template: 'Выберите шаблон' }; },
+    apply: function (t, v) {
+      var tp = byId(D.templates, v.template);
+      createProgram(t, tp.id, 'АП создана по шаблону «' + tp.name + '»', templateTasksFor(t, tp));
+    }
+  };
+
+  DIALOGS.createCopy = {
+    title: 'Копирование АП', form: 'ФормаКопированиеАП', submit: 'Создать АП', wide: true,
+    init: function () { return { source: '' }; },
+    body: function (t) {
+      var list = D.trainees.filter(function (x) { return x.id !== t.id && programOf(x) && tasksOf(programOf(x)).length; });
+      return '<p class="dlg-text">Задачи скопируются без статусов и результатов, сроки сдвинутся на дату выхода ' + fmtDate(t.startDate) + '.</p>' +
+        '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаСтажерыСАП') + '>' +
+        '<thead><tr><th></th><th>ФИО</th><th>Должность</th><th class="num">Задач</th></tr></thead><tbody>' +
+        list.map(function (x) {
+          var on = dlgValue('source') === x.id;
+          return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="dlgChoose" data-field="source" data-value="' + x.id + '">' +
+            '<td><input type="radio" name="source"' + (on ? ' checked' : '') + ' aria-label="' + esc(x.fullName) + '"' + a1c('Флажок', 'ТаблицаСтажерыСАПВыбран') + '></td>' +
+            '<td>' + esc(x.fullName) + '</td><td>' + esc(x.position) + (x.position === t.position ? ' ' + badge('success', 'Та же должность', 'ДекорацияТаЖеДолжность') : '') + '</td>' +
+            '<td class="num">' + tasksOf(programOf(x)).length + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (state.dialog.errors.source ? '<div class="field-error">' + esc(state.dialog.errors.source) + '</div>' : '');
+    },
+    validate: function (t, v) { return v.source ? {} : { source: 'Выберите стажёра, у которого копировать АП' }; },
+    apply: function (t, v) {
+      var src = trainee(v.source);
+      var specs = tasksOf(programOf(src)).map(function (x) {
+        return { block: x.block, name: x.name, description: x.description,
+          deadline: addDays(t.startDate, diffDays(src.startDate, x.deadline)) };
+      });
+      createProgram(t, programOf(src).templateId, 'АП создана копированием у стажёра ' + src.fullName, specs);
+    }
+  };
+
+  DIALOGS.createEmpty = {
+    title: 'Создать пустую АП', form: 'ФормаСоздатьПустуюАП', submit: 'Создать пустую АП',
+    body: function (t) { return '<p class="dlg-text">Будет создана адаптационная программа без задач. Задачи можно добавить вручную или из шаблона.</p>'; },
+    apply: function (t) { createProgram(t, null, 'АП создана с нуля', []); }
+  };
+
+  DIALOGS.addFromTemplate = {
+    title: 'Добавить из шаблона', form: 'ФормаДобавитьИзШаблона', submit: 'Добавить', wide: true,
+    init: function (t) {
+      var p = programOf(t);
+      return { template: (p.templateId && byId(D.templates, p.templateId) ? p.templateId : (recommendedTemplate(t) || D.templates[2]).id), picked: [] };
+    },
+    body: function (t) {
+      var tp = byId(D.templates, dlgValue('template'));
+      var picked = state.dialog.values.picked;
+      var existing = tasksOf(programOf(t)).map(function (x) { return x.name; });
+      var allOn = picked.length === tp.tasks.length;
+      return field('Шаблон', selectOptions('template', 'ПолеШаблон', D.templates.map(function (x) { return { value: x.id, text: x.name }; }), ' data-rerender="1"'), { forId: 'f_template' }) +
+        '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблона') + '>' +
+        '<thead><tr><th><input type="checkbox" data-action="dlgPickAll" title="Выбрать все"' + (allOn ? ' checked' : '') + a1c('Флажок', 'ТаблицаЗадачиШаблонаВыбратьВсе') + '></th>' +
+        '<th>Задача</th><th>Блок</th><th>Срок</th></tr></thead><tbody>' +
+        tp.tasks.map(function (x, i) {
+          var has = existing.indexOf(x.name) >= 0;
+          return '<tr><td><input type="checkbox" data-field-list="picked" value="' + i + '"' + (picked.indexOf(String(i)) >= 0 ? ' checked' : '') +
+            ' aria-label="' + esc(x.name) + '"' + a1c('Флажок', 'ТаблицаЗадачиШаблонаПометка') + '></td>' +
+            '<td>' + esc(x.name) + (has ? ' <span class="muted text-s">уже есть в АП</span>' : '') + '</td>' +
+            '<td class="nowrap">' + blockMeta(x.block).short + '</td>' +
+            '<td class="nowrap">' + fmtDate(addDays(t.startDate, x.offsetDays)) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (state.dialog.errors.picked ? '<div class="field-error">' + esc(state.dialog.errors.picked) + '</div>' : '');
+    },
+    validate: function (t, v) { return v.picked.length ? {} : { picked: 'Отметьте задачи, которые нужно добавить' }; },
+    apply: function (t, v) {
+      var tp = byId(D.templates, v.template);
+      var program = programOf(t);
+      var specs = templateTasksFor(t, tp).filter(function (x, i) { return v.picked.indexOf(String(i)) >= 0; });
+      specs.forEach(function (s) { D.tasks.push(newTask(program, s)); });
+      programChanged(t, 'Добавлено задач из шаблона «' + tp.name + '»: ' + specs.length);
+      toast('Добавлено задач: ' + specs.length);
+    }
+  };
+
+  // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
+  var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'reviewers', 'addFromTemplate'];
+
+  function openDialog(type, traineeId, ctx) {
     var def = DIALOGS[type];
     if (!def) { toast('Диалог появится в следующей фазе прототипа'); return; }
     var t = trainee(traineeId);
+    ctx = ctx || {};
+    var lock = editLock(t);
+    if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
     state.openMenu = null;
-    state.dialog = { type: type, traineeId: traineeId, values: def.init ? def.init(t) : {}, errors: {} };
+    state.dialog = { type: type, traineeId: traineeId, ctx: ctx, readOnly: type === 'task' && !!lock && !!ctx.taskId, values: {}, errors: {} };
+    if (type === 'task' && lock && !ctx.taskId) { state.dialog = null; toast(lock); return; }
+    state.dialog.values = def.init ? def.init(t, ctx) : {};
     render();
     var first = el('dialogHost').querySelector('[data-field]') || el('dialogHost').querySelector('.btn-primary');
     if (first) first.focus();
@@ -1171,7 +1848,7 @@
     var d = state.dialog;
     var def = DIALOGS[d.type];
     var t = trainee(d.traineeId);
-    if (def.readOnly) { closeDialog(); return; }
+    if (def.readOnly || d.readOnly) { closeDialog(); return; }
     d.errors = def.validate ? def.validate(t, d.values) : {};
     if (Object.keys(d.errors).length) {
       renderDialog();
@@ -1190,15 +1867,17 @@
     if (!d) { host.innerHTML = ''; return; }
     var def = DIALOGS[d.type];
     var t = trainee(d.traineeId);
+    var title = def.titleFn ? def.titleFn() : def.title;
+    var readOnly = def.readOnly || d.readOnly;
     host.innerHTML = '<div class="modal-backdrop">' +
-      '<div class="modal' + (def.wide ? ' modal-wide' : '') + '" role="dialog" aria-modal="true" aria-label="' + esc(def.title) + '"' +
+      '<div class="modal' + (def.wide ? ' modal-wide' : '') + '" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"' +
       a1c('ОтдельнаяФорма', def.form) + '>' +
-      '<div class="modal-head row"><span class="modal-title grow">' + esc(def.title) + '</span>' +
+      '<div class="modal-head row"><span class="modal-title grow">' + esc(title) + '</span>' +
         button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Закрыть', action: 'dialogCancel', name: def.form + 'Закрыть' }) + '</div>' +
       '<div class="modal-body col gap-3">' + def.body(t) + '</div>' +
       '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' +
-        button(def.submit, { cls: def.danger ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (def.readOnly ? 'Закрыть' : 'Выполнить') }) +
-        (def.readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' })) +
+        button(readOnly ? 'Закрыть' : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') }) +
+        (readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' })) +
       '</div></div></div>';
   }
 
@@ -1211,6 +1890,9 @@
     state.taskFilter = null;
     state.taskBlock = 'all';
     state.openMenu = null;
+    state.taskSort = { key: null, dir: 1 };
+    state.selectedTasks = {};
+    state.collapsedBlocks = {};
     deptChain(t.departmentId).forEach(function (d) { delete state.collapsed[d.id]; });
     render();
   }
@@ -1251,6 +1933,7 @@
     toggleMenu: function (btn) {
       var id = btn.getAttribute('data-menu');
       state.openMenu = state.openMenu === id ? null : id;
+      menuOpenedAt = Date.now();
       renderCenter();
     },
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
@@ -1271,6 +1954,8 @@
       else if (n.action === 'showTasksOverdue' || n.action === 'showTasksUndone') {
         state.traineeTab = 'program';
         state.taskBlock = 'all';
+        state.selectedTasks = {};
+        state.collapsedBlocks = {};
         state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'undone';
         renderCenter();
       } else if (n.action === 'showChecklistOverdue') {
@@ -1294,7 +1979,55 @@
     openProgramDoc: function () { state.openMenu = null; renderCenter(); toast('Откроется форма документа'); },
 
     // Диалоги
-    openDialog: function (btn) { openDialog(btn.getAttribute('data-dialog'), state.selectedTraineeId); },
+    openDialog: function (btn) {
+      var taskId = btn.getAttribute('data-task');
+      openDialog(btn.getAttribute('data-dialog'), state.selectedTraineeId, taskId ? { taskId: taskId, taskIds: [taskId] } : {});
+    },
+    dlgPickAll: function (box) {
+      var tp = byId(D.templates, state.dialog.values.template);
+      state.dialog.values.picked = box.checked ? tp.tasks.map(function (x, i) { return String(i); }) : [];
+      delete state.dialog.errors.picked;
+      renderDialog();
+    },
+
+    // Таблица задач
+    taskFilter: function (btn) {
+      state.taskFilter = btn.getAttribute('data-value') || null;
+      state.selectedTasks = {};
+      renderCenter();
+    },
+    taskBlock: function (btn) {
+      state.taskBlock = btn.getAttribute('data-value');
+      state.selectedTasks = {};
+      renderCenter();
+    },
+    sortTasks: function (btn) {
+      var key = btn.getAttribute('data-key');
+      if (state.taskSort.key !== key) state.taskSort = { key: key, dir: 1 };
+      else if (state.taskSort.dir > 0) state.taskSort.dir = -1;
+      else state.taskSort = { key: null, dir: 1 }; // третий клик — порядок задач в АП
+      renderCenter();
+    },
+    toggleBlockGroup: function (row) {
+      var b = row.getAttribute('data-block');
+      state.collapsedBlocks[b] = !state.collapsedBlocks[b];
+      renderCenter();
+    },
+    moveTask: function (btn) {
+      var t = trainee(state.selectedTraineeId);
+      var x = taskById(btn.getAttribute('data-task'));
+      var dir = Number(btn.getAttribute('data-dir'));
+      var siblings = tasksOf(programOf(t)).filter(function (y) { return y.block === x.block; });
+      var other = siblings[siblings.indexOf(x) + dir];
+      if (!other) return;
+      var i = D.tasks.indexOf(x), j = D.tasks.indexOf(other);
+      D.tasks[i] = other;
+      D.tasks[j] = x;
+      state.openMenu = null;
+      programChanged(t, 'Изменён порядок задач: «' + x.name + '» ' + (dir < 0 ? 'выше' : 'ниже'));
+      render();
+    },
+    openForus: function () { toast('Переход в Forus Team в прототипе не реализован'); },
     dialogSubmit: function () { submitDialog(); },
     dialogCancel: function () { closeDialog(); },
     dlgChoose: function (btn) {
@@ -1341,7 +2074,7 @@
   document.addEventListener('input', function (e) {
     var f = e.target.getAttribute('data-field');
     if (f && state.dialog) {
-      state.dialog.values[f] = e.target.value;
+      if (e.target.type !== 'checkbox') state.dialog.values[f] = e.target.value;
       return;
     }
     if (e.target.getAttribute('data-input') === 'search') {
@@ -1351,9 +2084,37 @@
     }
   });
   document.addEventListener('change', function (e) {
-    var f = e.target.getAttribute('data-field');
+    var tgt = e.target;
+    var f = tgt.getAttribute('data-field');
     if (f && state.dialog) {
-      state.dialog.values[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
+      if (tgt.hasAttribute('data-rerender')) {
+        if (f === 'template') state.dialog.values.picked = [];
+        renderDialog();
+      }
+      return;
+    }
+    var list = tgt.getAttribute('data-field-list');
+    if (list && state.dialog) {
+      var cur = state.dialog.values[list] || [];
+      cur = cur.filter(function (v) { return v !== tgt.value; });
+      if (tgt.checked) cur.push(tgt.value);
+      state.dialog.values[list] = cur;
+      delete state.dialog.errors[list];
+      if (list === 'picked') renderDialog();
+      return;
+    }
+    // Флажки выбора строк таблицы задач: только выбор, статус задачи не меняется
+    if (tgt.hasAttribute('data-select-task')) {
+      var id = tgt.getAttribute('data-select-task');
+      if (tgt.checked) state.selectedTasks[id] = true; else delete state.selectedTasks[id];
+      renderCenter();
+      return;
+    }
+    if (tgt.hasAttribute('data-select-all')) {
+      var ids = visibleTasks(trainee(state.selectedTraineeId)).map(function (x) { return x.id; });
+      ids.forEach(function (id2) { if (tgt.checked) state.selectedTasks[id2] = true; else delete state.selectedTasks[id2]; });
+      renderCenter();
       return;
     }
     if (e.target.getAttribute('data-change') === 'hideEmpty') {
@@ -1361,6 +2122,18 @@
       renderLeft();
     }
   });
+  // Двойной клик по строке задачи открывает карточку задачи
+  document.addEventListener('dblclick', function (e) {
+    var row = e.target.closest('tr[data-task-id]');
+    if (!row || e.target.closest('input, button')) return;
+    openDialog('task', state.selectedTraineeId, { taskId: row.getAttribute('data-task-id') });
+  });
+  // Контекстное меню строки закрывается при прокрутке
+  var menuOpenedAt = 0;
+  document.addEventListener('scroll', function () {
+    if (state.openMenu && state.openMenu.indexOf('row:') === 0 && Date.now() - menuOpenedAt > 300) { state.openMenu = null; renderCenter(); }
+  }, true);
+
   // Строки дерева и таблиц открываются с клавиатуры
   document.addEventListener('keydown', function (e) {
     var t = e.target;
