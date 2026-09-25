@@ -392,7 +392,6 @@
     summarySort: { key: 'action', dir: 1 },  // по умолчанию — по важности главного уведомления
     summaryCurrent: null,        // текущая строка сводной таблицы (одиночный клик, ↑ ↓)
     summaryFocus: false,         // вернуть фокус текущей строке после перерисовки
-    dismissed: {},               // закрытые info-плашки: {'traineeId:key': true}, до перезагрузки
     notesExpanded: false,        // «Ещё N уведомлений» раскрыто
     openMenu: null,              // открытое подменю
     dialog: null,                // открытый диалог (верхний)
@@ -794,8 +793,7 @@
     return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
       renderHeader(t) +
-      renderNotes(t) +
-      renderCommandBar(t) +
+      renderNextStepRow(t) +
       renderTraineePages(t) +
       '</div>';
   }
@@ -884,60 +882,59 @@
   }
 
   var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
+  // Уведомления с действием меняют данные; остальные — навигационные (кнопка только переключает вид)
+  var ACTION_NOTES = ['createProgram', 'sendToApproval', 'startClosing'];
+  function isActionNote(n) { return ACTION_NOTES.indexOf(n.action) >= 0; }
 
-  // Плашки уведомлений (раздел 7.1)
-  function renderNotes(t) {
-    var list = getNotifications(t).filter(function (n) { return !state.dismissed[t.id + ':' + n.key]; });
-    if (!list.length) return '';
-    var shown = state.notesExpanded ? list : list.slice(0, 3);
-    var rest = list.length - shown.length;
-    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаУведомления') + '>' +
-      shown.map(function (n) {
-        var disabled = n.action === 'startClosing' && !canStartClosing(t);
-        return '<div class="note note-' + n.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.key)) + '>' +
-          '<span class="tone-' + n.tone + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.key)) + '>' + icon(NOTE_ICONS[n.tone]) + '</span>' +
-          '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.key)) + '>' + esc(n.text) + '</span>' +
-          (n.button ? button(n.button, { action: 'noteAction', data: { key: n.key }, name: 'КнопкаУведомление' + n1c(n.key),
-            disabled: disabled, title: disabled ? 'Доступно с ' + fmtDate(closeAvailableFrom(t)) : '' }) : '') +
-          (n.tone === 'info' ? button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Скрыть уведомление', action: 'dismissNote',
-            data: { key: n.key }, name: 'КнопкаСкрытьУведомление' + n1c(n.key) }) : '') +
-          '</div>';
-      }).join('') +
-      (rest > 0 ? '<div>' + link('Ещё ' + pluralN(rest, ['уведомление', 'уведомления', 'уведомлений']), { action: 'toggleNotes', name: 'ГиперссылкаЕщеУведомления' }) + '</div>' : '') +
-      (state.notesExpanded && list.length > 3 ? '<div>' + link('Свернуть уведомления', { action: 'toggleNotes', name: 'ГиперссылкаСвернутьУведомления' }) + '</div>' : '') +
-      '</div>';
+  // Главное действие этапа, если уведомления с действием нет (решение 2 фазы 8)
+  function stageFallbackStep(t) {
+    var program = programOf(t);
+    if ((t.stage === 'draft' || t.stage === 'found') && program) {
+      return { key: 'stageAction', tone: 'info', text: 'Черновик АП готов к отправке на согласование',
+        button: 'Отправить на согласование', action: 'sendToApproval' };
+    }
+    if (t.stage === 'closing') {
+      return { key: 'stageAction', tone: 'info', text: 'Стажировка на этапе закрытия',
+        button: 'Начать закрытие стажировки', action: 'startClosing' };
+    }
+    return null;
   }
 
-  // Командная панель стажировки
-  function renderCommandBar(t) {
+  // Следующий шаг (фаза 8, раздел 3.1): главное уведомление и остальные
+  function getNextStep(t) {
+    var list = getNotifications(t);
+    var main = null;
+    if (t.stage === 'approval') main = list.filter(function (n) { return n.key === 'onApproval'; })[0] || null;
+    if (!main) main = list.filter(isActionNote)[0] || null;
+    if (!main) main = stageFallbackStep(t);
+    if (!main) main = list[0] || null;
+    return { main: main, rest: list.filter(function (n) { return n !== main; }) };
+  }
+
+  // Строка следующего шага: слева — главное уведомление с кнопкой, справа — второстепенные действия
+  function renderNextStepRow(t) {
+    var step = getNextStep(t);
+    var m = step.main;
+    var left = '';
+    if (m) {
+      var primary = isActionNote(m);
+      left = '<div class="next-step note-' + m.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаСледующийШаг') + '>' +
+        '<span class="tone-' + m.tone + '"' + a1c('Картинка', 'КартинкаСледующийШаг') + '>' + icon(NOTE_ICONS[m.tone]) + '</span>' +
+        '<span class="next-step-text" title="' + esc(m.text) + '"' + a1c('Надпись', 'ДекорацияСледующийШаг') + '>' + esc(m.text) + '</span>' +
+        (m.button ? button(primary ? m.button : 'Показать', { cls: primary ? 'btn-primary' : '', action: 'noteAction', data: { key: m.key },
+          name: 'КнопкаСледующийШаг' }) : '') +
+        (step.rest.length ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + step.rest.length, { action: 'toggleNotes',
+          title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '') +
+        '</div>';
+    }
+
+    // Правая часть: позиция не зависит от левой
     var program = programOf(t);
-    var s = t.stage;
+    var s_ = t.stage;
     var parts = [];
-    var reason = '';
-
-    if (s === 'found' && !program) {
-      parts.push(button('Создать АП', { cls: 'btn-primary', action: 'createProgram', name: 'КнопкаСоздатьАП' }));
-    } else if (s === 'found' || s === 'draft') {
-      parts.push(button('Отправить на согласование', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' }));
-    } else if (s === 'approval') {
-      parts.push(button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' }));
-    } else if (s === 'active' || s === 'closing') {
-      var can = canStartClosing(t);
-      parts.push(button('Начать закрытие стажировки', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'close' },
-        disabled: !can, title: can ? '' : 'Закрытие доступно за ' + pluralN(D.CLOSE_AVAILABLE_DAYS, W_DAYS) + ' до окончания стажировки',
-        name: 'КнопкаНачатьЗакрытиеСтажировки' }));
-      if (!can) reason = '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияЗакрытиеДоступноС') + '>Доступно с ' + fmtDate(closeAvailableFrom(t)) + '</span>';
-    }
-    if (reason) parts.push(reason);
-    if (s === 'active' || s === 'closing') {
-      parts.push(button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }));
-    }
-    if (program) {
-      parts.push(button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }));
-      if (!isClosed(t)) parts.push(button('Проверяющие и наблюдатели', { icon: 'users', action: 'openDialog', data: { dialog: 'reviewers' },
-        disabled: !!editLock(t), title: editLock(t) || '', name: 'КнопкаПроверяющиеИНаблюдатели' }));
-    }
-
+    if (s_ === 'approval') parts.push(button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' }));
+    if (s_ === 'active' || s_ === 'closing') parts.push(button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }));
+    if (program) parts.push(button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }));
     var menuItems = [];
     if (program) {
       menuItems.push(menuItem('История изменений АП', 'openDialog', { dialog: 'history' }, 'КнопкаИсторияИзмененийАП'));
@@ -947,14 +944,29 @@
       if (menuItems.length) menuItems.push('<div class="menu-sep"></div>');
       menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
     }
-
-    return '<div class="row wrap command-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
+    var right = '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
       parts.join('') +
-      '<span class="grow"></span>' +
       (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
       button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
         title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправка' }) +
       '</div>';
+
+    // «ещё N» раскрывает под строкой группу с остальными уведомлениями — одна строка на уведомление
+    var more = step.rest.length && state.notesExpanded
+      ? '<div class="col gap-1 more-notes"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' +
+        step.rest.map(function (n) {
+          return '<div class="more-note note-' + n.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.key)) + '>' +
+            '<span class="tone-' + n.tone + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.key)) + '>' + icon(NOTE_ICONS[n.tone]) + '</span>' +
+            '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.key)) + '>' + esc(n.text) + '</span>' +
+            (n.button ? button(isActionNote(n) ? n.button : 'Показать', { cls: 'btn-small-text', action: 'noteAction', data: { key: n.key },
+              name: 'КнопкаУведомление' + n1c(n.key) }) : '') +
+            '</div>';
+        }).join('') + '</div>'
+      : '';
+
+    return '<div class="col gap-1"' + a1c('ГруппаВертикальная', 'ГруппаСледующийШагИДействия') + '>' +
+      '<div class="row next-step-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаСледующегоШага') + '>' + left + right + '</div>' +
+      more + '</div>';
   }
 
   function menuItem(text, action, data, name, cls) {
@@ -2389,14 +2401,10 @@
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
     openHelp: function () { toast('Инструкция откроется в базе знаний'); },
     toggleNotes: function () { state.notesExpanded = !state.notesExpanded; renderCenter(); },
-    dismissNote: function (btn) {
-      state.dismissed[state.selectedTraineeId + ':' + btn.getAttribute('data-key')] = true;
-      renderCenter();
-    },
     noteAction: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var key = btn.getAttribute('data-key');
-      var n = getNotifications(t).filter(function (x) { return x.key === key; })[0];
+      var n = key === 'stageAction' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.key === key; })[0];
       if (!n) return;
       if (n.action === 'createProgram') actions.createProgram();
       else if (n.action === 'sendToApproval') openDialog('sendToApproval', t.id);
@@ -2406,7 +2414,7 @@
         state.taskBlock = 'all';
         state.selectedTasks = {};
         state.collapsedBlocks = {};
-        state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'undone';
+        state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'progress'; // отставание — «В работе»
         renderCenter();
       } else if (n.action === 'showChecklistOverdue') {
         state.traineeTab = 'prepare';

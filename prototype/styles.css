@@ -569,3 +569,13 @@ body.markup-1c table[data-1c]::before {
 .tcard .step-text { padding-top: 1px; }
 .tcard .step-title { line-height: 16px; }
 .step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
+
+/* ================= Фаза 8: строка следующего шага ================= */
+.next-step-row { min-height: 44px; gap: var(--sp-3); flex-wrap: nowrap; }
+.next-step { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 44px; padding: 0 var(--sp-3); border-radius: var(--radius); flex: 0 1 auto; min-width: 0; }
+.next-step-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.next-step .link { white-space: nowrap; }
+.trainee-actions { margin-left: auto; flex: 0 0 auto; gap: var(--sp-2); border: none; padding: 0; flex-wrap: nowrap; }
+.more-notes { padding: 0; }
+.more-note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-3); border-radius: var(--radius); }
+.btn-small-text { height: 24px; padding: 0 var(--sp-2); }
