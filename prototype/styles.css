@@ -13,6 +13,8 @@
   --c-danger:  #D93025;   --c-danger-bg:  #FCE8E6;
   --c-info:    #1E6FE8;   --c-info-bg:    #E8F0FE;
   --c-neutral-bg: #EEF0F3;
+  --c-stage-closing: #4B5563;
+  --c-stage-closing-bg: #E4E7EC;
 
   --font: Arial, "Helvetica Neue", sans-serif;
   --fs-s: 12px; --fs-m: 13px; --fs-l: 15px; --fs-xl: 18px;
@@ -117,7 +119,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Зоны */
 .zone-left {
-  flex: 0 0 320px; width: 320px;
+  flex: 0 0 360px; width: 360px;
   border: 1px solid var(--c-border); border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
@@ -272,31 +274,15 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); min-height: 0; }
 .left-inner > * { flex-shrink: 0; }
 .left-inner > .tree { flex-shrink: 1; }
-.counter-row { align-items: stretch; }
 .left-strip { align-items: center; padding: var(--sp-2) 0; }
 .left-bottom { justify-content: center; }
 
-.counter-card {
-  flex: 1 1 0; min-width: 0;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: var(--sp-2) var(--sp-1);
-  border: 1px solid var(--c-border); border-radius: var(--radius);
-  background: var(--c-bg); cursor: pointer; text-align: center;
-  transition: border-color 100ms;
-}
-.counter-card:hover { border-color: var(--c-primary); }
-.counter-card.on { border-color: var(--c-primary); background: var(--c-bg-selected); }
-.counter-head { display: flex; flex-direction: row; align-items: center; gap: 6px; }
-.counter-num { font-size: var(--fs-xl); font-weight: bold; color: var(--c-text); }
-.counter-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
 .tone-warning { color: var(--c-warning); display: inline-flex; }
 .tone-info    { color: var(--c-info);    display: inline-flex; }
 .tone-success { color: var(--c-success); display: inline-flex; }
 .tone-danger  { color: var(--c-danger);  display: inline-flex; }
 .filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius); }
 
-.toggle-full { display: flex; }
-.toggle-full button { flex: 1 1 0; }
 
 /* Дерево и список */
 .tree {
@@ -313,7 +299,6 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
 .tree-count { flex: 0 0 auto; }
 .tree-marker { flex: 0 0 auto; }
-.list-row { padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-2); }
 
 .empty {
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
@@ -322,13 +307,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .empty .row { gap: var(--sp-4); }
 
 /* ================= Сводная таблица ================= */
-.summary-table { table-layout: fixed; }
-.summary-table .w-stage { width: 150px; }
-.summary-table .w-tasks { width: 130px; }
-.summary-table .w-overdue { width: 96px; }
-.summary-table .w-date { width: 108px; }
-.summary-table .indicator-wrap .indicator { min-width: 0; }
-.summary-table td { vertical-align: middle; }
+.summary-table td { vertical-align: top; }
 .pct { flex: 0 0 36px; text-align: right; }
 th.num, td.num { text-align: right; }
 .nowrap { white-space: nowrap; }
@@ -484,3 +463,57 @@ body.markup-1c table[data-1c]::before {
   padding: 0 2px; font-size: 9px; line-height: 11px; color: var(--c-primary); background: var(--c-bg);
 }
 .markup-flag { padding: var(--sp-1) var(--sp-2); border: 1px dashed var(--c-primary); border-radius: var(--radius); background: var(--c-bg); color: var(--c-primary); font-size: var(--fs-s); }
+
+/* ================= Фаза 7: левая панель ================= */
+.filter-list { display: flex; flex-direction: column; }
+.filter-row {
+  display: flex; flex-direction: row; align-items: center; gap: var(--sp-2);
+  height: 28px; padding: 0 var(--sp-1) 0 var(--sp-2); border-radius: var(--radius); cursor: pointer;
+}
+.filter-row:hover { background: var(--c-neutral-bg); }
+.filter-row.on { background: var(--c-bg-selected); }
+.filter-row.on .filter-label { font-weight: bold; }
+.filter-icon { display: inline-flex; }
+.filter-num { min-width: 20px; text-align: right; }
+.filter-row:not(.on) .filter-num { margin-right: 32px; }
+.filter-sep { height: 1px; background: var(--c-border); margin: var(--sp-1) 0; }
+.menu-check { display: inline-block; width: 16px; }
+
+/* Цвета иконок и этапов */
+.c-danger { color: var(--c-danger); }
+.c-warning { color: var(--c-warning); }
+.c-info { color: var(--c-info); }
+.c-stage-found { color: var(--c-text-secondary); }
+.c-stage-approval { color: var(--c-info); }
+.c-stage-active { color: var(--c-success); }
+.c-stage-closing { color: var(--c-stage-closing); }
+
+/* Дерево: полные ФИО и значок уведомления */
+.tree-name { white-space: nowrap; min-width: 0; }
+.tree-marker { display: inline-flex; flex: 0 0 16px; }
+
+/* ================= Фаза 7: сводная таблица ================= */
+.summary-row { cursor: default; }
+.summary-row:hover td { background: var(--c-bg-panel); }
+.summary-row.selected td, .summary-row.selected:hover td { background: var(--c-bg-selected); }
+.summary-row:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; }
+.fio-link { white-space: normal; }
+.summary-table td:first-child { min-width: 150px; }
+.summary-table td:nth-child(4) { min-width: 136px; }
+.action-icon { display: inline-flex; flex: 0 0 16px; padding-top: 1px; }
+.action-more { padding-left: 20px; }
+.task-meter { flex-wrap: nowrap; }
+.task-meter .indicator { flex: 0 0 80px; width: 80px; min-width: 80px; }
+.indicator.warning > span { background: var(--c-warning); }
+.chip {
+  display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1);
+  height: 24px; padding: 0 0 0 var(--sp-2); border-radius: var(--radius);
+  background: var(--c-bg-selected); color: var(--c-primary); font-size: var(--fs-s);
+}
+
+/* ================= Фаза 7: цвета этапов (раздел 4) ================= */
+.badge-stage-found, .badge-stage-draft { background: var(--c-neutral-bg); color: var(--c-text-secondary); }
+.badge-stage-approval { background: var(--c-info-bg); color: var(--c-info); }
+.badge-stage-active { background: var(--c-success-bg); color: var(--c-success); }
+.badge-stage-closing { background: var(--c-stage-closing-bg); color: var(--c-stage-closing); }
+.badge-stage-closed { background: var(--c-bg); color: var(--c-text-secondary); border: 1px solid var(--c-border); padding: 0 5px; line-height: 16px; }
