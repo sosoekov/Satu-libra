@@ -379,6 +379,31 @@
     });
   });
 
+  /* ---------- Тип задачи, обязательность и ссылки для ознакомления (FT_2) ----------
+   * type: 'task' | 'course' | 'meeting' | 'test'; required: Булево; links: [{url, comment}].
+   * Для тестовых данных подставляются по наименованию задачи. Ссылки хранятся без схемы — в прототипе нет внешних адресов.
+   */
+  var linkSeq = 400;
+  function taskExtras(name, block) {
+    var n = name.toLowerCase();
+    var type = /курс|обучение/.test(n) ? 'course'
+      : /встреча|познакомиться с командой|планёрк|интервью/.test(n) ? 'meeting'
+      : /аттестаци/.test(n) ? 'test' : 'task';
+    var required = (block === 'corp' && /охране труда|информационной безопасности|аттестаци|регламент|кодекс/.test(n)) ||
+      /итогов/.test(n);
+    var links = [];
+    if (type === 'course') links.push({ url: 'forus.e-queo.online/' + (linkSeq++) + '/course', comment: 'Ссылка на курс' });
+    if (/регламент/.test(n)) links.push({ url: 'portal.cas.local/docs/reglamenty', comment: 'Регламенты на портале' });
+    if (/кодекс/.test(n)) links.push({ url: 'portal.cas.local/docs/kodeks', comment: 'Корпоративный кодекс' });
+    return { type: type, required: required, links: links };
+  }
+  function withExtras(x) {
+    var e = taskExtras(x.name, x.block);
+    x.type = e.type; x.required = e.required; x.links = e.links;
+  }
+  templates.forEach(function (tp) { tp.tasks.forEach(withExtras); });
+  tasks.forEach(withExtras);
+
   window.DATA = {
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
@@ -394,7 +419,11 @@
     tasks: tasks,
     checklist: checklist,
     checklistTemplate: checklistTemplate,
-    templates: templates
+    templates: templates,
+    taskTypes: [
+      { value: 'task', text: 'Задача' }, { value: 'course', text: 'Курс' },
+      { value: 'meeting', text: 'Встреча' }, { value: 'test', text: 'Тест' }
+    ]
     // notifications не хранятся — вычисляются getNotifications(trainee) в app.js
   };
 })();

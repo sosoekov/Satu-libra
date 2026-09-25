@@ -517,3 +517,24 @@ body.markup-1c table[data-1c]::before {
 .badge-stage-active { background: var(--c-success-bg); color: var(--c-success); }
 .badge-stage-closing { background: var(--c-stage-closing-bg); color: var(--c-stage-closing); }
 .badge-stage-closed { background: var(--c-bg); color: var(--c-text-secondary); border: 1px solid var(--c-border); padding: 0 5px; line-height: 16px; }
+
+/* ================= FT_2: форма «Задача адаптационной программы» ================= */
+.modal-xl { width: 980px; max-width: calc(100vw - 48px); }
+.modal-sys { margin-right: var(--sp-1); }
+.form-tool-s { width: 24px; height: 24px; }
+.task-form { gap: var(--sp-4); }
+.tf-row { display: flex; flex-direction: row; gap: var(--sp-5); align-items: flex-start; }
+.tf-row-bottom { align-items: flex-end; }
+.tf-row-top { align-items: stretch; }
+.tf-field { display: flex; flex-direction: column; gap: var(--sp-1); flex: 1 1 0; min-width: 0; }
+.tf-field.tf-wide { flex: 2 1 0; }
+.tf-spacer { flex: 1 1 0; }
+.tf-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
+.tf-check { height: 28px; }
+.tf-textarea { width: 100%; min-height: 110px; }
+.tf-links { flex: 1 1 0; min-width: 0; }
+.tf-links-bar { background: var(--c-bg-panel); border-radius: var(--radius); padding: var(--sp-1); }
+.links-table .w-check { width: 36px; }
+.links-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); }
+.links-table .input { width: 100%; }
+.tf-extra { display: flex; flex-direction: row; gap: var(--sp-5); align-items: flex-start; padding-top: var(--sp-3); border-top: 1px solid var(--c-border); }
