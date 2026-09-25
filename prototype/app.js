@@ -1784,12 +1784,25 @@
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
         : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>' : '';
       var reviewerId = dlgValue('reviewerId') || program.defaultReviewerId;
+      var obs = dlgValue('obsInherit') ? [] : state.dialog.values.observers;
+      var obsDefault = 'По умолчанию (' + namesOf(program.defaultObserverIds) + ')';
+      var obsText = obs.slice(0, 3).map(userShort).join(', ') + (obs.length > 3 ? ' +' + (obs.length - 3) : '');
+      var obsTitle = obs.length ? obs.map(function (id) { return user(id).fullName; }).join(', ') : obsDefault;
+      // Наблюдатели: поле со списком через запятую, выбор — форма с флажками, «✕» — вернуть «по умолчанию»
+      var observersField = fromTemplate || dlgRO()
+        ? '<input type="text" class="input grow" disabled value="' + esc(fromTemplate ? 'По умолчанию' : obs.length ? obsText : obsDefault) + '" title="' + esc(obsTitle) + '"' + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>'
+        : '<div class="input obs-field row gap-1" title="' + esc(obsTitle) + '">' +
+            '<input type="text" readonly class="obs-text grow' + (obs.length ? '' : ' muted') + '" id="f_observers" data-action="openObserversPicker"' +
+              ' value="' + esc(obs.length ? obsText : '') + '" placeholder="' + esc(obsDefault) + '"' + (e.observers ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>' +
+            (obs.length ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Очистить: наблюдатели по умолчанию', action: 'observersClear', name: 'КнопкаОчиститьНаблюдателей' }) : '') +
+            button('…', { cls: 'btn-icon btn-flat btn-small', title: 'Выбрать наблюдателей', action: 'openObserversPicker', name: 'КнопкаВыбратьНаблюдателей' }) +
+          '</div>';
       return note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
         '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНазвание') + '>' +
           tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
           '<div class="tf-field tf-spacer"></div>' +
         '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПроверяющийСрок') + '>' +
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПроверяющийНаблюдатели') + '>' +
           tfField('Проверяющий', '<div class="row gap-2">' +
               (fromTemplate
                 ? '<input type="text" class="input grow" disabled value="Назначается в АП (по умолчанию — наставник)"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
@@ -1797,10 +1810,17 @@
               (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard',
                 title: 'Открыть карточку сотрудника: ' + user(reviewerId).fullName, name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
             { forId: 'f_reviewerId' }) +
+          tfField('Наблюдатели', observersField, { forId: 'f_observers', error: e.observers, name: 'Наблюдатели' }) +
+        '</div>' +
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаТипСрок') + '>' +
+          tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
           tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
         '</div>' +
-        '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаТип') + '>' +
-          tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
+        '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаБлокСтатус') + '>' +
+          tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block', cls: 'tf-half' }) +
+          (fromTemplate ? '<div class="tf-field tf-half"></div>' :
+            tfField('Статус', selectOptions('status', 'ПолеСтатус', [
+              { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status', cls: 'tf-half' })) +
           '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
             a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
         '</div>' +
@@ -1810,18 +1830,6 @@
           (fromTemplate ? '' : tfField('Результат выполнения задачи стажером', '<textarea class="textarea tf-textarea" rows="6" id="f_result" data-field="result"' + ro() +
             a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('result')) + '</textarea>', { forId: 'f_result' })) +
           linksTable() +
-        '</div>' +
-        // Поля АП вне макета формы: блок, статус, наблюдатели
-        '<div class="tf-extra"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПараметрыВАП') + '>' +
-          tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block' }) +
-          (fromTemplate ? '' :
-            tfField('Статус', selectOptions('status', 'ПолеСтатус', [
-              { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status' }) +
-            tfField('Наблюдатели',
-              '<label class="check"><input type="checkbox" data-field="obsInherit" data-rerender="1"' + (dlgValue('obsInherit') ? ' checked' : '') + ro() +
-                a1c('Флажок', 'ПолеНаблюдателиКакВАП') + '> Как в АП <span class="muted">(' + esc(namesOf(program.defaultObserverIds)) + ')</span></label>' +
-              (dlgValue('obsInherit') ? '' : userCheckList('observers', 'ТаблицаНаблюдатели')),
-              { error: e.observers, name: 'Наблюдатели', cls: 'tf-wide' })) +
         '</div>' +
         '</div>';
     },
@@ -1862,6 +1870,42 @@
       for (var k in spec) x[k] = spec[k];
       if (changed.length) programChanged(t, 'Изменена задача «' + oldName + '»: ' + changed.join(', '));
       toast('Задача сохранена');
+    }
+  };
+
+  // Выбор наблюдателей задачи: список сотрудников с флажками и поиском; «Как в АП» — наблюдатели по умолчанию
+  DIALOGS.observersPicker = {
+    title: 'Выбор наблюдателей', form: 'ФормаВыборНаблюдателей', submit: 'Выбрать',
+    init: function (t, ctx) {
+      var owner = state.dialogStack[state.dialogStack.length - 1]; // карточка задачи — форма-владелец
+      return { inherit: !!owner.values.obsInherit || !owner.values.observers.length, picked: owner.values.observers.slice(), q: '' };
+    },
+    body: function (t) {
+      var program = programOf(t);
+      var v = state.dialog.values;
+      var q = v.q.trim().toLowerCase();
+      var list = D.users.filter(function (u) { return !q || u.fullName.toLowerCase().indexOf(q) >= 0; });
+      return '<label class="check"><input type="checkbox" data-field="inherit" data-rerender="1"' + (v.inherit ? ' checked' : '') +
+          a1c('Флажок', 'ПолеКакВАП') + '> Как в АП (по умолчанию: ' + esc(namesOf(program.defaultObserverIds)) + ')</label>' +
+        '<input type="text" class="input" data-field="q" placeholder="Поиск по ФИО" value="' + esc(v.q) + '"' + (v.inherit ? ' disabled' : '') +
+          ' title="Поиск по ФИО"' + a1c('ПолеВвода', 'ПолеПоискНаблюдателя') + '>' +
+        '<div class="check-list picker-list' + (state.dialog.errors.picked ? ' invalid' : '') + '"' + a1c('ТаблицаФормы', 'ТаблицаВыборНаблюдателей') + '>' +
+          (list.length ? list.map(function (u) {
+            return '<label class="check' + (v.inherit ? ' muted' : '') + '"><input type="checkbox" data-field-list="picked" value="' + u.id + '"' +
+              (v.picked.indexOf(u.id) >= 0 ? ' checked' : '') + (v.inherit ? ' disabled' : '') + a1c('Флажок', 'ТаблицаВыборНаблюдателейПометка') + '> ' +
+              esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
+          }).join('') : '<span class="muted"' + a1c('Надпись', 'ДекорацияНикогоНеНашли') + '>Никого не нашли</span>') +
+        '</div>' +
+        (state.dialog.errors.picked ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаВыборНаблюдателей') + '>' + esc(state.dialog.errors.picked) + '</div>' : '') +
+        (!v.inherit && v.picked.length ? '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияВыбраноНаблюдателей') + '>Выбрано: ' + v.picked.length + '</div>' : '');
+    },
+    validate: function (t, v) { return v.inherit || v.picked.length ? {} : { picked: 'Отметьте наблюдателей или включите «Как в АП»' }; },
+    // Результат выбора возвращается в карточку задачи (форму-владельца), изменение АП — при её сохранении
+    apply: function (t, v) {
+      var owner = state.dialogStack[state.dialogStack.length - 1];
+      owner.values.obsInherit = v.inherit;
+      owner.values.observers = v.inherit ? [] : v.picked.slice();
+      delete owner.errors.observers;
     }
   };
 
@@ -2471,6 +2515,15 @@
       delete state.dialog.errors.links;
       renderDialog();
     },
+    openObserversPicker: function () {
+      if (dlgRO()) return;
+      openDialog('observersPicker', state.dialog.traineeId, {}, { stack: true });
+    },
+    observersClear: function () {
+      state.dialog.values.obsInherit = true;
+      state.dialog.values.observers = [];
+      renderDialog();
+    },
     openLinkUrl: function (btn) { toast('Ссылка откроется в браузере: ' + btn.getAttribute('data-url')); },
     openReviewerCard: function () {
       var program = programOf(trainee(state.dialog.traineeId));
@@ -2526,6 +2579,13 @@
     var f = e.target.getAttribute('data-field');
     if (f && state.dialog) {
       if (e.target.type !== 'checkbox') state.dialog.values[f] = e.target.value;
+      if (state.dialog.type === 'observersPicker' && f === 'q') {
+        var pos = e.target.selectionStart;
+        renderDialog();
+        var q = topModal().querySelector('[data-field="q"]');
+        q.focus();
+        q.setSelectionRange(pos, pos);
+      }
       return;
     }
     var lf = e.target.getAttribute('data-link-field');
