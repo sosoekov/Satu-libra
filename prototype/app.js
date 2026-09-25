@@ -1500,7 +1500,7 @@
     }
     html += '<button type="button" class="btn demo-btn" data-action="demoToggle"' +
       (t ? ' title="Сменить этап: ' + esc(t.fullName) + '"' : ' disabled title="Выберите стажёра, чтобы сменить этап"') +
-      a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</button>';
+      a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '><span>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</span></button>';
     el('demoDock').innerHTML = html;
   }
 

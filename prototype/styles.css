@@ -254,10 +254,14 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 }
 
 /* ================= Демо-переключатель (НЕ_ПЕРЕНОСИТЬ) ================= */
-.demo-dock { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
+/* Фаза 8.5: в строке заголовка формы, слева от ⟳ ⋮; меню этапов раскрывается вниз */
+.demo-dock { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); flex: 0 1 auto; min-width: 0; }
+.demo-dock > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
+.demo-btn { max-width: 100%; }
+.demo-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-btn { border-style: dashed; }
 
-/* Плавающий слой для оповещений и демо — единственное исключение из «без абсолютного позиционирования»:
+/* Плавающий слой для оповещений — единственное исключение из «без абсолютного позиционирования»:
    в 1С это системные механизмы (ПоказатьОповещениеПользователя) либо не переносится */
 .overlay-corner { position: fixed; right: calc(56px + var(--sp-4)); bottom: var(--sp-4); z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
 
