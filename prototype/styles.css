@@ -192,11 +192,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .indicator-wrap { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); }
 
 /* Составная полоса */
-.stacked { height: 10px; }
-.stacked > .seg-done { background: var(--c-success); }
-.stacked > .seg-progress { background: var(--c-primary); }
-.stacked > .seg-overdue { background: var(--c-danger); }
-.stacked > .seg-todo { background: var(--c-neutral-bg); }
 
 /* ================= Поля ================= */
 .input, .select, .textarea {
@@ -259,10 +254,14 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 }
 
 /* ================= Демо-переключатель (НЕ_ПЕРЕНОСИТЬ) ================= */
-.demo-dock { display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
+/* Фаза 8.5: в строке заголовка формы, слева от ⟳ ⋮; меню этапов раскрывается вниз */
+.demo-dock { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); flex: 0 1 auto; min-width: 0; }
+.demo-dock > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
+.demo-btn { max-width: 100%; }
+.demo-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-btn { border-style: dashed; }
 
-/* Плавающий слой для оповещений и демо — единственное исключение из «без абсолютного позиционирования»:
+/* Плавающий слой для оповещений — единственное исключение из «без абсолютного позиционирования»:
    в 1С это системные механизмы (ПоказатьОповещениеПользователя) либо не переносится */
 .overlay-corner { position: fixed; right: calc(56px + var(--sp-4)); bottom: var(--sp-4); z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
 
@@ -281,7 +280,6 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .tone-info    { color: var(--c-info);    display: inline-flex; }
 .tone-success { color: var(--c-success); display: inline-flex; }
 .tone-danger  { color: var(--c-danger);  display: inline-flex; }
-.filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius); }
 
 
 /* Дерево и список */
@@ -398,7 +396,6 @@ th.num, td.num { text-align: right; }
 [aria-invalid="true"], .toggle.invalid { border-color: var(--c-danger); }
 
 /* ================= Вкладка «Адаптационная программа» ================= */
-.progress-blocks { flex: 0 0 260px; }
 .link.on { font-weight: bold; text-decoration: underline; }
 .note-neutral { background: var(--c-neutral-bg); }
 .command-bar-flat { border-top: none; padding-top: 0; }
@@ -407,9 +404,9 @@ th.num, td.num { text-align: right; }
 .task-table { table-layout: fixed; }
 .task-table .w-check { width: 36px; }
 .task-table .w-status { width: 104px; }
-.task-table .w-deadline { width: 96px; }
-.task-table .w-person { width: 128px; }
-.task-table .w-observers { width: 150px; }
+.task-table .w-deadline { width: 124px; }
+.task-table .w-person { width: 20%; }
+.task-table .w-observers { width: 20%; }
 .task-table .w-result { width: 64px; }
 .task-table .w-menu { width: 40px; }
 .task-table td { vertical-align: middle; }
@@ -547,3 +544,52 @@ body.markup-1c table[data-1c]::before {
 .obs-field:focus-within { outline: 2px solid var(--c-primary); outline-offset: 1px; }
 .obs-text::placeholder { color: var(--c-text-secondary); }
 .picker-list { max-height: 280px; }
+
+/* ================= Фаза 8: карточка стажёра ================= */
+.tcard { display: flex; flex-direction: column; gap: 3px; padding: 5px var(--sp-4); }
+.tcard-top { gap: 4px 32px; flex-wrap: wrap; }
+.tcard-dates { margin-left: auto; }
+.tcard-who { flex: 0 0 auto; }
+.avatar.avatar-s { flex: 0 0 40px; width: 40px; height: 40px; font-size: var(--fs-l); }
+.tcard-name { line-height: 22px; white-space: nowrap; }
+.tcard-people { flex: 0 1 auto; min-width: 0; }
+.tcard-line { line-height: 16px; white-space: nowrap; }
+.tcard-people .tcard-line { line-height: 20px; }
+.tcard-dates { flex: 0 0 auto; }
+.tcard-bar { gap: var(--sp-2); height: 16px; flex-wrap: nowrap; }
+.tcard-lbl { flex: 0 0 48px; }
+.tcard-bar .indicator { flex: 0 0 140px; width: 140px; min-width: 140px; }
+.tcard-sep { height: 1px; background: var(--c-border); flex: 0 0 1px; margin: 1px 0; }
+.tcard .stepper { padding: 0; }
+.tcard .step-mark { flex: 0 0 18px; width: 18px; height: 18px; }
+.tcard .step-line { margin-top: 9px; }
+.tcard .step-text { padding-top: 1px; }
+.tcard .step-title { line-height: 16px; }
+.step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
+
+/* ================= Фаза 8: строка следующего шага ================= */
+.next-step-row { min-height: 44px; gap: var(--sp-3); flex-wrap: nowrap; }
+.next-step { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 44px; padding: 0 var(--sp-3); border-radius: var(--radius); flex: 0 1 auto; min-width: 0; }
+.next-step-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.next-step .link { white-space: nowrap; }
+.trainee-actions { margin-left: auto; flex: 0 0 auto; gap: var(--sp-2); border: none; padding: 0; flex-wrap: nowrap; }
+.more-notes { padding: 0; }
+.more-note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-3); border-radius: var(--radius); }
+.btn-small-text { height: 24px; padding: 0 var(--sp-2); }
+
+/* Фаза 8: картинка страницы «Подготовка к выходу» */
+.tab-pic { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
+.c-success { color: var(--c-success); }
+
+/* Фаза 8.4: вкладка «Адаптационная программа» */
+.defaults-row { min-height: 24px; }
+.toggle button.tv-danger:not(.on) { color: var(--c-danger); }
+.toggle button.tv-danger.on { background: var(--c-danger); }
+.task-table tr.task-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
+.task-table tr.group-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
+.group-indicator { display: inline-flex; width: 80px; }
+.group-indicator > .indicator { width: 80px; }
+.filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius); }
+.task-bar { border-bottom: none; padding-bottom: 0; }
+.task-table thead th { padding-top: 5px; padding-bottom: 5px; }
+@media (max-width: 1500px) { .task-table .w-person, .task-table .w-observers { width: 13%; } }

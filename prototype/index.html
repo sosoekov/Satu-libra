@@ -27,9 +27,11 @@
 
           <!-- Заголовок формы: в 1С рисует платформа -->
           <div class="window-head col gap-3">
-            <div class="row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокФормы" aria-hidden="true">
-              <h1 class="window-title grow">Личный кабинет руководителя</h1>
-              <div class="row window-tools">
+            <div class="row window-head-row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокФормы">
+              <h1 class="window-title grow" aria-hidden="true">Личный кабинет руководителя</h1>
+              <!-- Демо-переключатель этапа выбранного стажёра: только для прототипа -->
+              <div class="demo-dock" id="demoDock" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ДемоПереключательЭтапа"></div>
+              <div class="row window-tools" aria-hidden="true">
                 <span class="form-tool" data-shell-icon="refresh"></span>
                 <span class="form-tool" data-shell-icon="more"></span>
               </div>
@@ -72,10 +74,9 @@
   <!-- Модальные окна (в 1С — отдельные формы с блокировкой окна владельца) -->
   <div id="dialogHost"></div>
 
-  <!-- Угол экрана: оповещения пользователя и демо-переключатель этапа -->
+  <!-- Угол экрана: оповещения пользователя -->
   <div class="overlay-corner">
     <div class="toasts" id="toasts"></div>
-    <div class="demo-dock" id="demoDock" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ДемоПереключательЭтапа"></div>
   </div>
 
   <script src="data.js"></script>
