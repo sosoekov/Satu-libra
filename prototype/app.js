@@ -999,9 +999,20 @@
   }
 
   // Вкладки стажёра: «Адаптационная программа» и «Подготовка к выходу»
+  // Итог чек-листа для заголовка вкладки (фаза 8, раздел 4): «2/7», картинка страницы — галочка или «!»
+  function checklistSummary(t) {
+    var all = checklistOf(t);
+    var done = all.filter(function (c) { return c.done; }).length;
+    var overdue = all.filter(checklistOverdue).length;
+    var pic = all.length && done === all.length ? { icon: 'check', cls: 'c-success', title: 'Подготовка завершена' }
+      : overdue ? { icon: 'alert', cls: 'c-danger', title: 'Просрочено пунктов подготовки: ' + overdue } : null;
+    return { text: done + '/' + all.length, pic: pic };
+  }
+
   function renderTraineePages(t) {
+    var cl = checklistSummary(t);
     var tabs = [
-      { id: 'prepare', text: 'Подготовка к выходу', name: 'СтраницаПодготовкаКВыходу' },
+      { id: 'prepare', text: 'Подготовка к выходу ' + cl.text, name: 'СтраницаПодготовкаКВыходу', pic: cl.pic },
       { id: 'program', text: 'Адаптационная программа', name: 'СтраницаАдаптационнаяПрограмма' }
     ];
     var body;
@@ -1012,10 +1023,14 @@
     }
     return '<div class="col gap-3"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
       '<div class="tabs">' + tabs.map(function (x) {
+        // Цветной текст в заголовке страницы в 1С не штатный — статус передаётся картинкой страницы
+        var pic = x.pic ? '<span class="tab-pic ' + x.pic.cls + '" title="' + esc(x.pic.title) + '"' +
+          a1c('Картинка', 'КартинкаСтраницыПодготовка', 'check') + '>' + icon(x.pic.icon) + '</span>' : '';
         return '<button type="button" class="tab' + (state.traineeTab === x.id ? ' active' : '') + '" data-tab="' + x.id + '" data-action="traineeTab"' +
-          a1c('Страница', x.name) + '>' + esc(x.text) + '</button>';
+          (x.pic ? ' title="' + esc(x.pic.title) + '"' : '') + a1c('Страница', x.name) + '>' + pic + esc(x.text) + '</button>';
       }).join('') + '</div>' + body + '</div>';
   }
+
   var TASK_FILTER_TITLES = { done: 'Выполнено', progress: 'В работе', overdue: 'Просрочено', todo: 'Не начато', undone: 'Невыполненные' };
 
   /* ---------------------------------------------------------------------

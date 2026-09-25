@@ -579,3 +579,7 @@ body.markup-1c table[data-1c]::before {
 .more-notes { padding: 0; }
 .more-note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-3); border-radius: var(--radius); }
 .btn-small-text { height: 24px; padding: 0 var(--sp-2); }
+
+/* Фаза 8: картинка страницы «Подготовка к выходу» */
+.tab-pic { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
+.c-success { color: var(--c-success); }
