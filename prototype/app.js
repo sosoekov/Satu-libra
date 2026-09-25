@@ -794,7 +794,6 @@
     return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
       renderHeader(t) +
-      renderStepper(t) +
       renderNotes(t) +
       renderCommandBar(t) +
       renderTraineePages(t) +
@@ -812,67 +811,74 @@
     });
   }
 
+  // Карточка стажёра (фаза 8, раздел 2): одна рамка, сверху — имя, ответственные, сроки; снизу — степпер
   function renderHeader(t) {
     var st = statsOf(t);
-    var col3;
-    var dates = '<div class="col gap-0"><span class="muted text-s">Даты стажировки</span>' +
-      '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</span></div>';
+    var right = '<div class="tcard-line"' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</div>';
+    function bar(label, pct, text, name, textName) {
+      return '<div class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
+        '<span class="tcard-lbl muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
+        indicator(pct, 'Индикатор' + name) +
+        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></div>';
+    }
     if (isClosed(t)) {
-      var what = t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ';
-      var result = t.closeKind === 'passed' ? '. Результат: пройдена' : t.closeKind === 'failed' ? '. Результат: не пройдена' : '';
-      col3 = dates + '<div class="bold"' + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' + what + fmtDate(t.closedAt) + result + '</div>';
+      var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
+      right += '<div class="tcard-line bold"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
+        (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</div>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
-      col3 = dates + '<div class="bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
-        (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>' +
-        (st ? meter('Задачи: ' + st.pct + '%', st.pct, 'ИндикаторЗадачи') : '');
+      right += '<div class="tcard-line bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+        (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>';
     } else {
-      col3 = dates +
-        meter('Срок: день ' + dayNo(t) + ' из ' + totalDays(t), timePct(t), 'ИндикаторСрок') +
-        (st ? meter('Задачи: ' + st.pct + '%', st.pct, 'ИндикаторЗадачи', 'success') : '') +
-        (lag(t) ? '<div class="danger-text bold"' + a1c('Надпись', 'ДекорацияОтставание') + '>Отстаёт от графика</div>' : '');
+      right += bar('Срок', timePct(t), 'день ' + dayNo(t) + ' из ' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
+        (st ? bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') : '');
+      // Вывод — только при отклонении от графика
+      if (lag(t)) right += '<div class="tcard-line c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Отстаёт от графика</div>';
+      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) right += '<div class="tcard-line muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Опережает график</div>';
     }
 
-    return '<div class="panel row top header"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаСтажера') + '>' +
-      // 1. Аватар, ФИО, должность, этап
-      '<div class="row top gap-3 header-col1"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
-        '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
-        '<div class="col gap-1 grow"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
-          '<div class="text-xl bold"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-          '<div' + a1c('Надпись', 'ДекорацияДолжность') + '><span class="muted">Стажёр на должность:</span> ' + esc(t.position) + '</div>' +
-          '<div>' + stageBadge(t, 'ДекорацияЭтап') + '</div>' +
+    return '<div class="panel tcard"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажераШапка') + '>' +
+      '<div class="row top tcard-top"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаСтажера') + '>' +
+        // 1. Аватар и имя
+        '<div class="row top gap-2 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
+          '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
+          '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
+            '<div class="text-xl bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
+            '<div class="muted"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
+          '</div>' +
         '</div>' +
+        // 2. Наставник и руководитель — сразу после имени
+        '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
+          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
+          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
+        '</div>' +
+        '<span class="grow"></span>' +
+        // 3. Даты и полосы — прижаты вправо
+        '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
       '</div>' +
-      // 2. Наставник и руководитель
-      '<div class="col gap-3 header-col2"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
-        '<div class="col gap-0"><span class="muted text-s">Наставник стажировки</span>' + personLink(t, 'mentor') + '</div>' +
-        '<div class="col gap-0"><span class="muted text-s">Руководитель стажировки</span>' + personLink(t, 'head') + '</div>' +
-      '</div>' +
-      // 3. Сроки
-      '<div class="col gap-2 header-col3"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + col3 + '</div>' +
+      '<div class="tcard-sep"></div>' +
+      renderStepper(t) +
       '</div>';
   }
 
-  function meter(label, pct, name, tone) {
-    return '<div class="col gap-1"><span class="text-s">' + esc(label) + '</span>' +
-      '<div class="indicator-wrap">' + indicator(pct, name, tone) + '</div></div>';
-  }
-
-  // Степпер этапов: пройденные — галочка, текущий — primary с датой, будущие — серые
+  // Степпер этапов внутри карточки. Подписи: текущий шаг — «с даты» (для found — «выход»),
+  // «Закрытие» в будущем при active — дата доступности закрытия, «Закрыта» — дата закрытия или отмены
   function renderStepper(t) {
     var cur = stageIndex(t.stage);
     var allDone = isClosed(t);
     return '<div class="stepper-wrap"><div class="stepper"' + a1c('ГруппаГоризонтальная', 'ГруппаСтеппер', 'check') + '>' +
       STAGES.map(function (s, i) {
         var state_ = allDone || i < cur ? 'done' : i === cur ? 'current' : 'future';
-        var title = s.title;
-        if (s.code === 'closed' && t.closeKind === 'cancelled') title = 'Отменена';
         var date = t.stageDates[s.code];
+        var sub = '';
+        if (allDone && s.code === 'closed') sub = (t.closeKind === 'cancelled' ? 'отменена ' : '') + fmtDate(t.closedAt);
+        else if (state_ === 'current') sub = s.code === 'found' ? 'выход ' + fmtDate(t.startDate) : date ? 'с ' + fmtDate(date) : '';
+        else if (s.code === 'closing' && state_ === 'future' && t.stage === 'active') sub = 'с ' + fmtDate(closeAvailableFrom(t));
         return '<div class="step step-' + state_ + '"' + a1c('Надпись', 'ДекорацияШаг' + n1c(s.code)) +
-          ' title="' + esc(title + (date ? ' с ' + fmtDate(date) : '')) + '">' +
+          ' title="' + esc(s.title + (sub ? ': ' + sub : '')) + '">' +
           '<span class="step-mark">' + (state_ === 'done' ? icon('check') : (i + 1)) + '</span>' +
-          '<span class="col gap-0 step-text"><span class="step-title">' + esc(title) + '</span>' +
-          (state_ === 'current' || (allDone && s.code === 'closed') ? '<span class="text-s muted">' + (date ? 'с ' + fmtDate(date) : '') + '</span>' : '') +
+          '<span class="col gap-0 step-text"><span class="step-title">' + esc(s.title) + '</span>' +
+          (sub ? '<span class="step-sub muted">' + esc(sub) + '</span>' : '') +
           '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line' + (state_ === 'done' ? ' done' : '') + '"></span>' : '');
       }).join('') + '</div></div>';
   }

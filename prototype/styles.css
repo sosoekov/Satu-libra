@@ -547,3 +547,25 @@ body.markup-1c table[data-1c]::before {
 .obs-field:focus-within { outline: 2px solid var(--c-primary); outline-offset: 1px; }
 .obs-text::placeholder { color: var(--c-text-secondary); }
 .picker-list { max-height: 280px; }
+
+/* ================= Фаза 8: карточка стажёра ================= */
+.tcard { display: flex; flex-direction: column; gap: 3px; padding: 5px var(--sp-4); }
+.tcard-top { gap: 4px 32px; flex-wrap: wrap; }
+.tcard-dates { margin-left: auto; }
+.tcard-who { flex: 0 0 auto; }
+.avatar.avatar-s { flex: 0 0 40px; width: 40px; height: 40px; font-size: var(--fs-l); }
+.tcard-name { line-height: 22px; white-space: nowrap; }
+.tcard-people { flex: 0 1 auto; min-width: 0; }
+.tcard-line { line-height: 16px; white-space: nowrap; }
+.tcard-people .tcard-line { line-height: 20px; }
+.tcard-dates { flex: 0 0 auto; }
+.tcard-bar { gap: var(--sp-2); height: 16px; flex-wrap: nowrap; }
+.tcard-lbl { flex: 0 0 48px; }
+.tcard-bar .indicator { flex: 0 0 140px; width: 140px; min-width: 140px; }
+.tcard-sep { height: 1px; background: var(--c-border); flex: 0 0 1px; margin: 1px 0; }
+.tcard .stepper { padding: 0; }
+.tcard .step-mark { flex: 0 0 18px; width: 18px; height: 18px; }
+.tcard .step-line { margin-top: 9px; }
+.tcard .step-text { padding-top: 1px; }
+.tcard .step-title { line-height: 16px; }
+.step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
