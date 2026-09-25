@@ -307,13 +307,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .empty .row { gap: var(--sp-4); }
 
 /* ================= Сводная таблица ================= */
-.summary-table { table-layout: fixed; }
-.summary-table .w-stage { width: 150px; }
-.summary-table .w-tasks { width: 130px; }
-.summary-table .w-overdue { width: 96px; }
-.summary-table .w-date { width: 108px; }
-.summary-table .indicator-wrap .indicator { min-width: 0; }
-.summary-table td { vertical-align: middle; }
+.summary-table td { vertical-align: top; }
 .pct { flex: 0 0 36px; text-align: right; }
 th.num, td.num { text-align: right; }
 .nowrap { white-space: nowrap; }
@@ -497,3 +491,22 @@ body.markup-1c table[data-1c]::before {
 /* Дерево: полные ФИО и значок уведомления */
 .tree-name { white-space: nowrap; min-width: 0; }
 .tree-marker { display: inline-flex; flex: 0 0 16px; }
+
+/* ================= Фаза 7: сводная таблица ================= */
+.summary-row { cursor: default; }
+.summary-row:hover td { background: var(--c-bg-panel); }
+.summary-row.selected td, .summary-row.selected:hover td { background: var(--c-bg-selected); }
+.summary-row:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; }
+.fio-link { white-space: normal; }
+.summary-table td:first-child { min-width: 150px; }
+.summary-table td:nth-child(4) { min-width: 136px; }
+.action-icon { display: inline-flex; flex: 0 0 16px; padding-top: 1px; }
+.action-more { padding-left: 20px; }
+.task-meter { flex-wrap: nowrap; }
+.task-meter .indicator { flex: 0 0 80px; width: 80px; min-width: 80px; }
+.indicator.warning > span { background: var(--c-warning); }
+.chip {
+  display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1);
+  height: 24px; padding: 0 0 0 var(--sp-2); border-radius: var(--radius);
+  background: var(--c-bg-selected); color: var(--c-primary); font-size: var(--fs-s);
+}

@@ -320,7 +320,7 @@
     onApproval: 'НаСогласовании', changed: 'ИзмененаПослеСогласования', tasksOverdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
     closeSoon: 'СкороОкончание',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
-    stage: 'Этап', deadline: 'Срок', status: 'Статус'
+    stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
   function n1c(key) { return NAME_1C[key] || key; }
 
@@ -386,7 +386,9 @@
     search: '',
     hideEmpty: true,             // «Скрыть подразделения без стажёров»
     collapsed: {},               // свёрнутые узлы дерева: {deptId: true}
-    summarySort: { key: null, dir: 1 },
+    summarySort: { key: 'action', dir: 1 },  // по умолчанию — по важности главного уведомления
+    summaryCurrent: null,        // текущая строка сводной таблицы (одиночный клик, ↑ ↓)
+    summaryFocus: false,         // вернуть фокус текущей строке после перерисовки
     dismissed: {},               // закрытые info-плашки: {'traineeId:key': true}, до перезагрузки
     notesExpanded: false,        // «Ещё N уведомлений» раскрыто
     openMenu: null,              // открытое подменю
@@ -432,7 +434,7 @@
       { id: 'tasks',      text: 'Задачи и уведомления', name: 'СтраницаЗадачиИУведомления' },
       { id: 'recruiting', text: 'Подбор персонала',     name: 'СтраницаПодборПерсонала' },
       { id: 'adaptation', text: 'Адаптация персонала' + (attention ? ' (' + attention + ')' : ''), name: 'СтраницаАдаптацияПерсонала',
-        title: attention ? 'Стажёров, требующих внимания: ' + attention : '' }
+        title: attention ? pluralN(attention, W_TRAINEES) + ' ' + (plural(attention, [0, 1, 1]) === 0 ? 'требует' : 'требуют') + ' действия' : '' }
     ];
     el('topTabs').innerHTML = tabs.map(function (t) {
       return '<button type="button" class="tab' + (state.topTab === t.id ? ' active' : '') + '" data-tab="' + t.id + '"' +
@@ -503,9 +505,6 @@
   }
   function isExpanded(d) { return searchQuery() ? true : !state.collapsed[d.id]; }
 
-  // Дата для колонки «Срок» и сортировки: до выхода — дата выхода, иначе — дата окончания
-  function summaryDate(t) { return t.stage === 'found' ? t.startDate : t.endDate; }
-  function overdueChecklistCount(t) { return checklistOf(t).filter(checklistOverdue).length; }
 
   // Значок главного уведомления в дереве (фаза 7, раздел 2.4): только иконка, тип — самого важного уведомления
   var TONE_ICONS = { danger: 'alert', warning: 'warn', info: 'info' };
@@ -624,69 +623,149 @@
   function renderCenter() {
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
     el('centerZone').innerHTML = t ? renderTraineeCard(t) : renderSummary();
+    if (!t && state.summaryFocus) {
+      state.summaryFocus = false;
+      var cur = el('centerZone').querySelector('.summary-row.selected');
+      if (cur) cur.focus();
+    }
     Array.prototype.forEach.call(el('centerZone').querySelectorAll('[data-indeterminate]'), function (x) { x.indeterminate = true; });
     placeFloatingMenu();
   }
 
-  // Сводная таблица (раздел 7.3)
+  // Текущая строка сводной таблицы: подсветка и фокус из state.summaryCurrent.
+  // Таблица не перерисовывается целиком, чтобы двойной клик приходил в ту же строку, что и первый клик.
+  function renderSummaryCurrent(focus) {
+    Array.prototype.forEach.call(document.querySelectorAll('.summary-row'), function (r) {
+      var on = r.getAttribute('data-id') === state.summaryCurrent;
+      r.classList.toggle('selected', on);
+      r.tabIndex = on ? 0 : -1;
+      if (on && focus) r.focus();
+    });
+  }
+
+  // Сводная таблица (фаза 7, раздел 3)
+  var TONE_RANK = { danger: 0, warning: 1, info: 2 };
+  // Важность главного уведомления: danger → warning → info → нет уведомлений
+  function actionRank(t) { var n = mainNotification(t); return n ? TONE_RANK[n.tone] : 3; }
+  // Дата колонки «Срок»: выход — для found, дата закрытия — для closed, иначе окончание
+  function summaryDate(t) {
+    if (t.stage === 'found') return t.startDate;
+    if (t.stage === 'closed') return t.closedAt || t.endDate;
+    return t.endDate;
+  }
+  function defaultOrder(a, b) { return actionRank(a) - actionRank(b) || summaryDate(a).localeCompare(summaryDate(b)); }
   var SUMMARY_SORT = {
     stage: function (t) { return stageIndex(t.stage); },
-    overdue: function (t) { return overdueCount(t) + overdueChecklistCount(t); },
-    deadline: function (t) { return summaryDate(t); }
+    action: null, // как по умолчанию
+    tasks: function (t) { var p = taskPct(t); return p === null ? -1 : p; },
+    deadline: function (t) { return t.endDate; } // по дате окончания стажировки
   };
-
-  function renderSummary() {
+  function sortedSummary() {
     var list = visibleTrainees().slice();
     var sort = state.summarySort;
-    if (sort.key) {
-      var key = SUMMARY_SORT[sort.key];
-      list.sort(function (a, b) {
-        var x = key(a), y = key(b);
-        return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
-      });
+    var key = SUMMARY_SORT[sort.key];
+    list.sort(function (a, b) {
+      if (!key) return defaultOrder(a, b) * sort.dir;
+      var x = key(a), y = key(b);
+      return ((x < y ? -1 : x > y ? 1 : 0) || defaultOrder(a, b)) * sort.dir;
+    });
+    return list;
+  }
+  function deptPath(t) { return deptChain(t.departmentId).map(function (d) { return d.name; }).reverse().join(' / '); }
+
+  // «Требует действия»: иконка и короткий текст главного уведомления, «ещё N»
+  var ACTION_COLORS = { danger: 'c-danger', warning: 'c-warning', info: 'muted' };
+  function actionCell(t) {
+    var list = getNotifications(t);
+    if (!list.length) return '';
+    var n = list[0];
+    return '<div class="row gap-1 top ' + ACTION_COLORS[n.tone] + '">' +
+        '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.tone]) + '</span>' +
+        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.short) + '</span></div>' +
+      (list.length > 1 ? '<div class="muted text-s action-more"' + a1c('Надпись', 'ТаблицаСтажеровЕщеУведомлений') + ' title="' +
+        esc(list.slice(1).map(function (x) { return x.short; }).join('; ')) + '">ещё ' +
+        pluralN(list.length - 1, ['уведомление', 'уведомления', 'уведомлений']) + '</div>' : '');
+  }
+  // «Задачи»: нет АП / количество задач / полоса с процентом и просрочкой
+  function tasksCell(t) {
+    var st = statsOf(t);
+    if (!st) return '<span class="muted"' + a1c('Надпись', 'ТаблицаСтажеровНетАП') + '>АП нет</span>';
+    if (['found', 'draft', 'approval'].indexOf(t.stage) >= 0) {
+      return '<span' + a1c('Надпись', 'ТаблицаСтажеровКоличествоЗадач') + '>' + pluralN(st.total, ['задача', 'задачи', 'задач']) + '</span>';
     }
-    function th(text, keyName, cls) {
-      if (!keyName) return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</th>';
+    var late = lag(t);
+    return '<div class="row gap-1 task-meter" title="' + esc('Выполнено ' + st.done + ' из ' + st.total + (late ? '. Отстаёт от графика' : '')) + '">' +
+        '<div class="indicator' + (late ? ' warning' : '') + '"' + a1c('Индикатор', 'ТаблицаСтажеровИндикаторЗадач', 'check') + '>' +
+          '<span style="width:' + st.pct + '%"></span></div>' +
+        '<span' + a1c('Надпись', 'ТаблицаСтажеровПроцентЗадач') + '>' + st.pct + '%</span></div>' +
+      (st.overdue ? '<div class="text-s c-danger"' + a1c('Надпись', 'ТаблицаСтажеровПросроченоЗадач') + '>' + st.overdue + ' просроч.</div>' : '');
+  }
+  // «Срок»: дата и «через N дн.», если до неё не больше CLOSE_AVAILABLE_DAYS
+  function dateCell(t) {
+    var d = summaryDate(t);
+    var text = t.stage === 'found' ? 'Выход ' : t.stage === 'closed' ? 'закрыта ' : 'до ';
+    var days = diffDays(D.TODAY, d);
+    return '<div' + a1c('Надпись', 'ТаблицаСтажеровСрок') + '>' + text + fmtDate(d) + '</div>' +
+      (t.stage !== 'closed' && days >= 0 && days <= D.CLOSE_AVAILABLE_DAYS
+        ? '<div class="text-s c-warning"' + a1c('Надпись', 'ТаблицаСтажеровЧерез') + '>' + (days ? 'через ' + days + ' дн.' : 'сегодня') + '</div>' : '');
+  }
+
+  function renderSummary() {
+    var list = sortedSummary();
+    var sort = state.summarySort;
+    if (state.summaryCurrent && !list.some(function (t) { return t.id === state.summaryCurrent; })) state.summaryCurrent = null;
+    function th(text, keyName) {
+      if (!keyName) return '<th>' + text + '</th>';
       var on = sort.key === keyName;
-      return '<th' + (cls ? ' class="' + cls + '"' : '') + ' aria-sort="' + (on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
+      return '<th aria-sort="' + (on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
         '<button type="button" class="th-sort' + (on ? ' on' : '') + '" data-action="sortSummary" data-key="' + keyName + '"' +
         ' title="Сортировать по колонке «' + text + '»"' + a1c('ТаблицаФормы', 'ТаблицаСтажеровСортировка' + n1c(keyName)) + '>' +
         text + (on ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
     }
 
     var rows = list.map(function (t) {
-      var st = statsOf(t);
-      var overTasks = overdueCount(t);
-      var overChecklist = overdueChecklistCount(t);
-      var over = overTasks + overChecklist;
       var d = dept(t.departmentId).name;
-      return '<tr class="clickable" tabindex="0" data-action="selectTrainee" data-id="' + t.id + '" title="Открыть карточку стажёра">' +
-        '<td><div class="ellipsis" title="' + esc(t.fullName) + '">' + esc(t.fullName) + '</div>' +
-          '<div class="muted text-s ellipsis" title="' + esc(t.position) + '">' + esc(t.position) + '</div></td>' +
-        '<td><div class="ellipsis" title="' + esc(d) + '">' + esc(d) + '</div></td>' +
+      return '<tr class="summary-row' + (state.summaryCurrent === t.id ? ' selected' : '') + '" tabindex="' + (state.summaryCurrent === t.id || (!state.summaryCurrent && t === list[0]) ? '0' : '-1') + '"' +
+        ' data-action="summaryRow" data-id="' + t.id + '" title="Двойной клик или Enter — открыть карточку стажёра">' +
+        '<td>' + link(t.fullName, { cls: 'fio-link', action: 'selectTrainee', data: { id: t.id }, title: 'Открыть карточку стажёра', name: 'ТаблицаСтажеровФИО' }).replace("data-1c-name=\"ТаблицаСтажеровФИО\"", "data-1c-name=\"ТаблицаСтажеровФИО\" data-1c-risk=\"check\"") +
+          '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(t.position) + '</div></td>' +
+        '<td><div title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаСтажеровПодразделение') + '>' + esc(d) + '</div></td>' +
         '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
-        '<td>' + (st ? '<div class="indicator-wrap">' + indicator(st.pct, 'ТаблицаСтажеровИндикаторЗадач') +
-          '<span class="pct">' + st.pct + '%</span></div>' : '<span class="muted">—</span>') + '</td>' +
-        '<td class="num">' + (over ? '<span class="danger-text bold" title="' + esc('Задач: ' + overTasks + ', пунктов подготовки: ' + overChecklist) + '">' + over + '</span>' : '') + '</td>' +
-        '<td class="nowrap">' + (t.stage === 'found' ? 'Выход ' + fmtDate(t.startDate) : 'до ' + fmtDate(t.endDate)) + '</td>' +
+        '<td>' + actionCell(t) + '</td>' +
+        '<td>' + tasksCell(t) + '</td>' +
+        '<td class="nowrap">' + dateCell(t) + '</td>' +
         '</tr>';
     }).join('');
 
+    var total = D.trainees.length;
+    var chips = '';
+    if (state.counterFilter) {
+      chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипФильтра') + '><span' + a1c('Надпись', 'ДекорацияЧипФильтра') + '>' +
+        esc(filterById(state.counterFilter).title) + '</span>' +
+        button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить фильтр', action: 'clearCounterFilter', name: 'КнопкаЧипФильтраСбросить' }) + '</span>';
+    }
+    if (searchQuery()) {
+      chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипПоиска') + '><span' + a1c('Надпись', 'ДекорацияЧипПоиска') + '>' +
+        'Поиск: «' + esc(state.search.trim()) + '»</span>' +
+        button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить поиск', action: 'resetSearch', name: 'КнопкаЧипПоискаСбросить' }) + '</span>';
+    }
+
     return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
       '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокСводки') + '>' +
-        '<div class="h-block grow"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + list.length + '</div>' +
+        '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + (chips ? list.length + ' из ' + total : list.length) + '</div>' +
+        chips + '<span class="grow"></span>' +
         button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
           title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправкаСводка' }) +
       '</div>' +
       (list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
-        '<colgroup><col><col><col class="w-stage"><col class="w-tasks"><col class="w-overdue"><col class="w-date"></colgroup>' +
-        '<thead><tr>' + th('Стажёр') + th('Подразделение') + th('Этап', 'stage') + th('Задачи') + th('Просрочено', 'overdue', 'num') + th('Срок', 'deadline') +
+        '<thead><tr>' + th('Стажёр') + th('Подразделение') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>'
         : emptyFilterState('Сводка')) +
       '</div>';
   }
+
 
   /* ---------------------------------------------------------------------
    * Карточка стажёра (раздел 7.4)
@@ -2113,9 +2192,19 @@
     },
     toggleLeft: function () { state.leftCollapsed = !state.leftCollapsed; renderLeft(); },
     selectTrainee: function (row) { selectTrainee(row.getAttribute('data-id')); },
-    backToList: function () { state.selectedTraineeId = null; render(); },
+    backToList: function () {
+      state.summaryCurrent = state.selectedTraineeId;
+      state.summaryFocus = true;
+      state.selectedTraineeId = null;
+      render();
+    },
 
     // Сводная таблица
+    summaryRow: function (row, e) {
+      if (e.target.closest('button')) return;
+      state.summaryCurrent = row.getAttribute('data-id');
+      renderSummaryCurrent(true);
+    },
     sortSummary: function (btn) {
       var key = btn.getAttribute('data-key');
       if (state.summarySort.key === key) state.summarySort.dir = -state.summarySort.dir;
@@ -2355,6 +2444,8 @@
   });
   // Двойной клик по строке задачи открывает карточку задачи
   document.addEventListener('dblclick', function (e) {
+    var srow = e.target.closest('tr.summary-row');
+    if (srow && !e.target.closest('button')) { selectTrainee(srow.getAttribute('data-id')); return; }
     var row = e.target.closest('tr[data-task-id]');
     if (!row || e.target.closest('input, button')) return;
     openDialog('task', state.selectedTraineeId, { taskId: row.getAttribute('data-task-id') });
@@ -2368,6 +2459,17 @@
   // Строки дерева и таблиц открываются с клавиатуры
   document.addEventListener('keydown', function (e) {
     var t = e.target;
+    // Сводная таблица: Enter — открыть (событие «Выбор»), ↑ ↓ — текущая строка, пробел — сделать текущей
+    if (t.classList && t.classList.contains('summary-row')) {
+      if (e.key === 'Enter') { e.preventDefault(); selectTrainee(t.getAttribute('data-id')); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        var next = e.key === 'ArrowDown' ? t.nextElementSibling : t.previousElementSibling;
+        state.summaryCurrent = (next || t).getAttribute('data-id');
+        renderSummaryCurrent(true);
+        return;
+      }
+    }
     if ((e.key === 'Enter' || e.key === ' ') && t.hasAttribute && t.hasAttribute('data-action') &&
         t.tagName !== 'BUTTON' && t.tagName !== 'INPUT') {
       e.preventDefault();
