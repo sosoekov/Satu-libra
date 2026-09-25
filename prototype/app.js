@@ -143,6 +143,10 @@
 
   var TONE_ORDER = { danger: 0, warning: 1, info: 2 };
 
+  // Уведомления стажёра (фаза 9, раздел 2.1). Поля: id, severity, kind, text, shortText, buttonText, target.
+  // kind: 'action' — кнопка меняет данные; 'navigation' — кнопка только переключает вид (target: {tab, filter}).
+  var NOTE_IDS = ['no_program', 'prep_overdue', 'draft_stale', 'rejected', 'changed_after_approval', 'tasks_overdue', 'lag', 'close_soon'];
+  var KIND_ORDER = { action: 0, navigation: 1 };
   function getNotifications(t) {
     var list = [];
     var s = t.stage;
@@ -152,56 +156,49 @@
     if (s === 'found' && !program) {
       var ds = daysToStart(t);
       list.push({
-        key: 'noProgram', tone: 'warning',
+        id: 'no_program', severity: 'warning', kind: 'action',
         text: 'Для стажёра нужно создать адаптационную программу. ' +
               (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)),
-        button: 'Создать АП', action: 'createProgram',
-        short: 'Создать АП' + (ds > 0 ? ', выход через ' + ds + ' дн.' : ds === 0 ? ', выход сегодня' : '')
+        shortText: 'Создать АП' + (ds > 0 ? ', выход через ' + ds + ' дн.' : ds === 0 ? ', выход сегодня' : ''),
+        buttonText: 'Создать АП'
       });
     }
 
     var clOver = checklistOf(t).filter(checklistOverdue).length;
     if (clOver > 0) {
       list.push({
-        key: 'checklistOverdue', tone: 'danger',
+        id: 'prep_overdue', severity: 'danger', kind: 'navigation',
         text: 'Просрочено пунктов подготовки к выходу: ' + clOver,
-        button: 'Показать', action: 'showChecklistOverdue',
-        short: 'Просрочено пунктов подготовки: ' + clOver
+        shortText: 'Просрочено пунктов подготовки: ' + clOver,
+        buttonText: 'Показать', target: { tab: 'prep' }
+      });
+    }
+
+    if (s === 'draft' && t.draftSince && !t.rejectionComment && diffDays(t.draftSince, D.TODAY) >= 2) {
+      var dd = diffDays(t.draftSince, D.TODAY);
+      list.push({
+        id: 'draft_stale', severity: 'warning', kind: 'action',
+        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
+        shortText: 'Не отправлена на согласование ' + dd + ' дн.',
+        buttonText: 'Отправить на согласование'
       });
     }
 
     if (s === 'draft' && t.rejectionComment) {
       list.push({
-        key: 'rejected', tone: 'danger',
+        id: 'rejected', severity: 'danger', kind: 'action',
         text: 'АП возвращена на доработку: «' + t.rejectionComment + '»',
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Возвращена на доработку'
-      });
-    } else if (s === 'draft' && t.draftSince && diffDays(t.draftSince, D.TODAY) >= 2) {
-      var dd = diffDays(t.draftSince, D.TODAY);
-      list.push({
-        key: 'draftStale', tone: 'warning',
-        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Не отправлена на согласование ' + dd + ' дн.'
-      });
-    }
-
-    if (s === 'approval') {
-      list.push({
-        key: 'onApproval', tone: 'info',
-        text: 'АП на согласовании с ' + fmtDate(t.stageDates.approval),
-        button: null, action: null,
-        short: 'На согласовании с ' + fmtDate(t.stageDates.approval).slice(0, 5)
+        shortText: 'Возвращена на доработку',
+        buttonText: 'Отправить на согласование'
       });
     }
 
     if (t.changedAfterApproval && (s === 'active' || s === 'closing')) {
       list.push({
-        key: 'changed', tone: 'warning',
+        id: 'changed_after_approval', severity: 'warning', kind: 'action',
         text: 'АП изменена после согласования. Отправьте её на повторное согласование',
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Изменена после согласования'
+        shortText: 'Изменена после согласования',
+        buttonText: 'Отправить на согласование'
       });
     }
 
@@ -209,18 +206,18 @@
       var st = statsOf(t);
       if (st && st.overdue > 0) {
         list.push({
-          key: 'tasksOverdue', tone: 'danger',
+          id: 'tasks_overdue', severity: 'danger', kind: 'navigation',
           text: 'Просрочено задач: ' + st.overdue,
-          button: 'Показать', action: 'showTasksOverdue',
-          short: 'Просрочено задач: ' + st.overdue
+          shortText: 'Просрочено задач: ' + st.overdue,
+          buttonText: 'Показать', target: { tab: 'program', filter: 'overdue' }
         });
       }
       if (lag(t)) {
         list.push({
-          key: 'lag', tone: 'warning',
+          id: 'lag', severity: 'warning', kind: 'navigation',
           text: 'Задачи отстают от графика: выполнено ' + st.pct + '% при прошедших ' + timePct(t) + '% срока',
-          button: 'Показать невыполненные', action: 'showTasksUndone',
-          short: 'Отстаёт от графика'
+          shortText: 'Отстаёт от графика',
+          buttonText: 'Показать', target: { tab: 'program', filter: 'in_progress' }
         });
       }
     }
@@ -228,20 +225,23 @@
     if ((s === 'active' || s === 'closing') && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS) {
       var de = Math.max(0, daysToEnd(t));
       list.push({
-        key: 'closeSoon', tone: 'info',
+        id: 'close_soon', severity: 'info', kind: 'action',
         text: 'До окончания стажировки ' + pluralN(de, W_DAYS),
-        button: 'Начать закрытие стажировки', action: 'startClosing',
-        short: 'До окончания ' + de + ' дн.'
+        shortText: 'До окончания ' + de + ' дн.',
+        buttonText: 'Начать закрытие стажировки'
       });
     }
 
-    // danger → warning → info, внутри типа — порядок правил
-    return list
-      .map(function (n, i) { n.order = i; return n; })
-      .sort(function (a, b) { return TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.order - b.order; });
+    // Порядок (раздел 2.2): danger → warning → info; внутри важности action выше navigation; затем порядок таблицы 2.1
+    return list.sort(function (a, b) {
+      return TONE_ORDER[a.severity] - TONE_ORDER[b.severity] || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
+        NOTE_IDS.indexOf(a.id) - NOTE_IDS.indexOf(b.id);
+    });
   }
+  // Требуют внимания, иконка в дереве, счётчик на вкладке — только danger и warning (раздел 2.4)
+  function isAttention(n) { return n.severity === 'danger' || n.severity === 'warning'; }
   function needsAttention(t) {
-    return getNotifications(t).some(function (n) { return n.tone === 'danger' || n.tone === 'warning'; });
+    return getNotifications(t).some(isAttention);
   }
   // Самый важный маркер для дерева и списка
 
@@ -318,9 +318,9 @@
   // Русские части имён элементов 1С для ключей кода (имена в стиле 1С, раздел 3.2)
   var NAME_1C = {
     found: 'ПодготовкаКВыходу', draft: 'ЧерновикАП', approval: 'Согласование', active: 'Стажировка', closing: 'Закрытие', closed: 'Закрыта',
-    noProgram: 'НетАП', checklistOverdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draftStale: 'ЧерновикНеОтправлен',
-    onApproval: 'НаСогласовании', changed: 'ИзмененаПослеСогласования', tasksOverdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
-    closeSoon: 'СкороОкончание',
+    no_program: 'НетАП', prep_overdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draft_stale: 'ЧерновикНеОтправлен',
+    changed_after_approval: 'ИзмененаПослеСогласования', tasks_overdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
+    close_soon: 'СкороОкончание', stage_action: 'ДействиеЭтапа',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
     stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
@@ -512,10 +512,11 @@
   // Значок главного уведомления в дереве (фаза 7, раздел 2.4): только иконка, тип — самого важного уведомления
   var TONE_ICONS = { danger: 'alert', warning: 'warn', info: 'info' };
   var TONE_TITLES = { danger: 'Критично', warning: 'Требует внимания', info: 'Информация' };
-  function mainNotification(t) { return getNotifications(t)[0] || null; }
+  // Дерево показывает только danger и warning (фаза 9, раздел 2.4); сводная — все уведомления
+  function treeNotification(t) { return getNotifications(t).filter(isAttention)[0] || null; }
   function treeRowTitle(t) {
-    var n = mainNotification(t);
-    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.short : '');
+    var n = treeNotification(t);
+    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.shortText : '');
   }
 
   function renderLeft() {
@@ -605,13 +606,13 @@
         if (open) {
           walk(n.children, level + 1);
           n.trainees.forEach(function (t) {
-            var n = mainNotification(t);
+            var n = treeNotification(t);
             out.push('<div class="tree-row tree-trainee' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" role="treeitem" tabindex="0"' +
               ' data-action="selectTrainee" data-id="' + t.id + '" style="padding-left:' + (8 + (level + 1) * 14) + 'px" title="' + esc(treeRowTitle(t)) + '">' +
               '<span class="tree-arrow"></span>' +
               '<span class="tree-name grow"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
-              (n ? '<span class="tree-marker c-' + n.tone + '" aria-label="' + esc(TONE_TITLES[n.tone] + ': ' + n.short) + '"' +
-                a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.tone]) + '</span>' : '') + '</div>');
+              (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
+                a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</div>');
           });
         }
       });
@@ -649,7 +650,7 @@
   // Сводная таблица (фаза 7, раздел 3)
   var TONE_RANK = { danger: 0, warning: 1, info: 2 };
   // Важность главного уведомления: danger → warning → info → нет уведомлений
-  function actionRank(t) { var n = mainNotification(t); return n ? TONE_RANK[n.tone] : 3; }
+  function actionRank(t) { var n = getNotifications(t)[0]; return n ? TONE_RANK[n.severity] : 3; }
   // Дата колонки «Срок»: выход — для found, дата закрытия — для closed, иначе окончание
   function summaryDate(t) {
     if (t.stage === 'found') return t.startDate;
@@ -682,11 +683,11 @@
     var list = getNotifications(t);
     if (!list.length) return '';
     var n = list[0];
-    return '<div class="row gap-1 top ' + ACTION_COLORS[n.tone] + '">' +
-        '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.tone]) + '</span>' +
-        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.short) + '</span></div>' +
+    return '<div class="row gap-1 top ' + ACTION_COLORS[n.severity] + '">' +
+        '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
+        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.shortText) + '</span></div>' +
       (list.length > 1 ? '<div class="muted text-s action-more"' + a1c('Надпись', 'ТаблицаСтажеровЕщеУведомлений') + ' title="' +
-        esc(list.slice(1).map(function (x) { return x.short; }).join('; ')) + '">ещё ' +
+        esc(list.slice(1).map(function (x) { return x.shortText; }).join('; ')) + '">ещё ' +
         pluralN(list.length - 1, ['уведомление', 'уведомления', 'уведомлений']) + '</div>' : '');
   }
   // «Задачи»: нет АП / количество задач / полоса с процентом и просрочкой
@@ -882,33 +883,48 @@
   }
 
   var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
-  // Уведомления с действием меняют данные; остальные — навигационные (кнопка только переключает вид)
-  var ACTION_NOTES = ['createProgram', 'sendToApproval', 'startClosing'];
-  function isActionNote(n) { return ACTION_NOTES.indexOf(n.action) >= 0; }
+  // Что делает кнопка action-уведомления
+  var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
+    changed_after_approval: 'sendToApproval', close_soon: 'startClosing' };
+  function noteActionOf(t, n) {
+    return n.id === 'stage_action' ? (t.stage === 'closing' ? 'startClosing' : 'sendToApproval') : NOTE_ACTION[n.id];
+  }
 
-  // Главное действие этапа, если уведомления с действием нет (решение 2 фазы 8)
+  // Главное действие этапа, если среди уведомлений блока процесса нет action (решение 2 фазы 9).
+  // Не уведомление: в дерево, счётчики и сводную не попадает.
   function stageFallbackStep(t) {
     var program = programOf(t);
     if ((t.stage === 'draft' || t.stage === 'found') && program) {
-      return { key: 'stageAction', tone: 'info', text: 'Черновик АП готов к отправке на согласование',
-        button: 'Отправить на согласование', action: 'sendToApproval' };
+      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Черновик АП готов к отправке на согласование',
+        buttonText: 'Отправить на согласование' };
     }
     if (t.stage === 'closing') {
-      return { key: 'stageAction', tone: 'info', text: 'Стажировка на этапе закрытия',
-        button: 'Начать закрытие стажировки', action: 'startClosing' };
+      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Стажировка на этапе закрытия',
+        buttonText: 'Начать закрытие стажировки' };
     }
     return null;
   }
 
-  // Следующий шаг (фаза 8, раздел 3.1): главное уведомление и остальные
+  // Навигационное уведомление, ведущее туда, где пользователь уже находится, в блоке процесса не показывается (раздел 2.3)
+  var TARGET_TAB = { prep: 'prepare', program: 'program' };
+  var TARGET_FILTER = { overdue: 'overdue', in_progress: 'progress' };
+  function leadsToCurrentView(n) {
+    if (n.kind !== 'navigation' || !n.target) return false;
+    if (TARGET_TAB[n.target.tab] !== state.traineeTab) return false;
+    return !n.target.filter || TARGET_FILTER[n.target.filter] === state.taskFilter;
+  }
+  // Уведомления блока процесса: без скрытых по 2.3; без action — первым главное действие этапа
+  function processNotifications(t) {
+    var list = getNotifications(t).filter(function (n) { return !leadsToCurrentView(n); });
+    if (!list.some(function (n) { return n.kind === 'action'; })) {
+      var f = stageFallbackStep(t);
+      if (f) list.unshift(f);
+    }
+    return list;
+  }
   function getNextStep(t) {
-    var list = getNotifications(t);
-    var main = null;
-    if (t.stage === 'approval') main = list.filter(function (n) { return n.key === 'onApproval'; })[0] || null;
-    if (!main) main = list.filter(isActionNote)[0] || null;
-    if (!main) main = stageFallbackStep(t);
-    if (!main) main = list[0] || null;
-    return { main: main, rest: list.filter(function (n) { return n !== main; }) };
+    var list = processNotifications(t);
+    return { main: list[0] || null, rest: list.slice(1) };
   }
 
   // Строка следующего шага: слева — главное уведомление с кнопкой, справа — второстепенные действия
@@ -917,11 +933,11 @@
     var m = step.main;
     var left = '';
     if (m) {
-      var primary = isActionNote(m);
-      left = '<div class="next-step note-' + m.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаСледующийШаг') + '>' +
-        '<span class="tone-' + m.tone + '"' + a1c('Картинка', 'КартинкаСледующийШаг') + '>' + icon(NOTE_ICONS[m.tone]) + '</span>' +
+      var primary = m.kind === 'action';
+      left = '<div class="next-step note-' + m.severity + '"' + a1c('ГруппаГоризонтальная', 'ГруппаСледующийШаг') + '>' +
+        '<span class="tone-' + m.severity + '"' + a1c('Картинка', 'КартинкаСледующийШаг') + '>' + icon(NOTE_ICONS[m.severity]) + '</span>' +
         '<span class="next-step-text" title="' + esc(m.text) + '"' + a1c('Надпись', 'ДекорацияСледующийШаг') + '>' + esc(m.text) + '</span>' +
-        (m.button ? button(primary ? m.button : 'Показать', { cls: primary ? 'btn-primary' : '', action: 'noteAction', data: { key: m.key },
+        (m.buttonText ? button(m.buttonText, { cls: primary ? 'btn-primary' : '', action: 'noteAction', data: { key: m.id },
           name: 'КнопкаСледующийШаг' }) : '') +
         (step.rest.length ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + step.rest.length, { action: 'toggleNotes',
           title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '') +
@@ -955,11 +971,11 @@
     var more = step.rest.length && state.notesExpanded
       ? '<div class="col gap-1 more-notes"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' +
         step.rest.map(function (n) {
-          return '<div class="more-note note-' + n.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.key)) + '>' +
-            '<span class="tone-' + n.tone + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.key)) + '>' + icon(NOTE_ICONS[n.tone]) + '</span>' +
-            '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.key)) + '>' + esc(n.text) + '</span>' +
-            (n.button ? button(isActionNote(n) ? n.button : 'Показать', { cls: 'btn-small-text', action: 'noteAction', data: { key: n.key },
-              name: 'КнопкаУведомление' + n1c(n.key) }) : '') +
+          return '<div class="more-note note-' + n.severity + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.id)) + '>' +
+            '<span class="tone-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.id)) + '>' + icon(NOTE_ICONS[n.severity]) + '</span>' +
+            '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.id)) + '>' + esc(n.text) + '</span>' +
+            (n.buttonText ? button(n.buttonText, { cls: 'btn-small-text', action: 'noteAction', data: { key: n.id },
+              name: 'КнопкаУведомление' + n1c(n.id) }) : '') +
             '</div>';
         }).join('') + '</div>'
       : '';
@@ -2410,24 +2426,27 @@
     toggleNotes: function () { state.notesExpanded = !state.notesExpanded; renderCenter(); },
     noteAction: function (btn) {
       var t = trainee(state.selectedTraineeId);
-      var key = btn.getAttribute('data-key');
-      var n = key === 'stageAction' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.key === key; })[0];
+      var id = btn.getAttribute('data-key');
+      var n = id === 'stage_action' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.id === id; })[0];
       if (!n) return;
-      if (n.action === 'createProgram') actions.createProgram();
-      else if (n.action === 'sendToApproval') openDialog('sendToApproval', t.id);
-      else if (n.action === 'startClosing') openDialog('close', t.id);
-      else if (n.action === 'showTasksOverdue' || n.action === 'showTasksUndone') {
-        state.traineeTab = 'program';
+      if (n.kind === 'action') {
+        var a = noteActionOf(t, n);
+        if (a === 'createProgram') actions.createProgram();
+        else if (a === 'sendToApproval') openDialog('sendToApproval', t.id);
+        else if (a === 'startClosing') openDialog('close', t.id);
+        return;
+      }
+      // navigation: переключить вид на target — вкладку и, для задач, тумблер статусов
+      state.traineeTab = TARGET_TAB[n.target.tab];
+      if (n.target.tab === 'program') {
         state.selectedTasks = {};
         state.collapsedBlocks = {};
-        state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'progress'; // отставание — «В работе»
-        renderCenter();
-      } else if (n.action === 'showChecklistOverdue') {
-        state.traineeTab = 'prepare';
+        state.taskFilter = n.target.filter ? TARGET_FILTER[n.target.filter] : null;
+      } else {
         state.checklistMode = 'all';
         state.checklistFilter = 'overdue';
-        renderCenter();
       }
+      renderCenter();
     },
     createProgram: function () {
       state.traineeTab = 'program';
@@ -2746,10 +2765,13 @@
       taskPct: taskPct(t), timePct: timePct(t), overdue: s ? s.overdue : 0, lag: lag(t),
       day: 'день ' + dayNo(t) + ' из ' + totalDays(t),
       daysToStart: daysToStart(t), daysToEnd: daysToEnd(t),
-      notifications: getNotifications(t).map(function (n) { return n.tone + ': ' + n.text; })
+      notifications: getNotifications(t).map(function (n) { return n.severity + ': ' + n.text; })
     };
   };
   window.plural = plural;
+  // НЕ_ПЕРЕНОСИТЬ: уведомления стажёра с полями раздела 2.1 фазы 9 и перерисовка после правки DATA из консоли
+  window.getNotifications = function (id) { return getNotifications(trainee(id)); };
+  window.rerender = function () { render(); };
 
   // НЕ_ПЕРЕНОСИТЬ: элементы без атрибутов соответствия 1С (раздел 7.9)
   window.check1c = function () {
