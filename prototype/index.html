@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Личный кабинет руководителя — прототип</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="window" id="window">
+
+    <!-- Заголовок окна: в 1С рисует платформа (заголовок формы и системные кнопки окна) -->
+    <div class="window-head col gap-3">
+      <div class="row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокОкна">
+        <h1 class="window-title grow">Личный кабинет руководителя</h1>
+        <div class="row window-tools">
+          <button type="button" class="btn btn-icon btn-flat" data-action="reloadPage" data-icon="refresh" title="Обновить"
+                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаОбновить" id="btnReload"></button>
+          <button type="button" class="btn btn-icon btn-flat" data-action="formMenu" data-icon="more" title="Ещё"
+                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаЕщё" id="btnFormMore"></button>
+          <button type="button" class="btn btn-icon btn-flat" data-action="closeForm" data-icon="close" title="Закрыть"
+                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаЗакрыть" id="btnClose"></button>
+        </div>
+      </div>
+
+      <!-- Верхние вкладки -->
+      <div class="tabs tabs-top" id="topTabs" data-1c="Страницы" data-1c-name="СтраницыРазделы"></div>
+    </div>
+
+    <div class="window-body" id="windowBody">
+      <!-- Заглушка для вкладок, не входящих в прототип -->
+      <div class="stub hidden" id="stubZone" data-1c="Надпись" data-1c-name="ДекорацияРазделНеВходитВПрототип">
+        Раздел не входит в прототип
+      </div>
+
+      <!-- Страница «Адаптация персонала»: три зоны -->
+      <div class="page-body" id="adaptationPage"
+           data-1c="ГруппаГоризонтальная" data-1c-name="ГруппаАдаптацияОсновная">
+        <div class="zone-left" id="leftZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЛеваяПанель"></div>
+        <div class="zone-center" id="centerZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЦентр"></div>
+        <div class="zone-help hidden" id="helpZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаСправка"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальные окна (в 1С — отдельные формы с блокировкой окна владельца) -->
+  <div id="dialogHost"></div>
+
+  <!-- Угол экрана: оповещения пользователя и демо-переключатель этапа -->
+  <div class="overlay-corner">
+    <div class="toasts" id="toasts"></div>
+    <div class="demo-dock" id="demoDock" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ДемоПереключательЭтапа"></div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
