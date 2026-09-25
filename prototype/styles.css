@@ -338,3 +338,83 @@ th.num, td.num { text-align: right; }
   color: inherit; font-size: inherit; white-space: nowrap;
 }
 .th-sort:hover, .th-sort.on { color: var(--c-text); }
+
+/* ================= Карточка стажёра ================= */
+.trainee-card { max-width: 1280px; }
+.header { gap: var(--sp-4) var(--sp-5); flex-wrap: wrap; }
+.header-col1 { flex: 1 1 300px; min-width: 280px; }
+.header-col2 { flex: 0 1 240px; min-width: 200px; }
+.header-col3 { flex: 0 0 240px; }
+.avatar {
+  flex: 0 0 56px; width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-xl); font-weight: bold;
+}
+
+/* Степпер */
+.stepper { display: flex; flex-direction: row; align-items: flex-start; gap: var(--sp-2); padding: 0 var(--sp-1); }
+.step { display: flex; flex-direction: row; align-items: flex-start; gap: 6px; flex: 0 1 auto; min-width: 0; color: var(--c-text-secondary); }
+.step-mark {
+  flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--c-border); font-size: var(--fs-s); background: var(--c-bg);
+}
+.step-text { padding-top: 2px; }
+.step { min-width: min-content; }
+.trainee-card { container-type: inline-size; }
+/* Узкая центральная область (открыта справка при 1366px): подписи только у текущего шага, у остальных — в title */
+@container (max-width: 760px) {
+  .step:not(.step-current) .step-text { display: none; }
+}
+.step-done { color: var(--c-success); }
+.step-done .step-mark { border-color: var(--c-success); background: var(--c-success-bg); }
+.step-current { color: var(--c-primary); font-weight: bold; }
+.step-current .step-mark { border-color: var(--c-primary); background: var(--c-primary); color: var(--c-bg); }
+.step-current .muted { font-weight: normal; }
+.step-line { flex: 1 1 16px; min-width: 8px; height: 1px; background: var(--c-border); margin-top: 11px; }
+.step-line.done { background: var(--c-success); }
+
+/* Плашки уведомлений */
+.note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius); min-height: 40px; }
+.note-danger  { background: var(--c-danger-bg); }
+.note-warning { background: var(--c-warning-bg); }
+.note-info    { background: var(--c-info-bg); }
+
+/* Командная панель */
+.command-bar { gap: var(--sp-2); padding: var(--sp-2) 0; border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); }
+.btn.pressed { background: var(--c-bg-selected); border-color: var(--c-primary); color: var(--c-primary); }
+.btn-danger { color: var(--c-danger); border-color: var(--c-danger); }
+.btn-danger:hover:not(:disabled) { background: var(--c-danger-bg); border-color: var(--c-danger); }
+
+/* Подменю — всплывающий список под кнопкой (в 1С — системное подменю) */
+.menu-host { position: relative; }
+.menu-pop { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 20; }
+.menu .danger-text { color: var(--c-danger); }
+
+/* Вкладки стажёра */
+.trainee-card .tabs .tab { font-size: var(--fs-l); font-weight: bold; }
+
+/* ================= Диалоги ================= */
+.modal-backdrop {
+  position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c-text) 40%, transparent);
+}
+.modal {
+  width: 480px; max-height: calc(100vh - 80px);
+  display: flex; flex-direction: column;
+  background: var(--c-bg); border-radius: var(--radius); border: 1px solid var(--c-border);
+}
+.modal-wide { width: 720px; }
+.modal-head { padding: var(--sp-3) var(--sp-3) var(--sp-2) var(--sp-4); }
+.modal-title { font-size: var(--fs-l); font-weight: bold; }
+.modal-body { padding: var(--sp-2) var(--sp-4) var(--sp-4); overflow: auto; }
+.modal-foot { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--c-border); }
+.dlg-text { margin: 0; }
+.dlg-summary { padding: var(--sp-2) var(--sp-3); background: var(--c-bg-panel); border-radius: var(--radius); }
+.dlg-table { max-height: 420px; }
+.field-row { display: flex; flex-direction: row; align-items: flex-start; gap: var(--sp-3); }
+.field-label { flex: 0 0 150px; padding-top: 6px; color: var(--c-text-secondary); }
+.req { color: var(--c-danger); }
+.field-error { color: var(--c-danger); font-size: var(--fs-s); }
+[aria-invalid="true"], .toggle.invalid { border-color: var(--c-danger); }

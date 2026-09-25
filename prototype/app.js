@@ -264,6 +264,7 @@
     users: '<circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.8 13c.5-2.2 2.2-3.4 4.2-3.4s3.7 1.2 4.2 3.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M10.3 3.4a2.3 2.3 0 0 1 0 4.3M11.6 9.8c1.3.4 2.2 1.5 2.6 3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     clock: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.8V8l2.2 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
     docCheck: '<path d="M4 2.5h5.5L12 5v8.5H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 9l1.5 1.5L10.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
+    info: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/>',
     alert: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".9" fill="currentColor"/>',
     flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 3 1.8 3h-8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
@@ -372,6 +373,12 @@
     leftMode: 'tree',            // 'tree' | 'attention'
     collapsed: {},               // свёрнутые узлы дерева: {deptId: true}
     summarySort: { key: null, dir: 1 },
+    dismissed: {},               // закрытые info-плашки: {'traineeId:key': true}, до перезагрузки
+    notesExpanded: false,        // «Ещё N уведомлений» раскрыто
+    openMenu: null,              // открытое подменю
+    dialog: null,                // открытый диалог
+    taskFilter: null,            // фильтр таблицы задач: 'done' | 'progress' | 'overdue' | 'todo' | 'undone'
+    taskBlock: 'all',            // 'all' | 'corp' | 'spec'
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     toasts: []
   };
@@ -392,6 +399,7 @@
       renderCenter();
       renderHelp();
     }
+    renderDialog();
     renderDemo();
     renderToasts();
   }
@@ -676,7 +684,11 @@
     }).join('');
 
     return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
-      '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + list.length + '</div>' +
+      '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокСводки') + '>' +
+        '<div class="h-block grow"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + list.length + '</div>' +
+        button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
+          title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправкаСводка' }) +
+      '</div>' +
       (list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
@@ -687,18 +699,240 @@
       '</div>';
   }
 
-  // Карточка стажёра — фаза 2. Пока только переход назад и имя.
+  /* ---------------------------------------------------------------------
+   * Карточка стажёра (раздел 7.4)
+   * --------------------------------------------------------------------- */
+
+  function initials(fullName) {
+    var p = fullName.split(' ');
+    return (p[0] ? p[0][0] : '') + (p[1] ? p[1][0] : '');
+  }
+  // Файл печати: АП_Лебедев_С_Н.docx
+  function printFileName(t) {
+    var p = t.fullName.split(' ');
+    return 'АП_' + p[0] + (p[1] ? '_' + p[1][0] : '') + (p[2] ? '_' + p[2][0] : '') + '.docx';
+  }
+  function closeAvailableFrom(t) { return addDays(t.endDate, -D.CLOSE_AVAILABLE_DAYS); }
+  function canStartClosing(t) {
+    return t.stage === 'closing' || (t.stage === 'active' && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS);
+  }
+  function isClosed(t) { return t.stage === 'closed'; }
+
   function renderTraineeCard(t) {
-    return '<div class="col gap-4"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
+    return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
-      '<div class="row gap-3"><span class="text-xl bold">' + esc(t.fullName) + '</span>' + stageBadge(t) + '</div>' +
-      '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаКарточкиСтажера') + '>Карточка стажёра появится в фазе 2</div>' +
+      renderHeader(t) +
+      renderStepper(t) +
+      renderNotes(t) +
+      renderCommandBar(t) +
+      renderTraineePages(t) +
       '</div>';
   }
 
+  function personLink(t, role) {
+    var id = role === 'mentor' ? t.mentorId : t.headId;
+    var u = user(id);
+    var name = role === 'mentor' ? 'ГиперссылкаНаставник' : 'ГиперссылкаРуководительСтажировки';
+    if (isClosed(t)) return '<span' + a1c('Надпись', name) + '>' + esc(u.fullName) + '</span>';
+    return link(u.fullName, {
+      action: 'openDialog', data: { dialog: role === 'mentor' ? 'changeMentor' : 'changeHead' },
+      title: role === 'mentor' ? 'Сменить наставника' : 'Сменить руководителя стажировки', name: name
+    });
+  }
+
+  function renderHeader(t) {
+    var st = statsOf(t);
+    var col3;
+    var dates = '<div class="col gap-0"><span class="muted text-s">Даты стажировки</span>' +
+      '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</span></div>';
+    if (isClosed(t)) {
+      var what = t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ';
+      var result = t.closeKind === 'passed' ? '. Результат: пройдена' : t.closeKind === 'failed' ? '. Результат: не пройдена' : '';
+      col3 = dates + '<div class="bold"' + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' + what + fmtDate(t.closedAt) + result + '</div>';
+    } else if (t.stage === 'found' || daysToStart(t) > 0) {
+      var ds = daysToStart(t);
+      col3 = dates + '<div class="bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+        (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>' +
+        (st ? meter('Задачи: ' + st.pct + '%', st.pct, 'ИндикаторЗадачи') : '');
+    } else {
+      col3 = dates +
+        meter('Срок: день ' + dayNo(t) + ' из ' + totalDays(t), timePct(t), 'ИндикаторСрок') +
+        (st ? meter('Задачи: ' + st.pct + '%', st.pct, 'ИндикаторЗадачи', 'success') : '') +
+        (lag(t) ? '<div class="danger-text bold"' + a1c('Надпись', 'ДекорацияОтставание') + '>Отстаёт от графика</div>' : '');
+    }
+
+    return '<div class="panel row top header"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаСтажера') + '>' +
+      // 1. Аватар, ФИО, должность, этап
+      '<div class="row top gap-3 header-col1"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
+        '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
+        '<div class="col gap-1 grow"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
+          '<div class="text-xl bold"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
+          '<div' + a1c('Надпись', 'ДекорацияДолжность') + '><span class="muted">Стажёр на должность:</span> ' + esc(t.position) + '</div>' +
+          '<div>' + stageBadge(t, 'ДекорацияЭтап') + '</div>' +
+        '</div>' +
+      '</div>' +
+      // 2. Наставник и руководитель
+      '<div class="col gap-3 header-col2"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
+        '<div class="col gap-0"><span class="muted text-s">Наставник стажировки</span>' + personLink(t, 'mentor') + '</div>' +
+        '<div class="col gap-0"><span class="muted text-s">Руководитель стажировки</span>' + personLink(t, 'head') + '</div>' +
+      '</div>' +
+      // 3. Сроки
+      '<div class="col gap-2 header-col3"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + col3 + '</div>' +
+      '</div>';
+  }
+
+  function meter(label, pct, name, tone) {
+    return '<div class="col gap-1"><span class="text-s">' + esc(label) + '</span>' +
+      '<div class="indicator-wrap">' + indicator(pct, name, tone) + '</div></div>';
+  }
+
+  // Степпер этапов: пройденные — галочка, текущий — primary с датой, будущие — серые
+  function renderStepper(t) {
+    var cur = stageIndex(t.stage);
+    var allDone = isClosed(t);
+    return '<div class="stepper"' + a1c('ГруппаГоризонтальная', 'ГруппаСтеппер', 'check') + '>' +
+      STAGES.map(function (s, i) {
+        var state_ = allDone || i < cur ? 'done' : i === cur ? 'current' : 'future';
+        var title = s.title;
+        if (s.code === 'closed' && t.closeKind === 'cancelled') title = 'Отменена';
+        var date = t.stageDates[s.code];
+        return '<div class="step step-' + state_ + '"' + a1c('Надпись', 'ДекорацияШаг_' + s.code) +
+          ' title="' + esc(title + (date ? ' с ' + fmtDate(date) : '')) + '">' +
+          '<span class="step-mark">' + (state_ === 'done' ? icon('check') : (i + 1)) + '</span>' +
+          '<span class="col gap-0 step-text"><span class="step-title">' + esc(title) + '</span>' +
+          (state_ === 'current' || (allDone && s.code === 'closed') ? '<span class="text-s muted">' + (date ? 'с ' + fmtDate(date) : '') + '</span>' : '') +
+          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line' + (state_ === 'done' ? ' done' : '') + '"></span>' : '');
+      }).join('') + '</div>';
+  }
+
+  var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
+
+  // Плашки уведомлений (раздел 7.1)
+  function renderNotes(t) {
+    var list = getNotifications(t).filter(function (n) { return !state.dismissed[t.id + ':' + n.key]; });
+    if (!list.length) return '';
+    var shown = state.notesExpanded ? list : list.slice(0, 3);
+    var rest = list.length - shown.length;
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаУведомления') + '>' +
+      shown.map(function (n) {
+        var disabled = n.action === 'startClosing' && !canStartClosing(t);
+        return '<div class="note note-' + n.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление_' + n.key) + '>' +
+          '<span class="tone-' + n.tone + '"' + a1c('Картинка', 'КартинкаУведомление_' + n.key) + '>' + icon(NOTE_ICONS[n.tone]) + '</span>' +
+          '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление_' + n.key) + '>' + esc(n.text) + '</span>' +
+          (n.button ? button(n.button, { action: 'noteAction', data: { key: n.key }, name: 'КнопкаУведомление_' + n.key,
+            disabled: disabled, title: disabled ? 'Доступно с ' + fmtDate(closeAvailableFrom(t)) : '' }) : '') +
+          (n.tone === 'info' ? button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Скрыть уведомление', action: 'dismissNote',
+            data: { key: n.key }, name: 'КнопкаСкрытьУведомление_' + n.key }) : '') +
+          '</div>';
+      }).join('') +
+      (rest > 0 ? '<div>' + link('Ещё ' + pluralN(rest, ['уведомление', 'уведомления', 'уведомлений']), { action: 'toggleNotes', name: 'ГиперссылкаЕщеУведомления' }) + '</div>' : '') +
+      (state.notesExpanded && list.length > 3 ? '<div>' + link('Свернуть уведомления', { action: 'toggleNotes', name: 'ГиперссылкаСвернутьУведомления' }) + '</div>' : '') +
+      '</div>';
+  }
+
+  // Командная панель стажировки
+  function renderCommandBar(t) {
+    var program = programOf(t);
+    var s = t.stage;
+    var parts = [];
+    var reason = '';
+
+    if (s === 'found' && !program) {
+      parts.push(button('Создать АП', { cls: 'btn-primary', action: 'createProgram', name: 'КнопкаСоздатьАП' }));
+    } else if (s === 'found' || s === 'draft') {
+      parts.push(button('Отправить на согласование', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' }));
+    } else if (s === 'approval') {
+      parts.push(button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' }));
+    } else if (s === 'active' || s === 'closing') {
+      var can = canStartClosing(t);
+      parts.push(button('Начать закрытие стажировки', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'close' },
+        disabled: !can, title: can ? '' : 'Закрытие доступно за ' + pluralN(D.CLOSE_AVAILABLE_DAYS, W_DAYS) + ' до окончания стажировки',
+        name: 'КнопкаНачатьЗакрытиеСтажировки' }));
+      if (!can) reason = '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияЗакрытиеДоступноС') + '>Доступно с ' + fmtDate(closeAvailableFrom(t)) + '</span>';
+    }
+    if (reason) parts.push(reason);
+    if (s === 'active' || s === 'closing') {
+      parts.push(button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }));
+    }
+    if (program) {
+      parts.push(button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }));
+      if (!isClosed(t)) parts.push(button('Проверяющие и наблюдатели', { icon: 'users', action: 'openDialog', data: { dialog: 'reviewers' }, name: 'КнопкаПроверяющиеИНаблюдатели' }));
+    }
+
+    var menuItems = [];
+    if (program) {
+      menuItems.push(menuItem('История изменений АП', 'openDialog', { dialog: 'history' }, 'КнопкаИсторияИзмененийАП'));
+      menuItems.push(menuItem('Открыть документ АП', 'openProgramDoc', null, 'КнопкаОткрытьДокументАП'));
+    }
+    if (!isClosed(t)) {
+      if (menuItems.length) menuItems.push('<div class="menu-sep"></div>');
+      menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
+    }
+
+    return '<div class="row wrap command-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
+      parts.join('') +
+      '<span class="grow"></span>' +
+      (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
+      button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
+        title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправка' }) +
+      '</div>';
+  }
+
+  function menuItem(text, action, data, name, cls) {
+    var attrs = '';
+    if (data) for (var k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
+    return '<button type="button" data-action="' + action + '"' + attrs + (cls ? ' class="' + cls + '"' : '') + a1c('Кнопка', name) + '>' + esc(text) + '</button>';
+  }
+  function submenu(id, name, items) {
+    var open = state.openMenu === id;
+    return '<div class="menu-host">' +
+      button('', { cls: 'btn-icon', icon: 'more', title: 'Ещё', action: 'toggleMenu', data: { menu: id }, type: 'Подменю', name: name }) +
+      (open ? '<div class="menu menu-pop"' + a1c('Подменю', name + 'Список') + '>' + items.join('') + '</div>' : '') +
+      '</div>';
+  }
+
+  // Вкладки стажёра: содержимое — фазы 3 и 4
+  function renderTraineePages(t) {
+    var tabs = [
+      { id: 'program', text: 'Адаптационная программа', name: 'СтраницаАдаптационнаяПрограмма' },
+      { id: 'prepare', text: 'Подготовка к выходу', name: 'СтраницаПодготовкаКВыходу' }
+    ];
+    var body;
+    if (state.traineeTab === 'program') {
+      var f = state.taskFilter ? ' Активный фильтр: ' + TASK_FILTER_TITLES[state.taskFilter] + '.' : '';
+      body = '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаВкладкиАП') + '>Вкладка «Адаптационная программа» появится в фазе 3.' + esc(f) + '</div>';
+    } else {
+      body = '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаВкладкиПодготовка') + '>Вкладка «Подготовка к выходу» появится в фазе 4.</div>';
+    }
+    return '<div class="col gap-3"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
+      '<div class="tabs">' + tabs.map(function (x) {
+        return '<button type="button" class="tab' + (state.traineeTab === x.id ? ' active' : '') + '" data-tab="' + x.id + '" data-action="traineeTab"' +
+          a1c('Страница', x.name) + '>' + esc(x.text) + '</button>';
+      }).join('') + '</div>' + body + '</div>';
+  }
+  var TASK_FILTER_TITLES = { done: 'Выполнено', progress: 'В работе', overdue: 'Просрочено', todo: 'Не начато', undone: 'Невыполненные' };
+
+  /* ---------------------------------------------------------------------
+   * Справка (раздел 7.8)
+   * --------------------------------------------------------------------- */
+
+  var HELP_LINKS = [
+    'Как заказать технику стажёру?',
+    'Как создать адаптационную программу?',
+    'Как изменить состав задач АП?',
+    'Какие мероприятия стажёр пропустил?',
+    'Как продлить стажировку?',
+    'Как закрыть стажировку?',
+    'Как узнать результат выполнения задач стажёром в Forus Team?'
+  ];
   function renderHelp() {
     el('helpZone').classList.toggle('hidden', !state.helpOpen);
-    el('helpZone').innerHTML = '';
+    el('helpZone').innerHTML = !state.helpOpen ? '' :
+      '<div class="col gap-3">' +
+      '<div class="row"><span class="tone-info">' + icon('help') + '</span><span class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокИнструкции') + '>Инструкции</span></div>' +
+      HELP_LINKS.map(function (text, i) {
+        return '<div>' + link(text, { action: 'openHelp', name: 'ГиперссылкаИнструкция' + (i + 1) }) + '</div>';
+      }).join('') + '</div>';
   }
 
   // НЕ_ПЕРЕНОСИТЬ: демо-переключатель этапа выбранного стажёра
@@ -760,11 +994,223 @@
     }
   }
 
+  /* =====================================================================
+   * Диалоги (раздел 7.7). В 1С — отдельные формы, открытые с блокировкой окна владельца.
+   * state.dialog = {type, traineeId, values, errors}
+   * ===================================================================== */
+
+  // Строка поля: подпись слева, поле справа, ошибка под полем
+  function field(label, control, opts) {
+    opts = opts || {};
+    var err = opts.error ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибка' + (opts.name || '')) + '>' + esc(opts.error) + '</div>' : '';
+    return '<div class="field-row">' +
+      '<label class="field-label"' + (opts.forId ? ' for="' + opts.forId + '"' : '') + '>' + esc(label) +
+      (opts.required ? '<span class="req" title="Обязательное поле"> *</span>' : '') + '</label>' +
+      '<div class="col gap-1 grow">' + control + err + '</div></div>';
+  }
+  function dlgValue(name) { var v = state.dialog.values[name]; return v == null ? '' : v; }
+  function inputText(name, oneC, attrs) {
+    return '<input type="text" class="input grow" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
+      (attrs || '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
+  }
+  function inputDate(name, oneC, min) {
+    return '<input type="date" class="input" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
+      (min ? ' min="' + min + '"' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
+  }
+  function textarea(name, oneC) {
+    return '<textarea class="textarea grow" rows="3" id="f_' + name + '" data-field="' + name + '"' +
+      (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' + esc(dlgValue(name)) + '</textarea>';
+  }
+  function selectUser(name, oneC) {
+    return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + a1c('ПолеВвода', oneC) + '>' +
+      D.users.map(function (u) {
+        return '<option value="' + u.id + '"' + (dlgValue(name) === u.id ? ' selected' : '') + '>' + esc(u.fullName + ' — ' + u.role) + '</option>';
+      }).join('') + '</select>';
+  }
+  function choice(name, oneC, items) {
+    return '<div class="toggle' + (state.dialog.errors[name] ? ' invalid' : '') + '" role="radiogroup"' + a1c('Тумблер', oneC) + '>' +
+      items.map(function (it) {
+        return '<button type="button" role="radio" aria-checked="' + (dlgValue(name) === it.value) + '" class="' + (dlgValue(name) === it.value ? 'on' : '') + '"' +
+          ' data-action="dlgChoose" data-field="' + name + '" data-value="' + it.value + '"' + a1c('Тумблер', oneC + 'Вариант' + it.name) + '>' + esc(it.text) + '</button>';
+      }).join('') + '</div>';
+  }
+  function required(v) { return String(v == null ? '' : v).trim() !== ''; }
+  function personName(role) { return role === 'mentor' ? 'Наставник' : 'Руководитель стажировки'; }
+
+  var DIALOGS = {
+    sendToApproval: {
+      title: 'Отправить на согласование', form: 'ФормаОтправкаНаСогласование', submit: 'Отправить на согласование',
+      body: function (t) {
+        return '<p class="dlg-text">Адаптационная программа стажёра ' + esc(t.fullName) + ' будет отправлена на согласование.</p>' +
+          field('Комментарий', textarea('comment', 'ПолеКомментарий'), { forId: 'f_comment' });
+      },
+      apply: function (t, v) {
+        var program = programOf(t);
+        setStage(t, 'approval');
+        t.changedAfterApproval = false;
+        t.rejectionComment = null;
+        addHistory(program, 'АП отправлена на согласование' + (required(v.comment) ? '. Комментарий: «' + v.comment.trim() + '»' : ''));
+        toast('АП отправлена на согласование');
+      }
+    },
+    extend: {
+      title: 'Продлить срок', form: 'ФормаПродлитьСрок', submit: 'Продлить срок',
+      init: function (t) { return { endDate: addDays(t.endDate, 30), reason: '' }; },
+      body: function (t) {
+        return '<p class="dlg-text">Текущая дата окончания стажировки: ' + fmtDate(t.endDate) + '.</p>' +
+          field('Новая дата окончания', inputDate('endDate', 'ПолеНоваяДатаОкончания', addDays(t.endDate, 1)),
+            { required: true, error: state.dialog.errors.endDate, forId: 'f_endDate', name: 'НоваяДатаОкончания' }) +
+          field('Причина', textarea('reason', 'ПолеПричинаПродления'), { required: true, error: state.dialog.errors.reason, forId: 'f_reason', name: 'ПричинаПродления' });
+      },
+      validate: function (t, v) {
+        var e = {};
+        if (!required(v.endDate)) e.endDate = 'Укажите новую дату окончания';
+        else if (v.endDate <= t.endDate) e.endDate = 'Дата должна быть не раньше ' + fmtDate(addDays(t.endDate, 1));
+        if (!required(v.reason)) e.reason = 'Укажите причину продления';
+        return e;
+      },
+      apply: function (t, v) {
+        var old = t.endDate;
+        t.endDate = v.endDate;
+        var program = programOf(t);
+        if (program) addHistory(program, 'Срок стажировки продлён: ' + fmtDate(old) + ' → ' + fmtDate(v.endDate) + '. Причина: «' + v.reason.trim() + '»');
+        toast('Срок стажировки продлён до ' + fmtDate(v.endDate));
+      }
+    },
+    close: {
+      title: 'Начать закрытие стажировки', form: 'ФормаЗакрытиеСтажировки', submit: 'Начать закрытие стажировки',
+      body: function (t) {
+        var st = statsOf(t) || { done: 0, total: 0, overdue: 0 };
+        return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: <b>' + st.done + ' из ' + st.total + '</b>' +
+          (st.overdue ? ', просрочено: <b class="danger-text">' + st.overdue + '</b>' : ', просроченных нет') + '</div>' +
+          field('Результат', choice('result', 'ПолеРезультатСтажировки', [
+            { value: 'passed', text: 'Стажировка пройдена', name: 'Пройдена' },
+            { value: 'failed', text: 'Не пройдена', name: 'НеПройдена' }
+          ]), { required: true, error: state.dialog.errors.result, name: 'РезультатСтажировки' }) +
+          field('Комментарий', textarea('comment', 'ПолеКомментарийЗакрытия'), { forId: 'f_comment' });
+      },
+      validate: function (t, v) { return required(v.result) ? {} : { result: 'Выберите результат стажировки' }; },
+      apply: function (t, v) {
+        t.closeKind = v.result;
+        t.closedAt = D.TODAY;
+        setStage(t, 'closed');
+        var program = programOf(t);
+        if (program) addHistory(program, 'Стажировка закрыта. Результат: ' + (v.result === 'passed' ? 'пройдена' : 'не пройдена') +
+          (required(v.comment) ? '. Комментарий: «' + v.comment.trim() + '»' : ''));
+        toast('Стажировка закрыта');
+      }
+    },
+    cancel: {
+      title: 'Отменить стажировку', form: 'ФормаОтменаСтажировки', submit: 'Отменить стажировку', danger: true,
+      body: function (t) {
+        return '<div class="note note-warning"' + a1c('ГруппаГоризонтальная', 'ГруппаПредупреждениеОтмена') + '><span class="tone-warning">' + icon('alert') + '</span>' +
+          '<span class="grow">Стажировка ' + esc(t.fullName) + ' будет отменена. Адаптационная программа и чек-лист станут доступны только для просмотра.</span></div>' +
+          field('Причина', textarea('reason', 'ПолеПричинаОтмены'), { required: true, error: state.dialog.errors.reason, forId: 'f_reason', name: 'ПричинаОтмены' });
+      },
+      validate: function (t, v) { return required(v.reason) ? {} : { reason: 'Укажите причину отмены' }; },
+      apply: function (t, v) {
+        t.closeKind = 'cancelled';
+        t.closedAt = D.TODAY;
+        setStage(t, 'closed');
+        var program = programOf(t);
+        if (program) addHistory(program, 'Стажировка отменена. Причина: «' + v.reason.trim() + '»');
+        toast('Стажировка отменена');
+      }
+    },
+    changeMentor: personDialog('mentor'),
+    changeHead: personDialog('head'),
+    history: {
+      title: 'История изменений АП', form: 'ФормаИсторияИзмененийАП', submit: 'Закрыть', wide: true, readOnly: true,
+      body: function (t) {
+        var program = programOf(t);
+        var rows = program.history.slice().reverse().map(function (h) {
+          return '<tr><td class="nowrap">' + fmtDateTime(h.at) + '</td><td class="nowrap">' + esc(userShort(h.userId)) + '</td><td>' + esc(h.action) + '</td></tr>';
+        }).join('');
+        return '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаИсторияИзменений') + '>' +
+          '<thead><tr><th>Дата и время</th><th>Пользователь</th><th>Действие</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+    }
+  };
+
+  function personDialog(role) {
+    var key = role === 'mentor' ? 'mentorId' : 'headId';
+    var title = role === 'mentor' ? 'Сменить наставника' : 'Сменить руководителя стажировки';
+    return {
+      title: title, form: role === 'mentor' ? 'ФормаСменитьНаставника' : 'ФормаСменитьРуководителя', submit: 'Сохранить',
+      init: function (t) { return { userId: t[key] }; },
+      body: function (t) {
+        return field(personName(role), selectUser('userId', 'ПолеСотрудник'), { required: true, forId: 'f_userId' });
+      },
+      apply: function (t, v) {
+        var old = t[key];
+        if (old === v.userId) return;
+        t[key] = v.userId;
+        // Невыполненные пункты чек-листа переходят к новому ответственному
+        checklistOf(t).forEach(function (c) {
+          if (!c.done && c.responsibleRole === role) c.responsibleId = v.userId;
+        });
+        var program = programOf(t);
+        if (program) addHistory(program, personName(role) + ' изменён: ' + userShort(old) + ' → ' + userShort(v.userId));
+        toast(personName(role) + ' изменён: ' + userShort(v.userId));
+      }
+    };
+  }
+
+  function openDialog(type, traineeId) {
+    var def = DIALOGS[type];
+    if (!def) { toast('Диалог появится в следующей фазе прототипа'); return; }
+    var t = trainee(traineeId);
+    state.openMenu = null;
+    state.dialog = { type: type, traineeId: traineeId, values: def.init ? def.init(t) : {}, errors: {} };
+    render();
+    var first = el('dialogHost').querySelector('[data-field]') || el('dialogHost').querySelector('.btn-primary');
+    if (first) first.focus();
+  }
+  function closeDialog() { state.dialog = null; renderDialog(); }
+  function submitDialog() {
+    var d = state.dialog;
+    var def = DIALOGS[d.type];
+    var t = trainee(d.traineeId);
+    if (def.readOnly) { closeDialog(); return; }
+    d.errors = def.validate ? def.validate(t, d.values) : {};
+    if (Object.keys(d.errors).length) {
+      renderDialog();
+      var bad = el('dialogHost').querySelector('[aria-invalid="true"], .toggle.invalid button');
+      if (bad) bad.focus();
+      return;
+    }
+    def.apply(t, d.values);
+    state.dialog = null;
+    render();
+  }
+
+  function renderDialog() {
+    var host = el('dialogHost');
+    var d = state.dialog;
+    if (!d) { host.innerHTML = ''; return; }
+    var def = DIALOGS[d.type];
+    var t = trainee(d.traineeId);
+    host.innerHTML = '<div class="modal-backdrop">' +
+      '<div class="modal' + (def.wide ? ' modal-wide' : '') + '" role="dialog" aria-modal="true" aria-label="' + esc(def.title) + '"' +
+      a1c('ОтдельнаяФорма', def.form) + '>' +
+      '<div class="modal-head row"><span class="modal-title grow">' + esc(def.title) + '</span>' +
+        button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Закрыть', action: 'dialogCancel', name: def.form + 'Закрыть' }) + '</div>' +
+      '<div class="modal-body col gap-3">' + def.body(t) + '</div>' +
+      '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' +
+        button(def.submit, { cls: def.danger ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (def.readOnly ? 'Закрыть' : 'Выполнить') }) +
+        (def.readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' })) +
+      '</div></div></div>';
+  }
+
   // Выбор стажёра из любого места: дерево раскрывается до него, вкладка — по этапу (раздел 5.4)
   function selectTrainee(id) {
     var t = trainee(id);
     state.selectedTraineeId = id;
     state.traineeTab = t.stage === 'found' ? 'prepare' : 'program';
+    state.notesExpanded = false;
+    state.taskFilter = null;
+    state.taskBlock = 'all';
+    state.openMenu = null;
     deptChain(t.departmentId).forEach(function (d) { delete state.collapsed[d.id]; });
     render();
   }
@@ -800,6 +1246,65 @@
       renderCenter();
     },
 
+    // Карточка стажёра
+    traineeTab: function (btn) { state.traineeTab = btn.getAttribute('data-tab'); renderCenter(); },
+    toggleMenu: function (btn) {
+      var id = btn.getAttribute('data-menu');
+      state.openMenu = state.openMenu === id ? null : id;
+      renderCenter();
+    },
+    toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
+    openHelp: function () { toast('Инструкция откроется в базе знаний'); },
+    toggleNotes: function () { state.notesExpanded = !state.notesExpanded; renderCenter(); },
+    dismissNote: function (btn) {
+      state.dismissed[state.selectedTraineeId + ':' + btn.getAttribute('data-key')] = true;
+      renderCenter();
+    },
+    noteAction: function (btn) {
+      var t = trainee(state.selectedTraineeId);
+      var key = btn.getAttribute('data-key');
+      var n = getNotifications(t).filter(function (x) { return x.key === key; })[0];
+      if (!n) return;
+      if (n.action === 'createProgram') actions.createProgram();
+      else if (n.action === 'sendToApproval') openDialog('sendToApproval', t.id);
+      else if (n.action === 'startClosing') openDialog('close', t.id);
+      else if (n.action === 'showTasksOverdue' || n.action === 'showTasksUndone') {
+        state.traineeTab = 'program';
+        state.taskBlock = 'all';
+        state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'undone';
+        renderCenter();
+      } else if (n.action === 'showChecklistOverdue') {
+        state.traineeTab = 'prepare';
+        renderCenter();
+      }
+    },
+    createProgram: function () {
+      state.traineeTab = 'program';
+      renderCenter();
+    },
+    recallApproval: function () {
+      var t = trainee(state.selectedTraineeId);
+      setStage(t, 'draft');
+      t.draftSince = D.TODAY;
+      addHistory(programOf(t), 'АП отозвана с согласования');
+      toast('АП отозвана с согласования');
+      render();
+    },
+    printProgram: function () { toast('Файл ' + printFileName(trainee(state.selectedTraineeId)) + ' сформирован'); },
+    openProgramDoc: function () { state.openMenu = null; renderCenter(); toast('Откроется форма документа'); },
+
+    // Диалоги
+    openDialog: function (btn) { openDialog(btn.getAttribute('data-dialog'), state.selectedTraineeId); },
+    dialogSubmit: function () { submitDialog(); },
+    dialogCancel: function () { closeDialog(); },
+    dlgChoose: function (btn) {
+      state.dialog.values[btn.getAttribute('data-field')] = btn.getAttribute('data-value');
+      delete state.dialog.errors[btn.getAttribute('data-field')];
+      renderDialog();
+      var on = el('dialogHost').querySelector('[data-action="dlgChoose"].on');
+      if (on) on.focus();
+    },
+
     // НЕ_ПЕРЕНОСИТЬ
     demoToggle: function () { state.demoMenuOpen = !state.demoMenuOpen; renderDemo(); },
     demoSetStage: function (btn) {
@@ -819,6 +1324,10 @@
   };
 
   document.addEventListener('click', function (e) {
+    if (state.openMenu && !e.target.closest('.menu-host')) {
+      state.openMenu = null;
+      renderCenter();
+    }
     var target = e.target.closest('[data-action]');
     if (!target || target.disabled) {
       if (state.demoMenuOpen && !e.target.closest('#demoDock')) { state.demoMenuOpen = false; renderDemo(); }
@@ -830,6 +1339,11 @@
 
   // Поле поиска: фильтрация по мере ввода
   document.addEventListener('input', function (e) {
+    var f = e.target.getAttribute('data-field');
+    if (f && state.dialog) {
+      state.dialog.values[f] = e.target.value;
+      return;
+    }
     if (e.target.getAttribute('data-input') === 'search') {
       state.search = e.target.value;
       renderLeft();
@@ -837,6 +1351,11 @@
     }
   });
   document.addEventListener('change', function (e) {
+    var f = e.target.getAttribute('data-field');
+    if (f && state.dialog) {
+      state.dialog.values[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      return;
+    }
     if (e.target.getAttribute('data-change') === 'hideEmpty') {
       state.hideEmpty = e.target.checked;
       renderLeft();
@@ -850,7 +1369,11 @@
       e.preventDefault();
       t.click();
     }
-    if (e.key === 'Escape' && state.demoMenuOpen) { state.demoMenuOpen = false; renderDemo(); }
+    if (e.key === 'Escape') {
+      if (state.dialog) closeDialog();
+      else if (state.openMenu) { state.openMenu = null; renderCenter(); }
+      else if (state.demoMenuOpen) { state.demoMenuOpen = false; renderDemo(); }
+    }
   });
 
   /* =====================================================================
