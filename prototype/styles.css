@@ -58,14 +58,49 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .h-block { font-size: var(--fs-l); font-weight: bold; margin: 0; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
+/* ================= Оболочка клиента 1С 8.5 (НЕ_ПЕРЕНОСИТЬ, раздел 2.4) ================= */
+.shell {
+  display: flex; flex-direction: column; height: 100vh; min-width: 1366px;
+  background: var(--c-neutral-bg); color: var(--c-text-secondary);
+  cursor: default;
+}
+.shell-top { flex: 0 0 44px; display: flex; flex-direction: row; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4) 0 var(--sp-5); user-select: none; }
+.shell-logo { display: inline-flex; color: var(--c-text-secondary); }
+.shell-logo svg { width: 46px; height: 22px; }
+.shell-home {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
+  height: 32px; padding: 0 var(--sp-3) 0 var(--sp-2);
+  background: var(--c-bg); color: var(--c-text); font-size: var(--fs-s);
+  border-radius: calc(var(--radius) * 2); border-left: 3px solid var(--c-tab-active);
+}
+.shell-home svg { width: 16px; height: 16px; }
+.shell-main { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; }
+.shell-side { display: flex; flex-direction: column; align-items: center; gap: var(--sp-4); padding: var(--sp-3) 0 var(--sp-4); user-select: none; }
+.shell-left { flex: 0 0 64px; }
+.shell-right { flex: 0 0 56px; }
+.shell-ico { display: inline-flex; color: var(--c-text-secondary); }
+.shell-ico svg { width: 22px; height: 22px; }
+.shell-sep { width: 28px; height: 1px; background: var(--c-border); flex: 0 0 1px; }
+.shell-form {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  background: var(--c-bg); color: var(--c-text);
+  border-radius: calc(var(--radius) * 3) calc(var(--radius) * 3) 0 0;
+  overflow: hidden;
+}
+
 /* ================= Окно формы ================= */
-.window { display: flex; flex-direction: column; height: 100vh; min-width: 1366px; }
+.window { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .window-head {
   flex: 0 0 auto;
-  padding: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-5) var(--sp-5) 0;
 }
 .window-title { font-size: var(--fs-xl); margin: 0; font-weight: normal; }
-.window-tools { gap: var(--sp-1); }
+.window-tools { gap: var(--sp-2); }
+.form-tool {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--c-neutral-bg); color: var(--c-text);
+}
 
 /* Верхние вкладки */
 .tabs { display: flex; flex-direction: row; gap: var(--sp-5); border-bottom: 1px solid var(--c-border); }
@@ -78,20 +113,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tabs-top { padding: 0 var(--sp-2); }
 .tabs-top .tab { font-size: var(--fs-l); }
 
-.window-body { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; }
+.window-body { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; padding: var(--sp-4) var(--sp-5) 0; }
 
 /* Зоны */
 .zone-left {
   flex: 0 0 320px; width: 320px;
-  border-right: 1px solid var(--c-border);
+  border: 1px solid var(--c-border); border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   display: flex; flex-direction: column; min-height: 0;
 }
 .zone-left.collapsed { flex-basis: 40px; width: 40px; }
-.zone-center { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: var(--sp-4) var(--sp-5); }
+.zone-center { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 var(--sp-5) var(--sp-4); }
 .zone-help {
   flex: 0 0 280px; width: 280px;
-  border-left: 1px solid var(--c-border);
+  border: 1px solid var(--c-border); border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   overflow: auto; padding: var(--sp-4);
 }
@@ -224,9 +261,10 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 
 /* Плавающий слой для оповещений и демо — единственное исключение из «без абсолютного позиционирования»:
    в 1С это системные механизмы (ПоказатьОповещениеПользователя) либо не переносится */
-.overlay-corner { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
+.overlay-corner { position: fixed; right: calc(56px + var(--sp-4)); bottom: var(--sp-4); z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-2); }
 
 /* Отладочная панель фазы 0 (НЕ_ПЕРЕНОСИТЬ) */
 .debug-note { border: 1px dashed var(--c-border); border-radius: var(--radius); padding: var(--sp-3); background: var(--c-bg-panel); }
 
 .page-body { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; min-width: 0; }
+.demo-btn:disabled { opacity: 1; color: var(--c-text-secondary); }

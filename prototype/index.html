@@ -6,38 +6,65 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="window" id="window">
+  <!-- ОБОЛОЧКА КЛИЕНТА 1С 8.5 (раздел 2.4 ТЗ): статичная имитация, некликабельна, в 1С не переносится -->
+  <div class="shell" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ОболочкаКлиента">
+    <div class="shell-top" aria-hidden="true">
+      <span class="shell-logo" data-shell-icon="logo"></span>
+      <span class="shell-home"><span data-shell-icon="home"></span>Начало</span>
+    </div>
 
-    <!-- Заголовок окна: в 1С рисует платформа (заголовок формы и системные кнопки окна) -->
-    <div class="window-head col gap-3">
-      <div class="row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокОкна">
-        <h1 class="window-title grow">Личный кабинет руководителя</h1>
-        <div class="row window-tools">
-          <button type="button" class="btn btn-icon btn-flat" data-action="reloadPage" data-icon="refresh" title="Обновить"
-                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаОбновить" id="btnReload"></button>
-          <button type="button" class="btn btn-icon btn-flat" data-action="formMenu" data-icon="more" title="Ещё"
-                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаЕщё" id="btnFormMore"></button>
-          <button type="button" class="btn btn-icon btn-flat" data-action="closeForm" data-icon="close" title="Закрыть"
-                  data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="СистемнаяКнопкаЗакрыть" id="btnClose"></button>
+    <div class="shell-main">
+      <div class="shell-side shell-left" aria-hidden="true">
+        <span class="shell-ico" data-shell-icon="sectionMain"></span>
+        <span class="shell-ico" data-shell-icon="sectionStaff"></span>
+        <span class="grow"></span>
+        <span class="shell-ico" data-shell-icon="panel"></span>
+      </div>
+
+      <!-- Карточка формы «Личный кабинет руководителя» -->
+      <div class="shell-form">
+        <div class="window" id="window">
+
+          <!-- Заголовок формы: в 1С рисует платформа -->
+          <div class="window-head col gap-3">
+            <div class="row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокФормы" aria-hidden="true">
+              <h1 class="window-title grow">Личный кабинет руководителя</h1>
+              <div class="row window-tools">
+                <span class="form-tool" data-shell-icon="refresh"></span>
+                <span class="form-tool" data-shell-icon="more"></span>
+              </div>
+            </div>
+
+            <!-- Верхние вкладки -->
+            <div class="tabs tabs-top" id="topTabs" data-1c="Страницы" data-1c-name="СтраницыРазделы"></div>
+          </div>
+
+          <div class="window-body" id="windowBody">
+            <!-- Заглушка для вкладок, не входящих в прототип -->
+            <div class="stub hidden" id="stubZone" data-1c="Надпись" data-1c-name="ДекорацияРазделНеВходитВПрототип">
+              Раздел не входит в прототип
+            </div>
+
+            <!-- Страница «Адаптация персонала»: три зоны -->
+            <div class="page-body" id="adaptationPage"
+                 data-1c="ГруппаГоризонтальная" data-1c-name="ГруппаАдаптацияОсновная">
+              <div class="zone-left" id="leftZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЛеваяПанель"></div>
+              <div class="zone-center" id="centerZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЦентр"></div>
+              <div class="zone-help hidden" id="helpZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаСправка"></div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Верхние вкладки -->
-      <div class="tabs tabs-top" id="topTabs" data-1c="Страницы" data-1c-name="СтраницыРазделы"></div>
-    </div>
-
-    <div class="window-body" id="windowBody">
-      <!-- Заглушка для вкладок, не входящих в прототип -->
-      <div class="stub hidden" id="stubZone" data-1c="Надпись" data-1c-name="ДекорацияРазделНеВходитВПрототип">
-        Раздел не входит в прототип
-      </div>
-
-      <!-- Страница «Адаптация персонала»: три зоны -->
-      <div class="page-body" id="adaptationPage"
-           data-1c="ГруппаГоризонтальная" data-1c-name="ГруппаАдаптацияОсновная">
-        <div class="zone-left" id="leftZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЛеваяПанель"></div>
-        <div class="zone-center" id="centerZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЦентр"></div>
-        <div class="zone-help hidden" id="helpZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаСправка"></div>
+      <div class="shell-side shell-right" aria-hidden="true">
+        <span class="shell-ico" data-shell-icon="search"></span>
+        <span class="shell-ico" data-shell-icon="bell"></span>
+        <span class="shell-ico" data-shell-icon="history"></span>
+        <span class="shell-ico" data-shell-icon="star"></span>
+        <span class="shell-sep"></span>
+        <span class="shell-ico" data-shell-icon="functions"></span>
+        <span class="grow"></span>
+        <span class="shell-ico" data-shell-icon="account"></span>
       </div>
     </div>
   </div>
