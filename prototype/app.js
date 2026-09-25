@@ -384,6 +384,10 @@
     taskSort: { key: null, dir: 1 },
     selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
     collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
+    checklistMode: 'all',        // 'all' | 'mine'
+    checklistSort: 1,            // сортировка по сроку: 1 — по возрастанию, -1 — по убыванию, 0 — порядок списка
+    checklistFilter: null,       // 'overdue' — из плашки «Показать»
+    checklistSel: null,          // выбранный пункт для ↑ ↓
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     toasts: []
   };
@@ -925,7 +929,7 @@
     if (state.traineeTab === 'program') {
       body = renderProgramTab(t);
     } else {
-      body = '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаВкладкиПодготовка') + '>Вкладка «Подготовка к выходу» появится в фазе 4.</div>';
+      body = renderPrepareTab(t);
     }
     return '<div class="col gap-3"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
       '<div class="tabs">' + tabs.map(function (x) {
@@ -1248,6 +1252,126 @@
       status: s.status || 'not_started', deadline: s.deadline, reviewerId: s.reviewerId || null,
       observerIds: s.observerIds || [], result: s.result || null, externalUrl: 'forus-team:task/new'
     };
+  }
+
+  /* ---------------------------------------------------------------------
+   * Вкладка «Подготовка к выходу» (раздел 7.6)
+   * --------------------------------------------------------------------- */
+
+  function checklistLock(t) { return isClosed(t) ? 'Стажировка закрыта — чек-лист доступен только для просмотра' : null; }
+  function offsetText(n) {
+    if (n < 0) return 'за ' + (-n) + ' дн. до выхода';
+    if (n === 0) return 'в день выхода';
+    return 'через ' + n + ' дн. после выхода';
+  }
+  function checklistStatus(c) {
+    if (c.done) return { text: 'Выполнено', tone: 'success' };
+    if (checklistOverdue(c)) return { text: 'Просрочено', tone: 'danger' };
+    return { text: 'Не выполнено', tone: 'neutral' };
+  }
+  function requestKind(c) { return c.name.indexOf('пропуск') >= 0 ? 'выпуск пропуска' : 'создание учётной записи'; }
+
+  function visibleChecklist(t) {
+    var list = checklistOf(t).filter(function (c) {
+      return (state.checklistMode === 'all' || c.responsibleId === D.CURRENT_USER_ID) &&
+        (!state.checklistFilter || checklistOverdue(c));
+    });
+    if (state.checklistSort) {
+      list.sort(function (a, b) { return (a.offsetDays - b.offsetDays) * state.checklistSort; });
+    }
+    return list;
+  }
+
+  function renderPrepareTab(t) {
+    var all = checklistOf(t);
+    var done = all.filter(function (c) { return c.done; }).length;
+    var ds = daysToStart(t);
+    var lock = checklistLock(t);
+    var list = visibleChecklist(t);
+    var sel = state.checklistSel && byId(all, state.checklistSel) ? state.checklistSel : null;
+    var orderReason = lock || (state.checklistSort ? 'Отключите сортировку по сроку, чтобы менять порядок пунктов' : !sel ? 'Выберите пункт в таблице' : '');
+    var selIdx = sel ? all.indexOf(byId(all, sel)) : -1;
+
+    var summary = '<div class="panel row gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаСводкаПодготовки') + '>' +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаДоВыхода') + '>' +
+        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
+          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
+          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
+      '</div>' +
+      '<div class="col gap-1 grow prepare-progress"' + a1c('ГруппаВертикальная', 'ГруппаГотовность') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: <b>' + done + ' из ' + all.length + '</b></span>' +
+        '<div class="indicator-wrap">' + indicator(all.length ? done / all.length * 100 : 0, 'ИндикаторГотовность', 'success') + '</div>' +
+      '</div>' +
+      '</div>';
+
+    var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
+      button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, disabled: !!lock, title: lock || '', name: 'КнопкаДобавитьПункт' }) +
+      button('', { cls: 'btn-icon', icon: 'up', action: 'clMove', data: { dir: -1 }, name: 'КнопкаПунктВыше',
+        disabled: !!orderReason || selIdx <= 0, title: orderReason || (selIdx <= 0 ? 'Пункт уже первый' : 'Переместить выше') }) +
+      button('', { cls: 'btn-icon', icon: 'down', action: 'clMove', data: { dir: 1 }, name: 'КнопкаПунктНиже',
+        disabled: !!orderReason || selIdx === all.length - 1, title: orderReason || (selIdx === all.length - 1 ? 'Пункт уже последний' : 'Переместить ниже') }) +
+      button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, disabled: !!lock, title: lock || '', name: 'КнопкаЗаполнитьПоШаблону' }) +
+      '<span class="grow"></span>' +
+      toggle('ТумблерМоиПункты', 'clMode', [
+        { value: 'all', text: 'Все', name: 'Все' },
+        { value: 'mine', text: 'Мои', name: 'Мои' }
+      ], state.checklistMode) +
+      '</div>';
+
+    var filterLine = state.checklistFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЧекЛиста') + '>' +
+      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: <b>Просрочено</b></span>' +
+      button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'clFilter', name: 'КнопкаСброситьФильтрЧекЛиста' }) + '</div>' : '';
+
+    var body;
+    if (!list.length) {
+      var text = !all.length ? 'Чек-лист пуст' : state.checklistFilter ? 'Просроченных пунктов нет' : 'У вас нет пунктов в чек-листе';
+      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияЧекЛистПуст') + '>' + esc(text) + '</span>' +
+        (!all.length ? (lock ? '' : '<div class="row">' + link('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'ГиперссылкаЗаполнитьПоШаблону' }) +
+            link('Добавить пункт', { action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'ГиперссылкаДобавитьПункт' }) + '</div>')
+          : state.checklistFilter ? link('Сбросить фильтр', { action: 'clFilter', name: 'ГиперссылкаСброситьФильтрЧекЛиста' })
+          : link('Показать все', { action: 'clMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПункты' })) +
+        '</div></td></tr>';
+    } else {
+      body = list.map(function (c) { return checklistRow(t, c, lock, sel); }).join('');
+    }
+
+    var sortOn = state.checklistSort;
+    var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
+      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-cl-status"><col class="w-action"></colgroup>' +
+      '<thead><tr><th title="Выполнено">✓</th><th>Пункт</th><th>Ответственный</th>' +
+      '<th aria-sort="' + (sortOn ? (sortOn > 0 ? 'ascending' : 'descending') : 'none') + '"><button type="button" class="th-sort' + (sortOn ? ' on' : '') + '" data-action="clSort"' +
+        ' title="Сортировать по сроку"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовкиСортировкаСрок') + '>Срок' + (sortOn ? (sortOn > 0 ? ' ▲' : ' ▼') : '') + '</button></th>' +
+      '<th>Статус</th><th>Действие</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+
+    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
+  }
+
+  function checklistRow(t, c, lock, sel) {
+    var st = checklistStatus(c);
+    var date = checklistDate(c);
+    var auto = c.linkedDocType === 'program';
+    var boxTitle = lock || (auto ? 'Отмечается автоматически при создании АП' : c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
+    var action = '';
+    if (c.linkedDocType === 'request0911') {
+      action = c.linkedDocNumber
+        ? link('Заявка ' + c.linkedDocNumber, { action: 'clOpenRequest', name: 'ТаблицаЧекЛистДокумент' })
+        : link('Создать заявку', { action: 'openDialog', data: { dialog: 'request0911', item: c.id }, disabled: !!lock, title: lock || '', name: 'ТаблицаЧекЛистСоздатьЗаявку' });
+    } else if (c.linkedDocType === 'bitrix') {
+      action = link('Открыть Bitrix', { action: 'clOpenBitrix', name: 'ТаблицаЧекЛистОткрытьBitrix' });
+    } else if (c.linkedDocType === 'program') {
+      action = link('Перейти к АП', { action: 'traineeTab', data: { tab: 'program' }, name: 'ТаблицаЧекЛистПерейтиКАП' });
+    }
+    return '<tr class="clickable' + (sel === c.id ? ' selected' : '') + '" data-action="clSelect" data-id="' + c.id + '">' +
+      '<td><input type="checkbox" data-cl-done="' + c.id + '"' + (c.done ? ' checked' : '') + (lock || auto ? ' disabled' : '') +
+        ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистВыполнено') + '></td>' +
+      '<td><div class="ellipsis" title="' + esc(c.name) + '">' + esc(c.name) + '</div></td>' +
+      '<td><div>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div><div class="muted text-s">' + esc(userShort(c.responsibleId)) + '</div></td>' +
+      '<td class="nowrap"><div class="' + (st.tone === 'danger' ? 'danger-text' : '') + '">' + fmtDate(date) + '</div><div class="muted text-s">' + offsetText(c.offsetDays) + '</div></td>' +
+      '<td>' + badge(st.tone, st.text, 'ТаблицаЧекЛистСтатус') +
+        (c.done && c.doneBy ? '<div class="muted text-s">' + esc(userShort(c.doneBy)) + ', ' + fmtDate(c.doneAt).slice(0, 5) + '</div>' : '') + '</td>' +
+      '<td>' + action + '</td>' +
+      '</tr>';
   }
 
   /* ---------------------------------------------------------------------
@@ -1825,6 +1949,94 @@
     }
   };
 
+  /* ---------- Диалоги фазы 4: чек-лист подготовки ---------- */
+
+  var requestSeq = 124;
+  function checklistItemById(id) { return byId(D.checklist, id); }
+  function markChecklistDone(c, done) {
+    c.done = done;
+    c.doneBy = done ? D.CURRENT_USER_ID : null;
+    c.doneAt = done ? D.TODAY : null;
+  }
+  function roleDefaultUser(t, role) { return role === 'head' ? t.headId : role === 'hr' ? D.HR_ID : t.mentorId; }
+
+  // Имитация формы документа «Заявка (0911)»
+  DIALOGS.request0911 = {
+    form: 'ФормаЗаявка0911', submit: 'Провести и закрыть',
+    titleFn: function () { return 'Заявка (0911): ' + requestKind(checklistItemById(dlgCtx().itemId)); },
+    init: function () { return { comment: '' }; },
+    body: function (t) {
+      var c = checklistItemById(dlgCtx().itemId);
+      function fixed(label, value, name) {
+        return field(label, '<input type="text" class="input grow" disabled value="' + esc(value) + '"' + a1c('ПолеВвода', name) + '>');
+      }
+      return fixed('Сотрудник', t.fullName, 'ПолеСотрудник') +
+        fixed('Подразделение', dept(t.departmentId).name, 'ПолеПодразделение') +
+        fixed('Дата выхода', fmtDate(t.startDate), 'ПолеДатаВыхода') +
+        fixed('Вид заявки', requestKind(c).replace(/^./, function (x) { return x.toUpperCase(); }), 'ПолеВидЗаявки') +
+        field('Комментарий', textarea('comment', 'ПолеКомментарийЗаявки'), { forId: 'f_comment' });
+    },
+    apply: function (t) {
+      var c = checklistItemById(dlgCtx().itemId);
+      var number = '0911-00' + (requestSeq++);
+      c.linkedDocNumber = number;
+      markChecklistDone(c, true);
+      toast('Заявка ' + number + ' создана');
+    }
+  };
+
+  DIALOGS.checklistItem = {
+    title: 'Добавить пункт', form: 'ФормаПунктЧекЛиста', submit: 'Добавить пункт',
+    init: function (t) { return { name: '', role: 'head', userId: t.headId, date: addDays(t.startDate, -1) }; },
+    body: function (t) {
+      var e = state.dialog.errors;
+      var v = state.dialog.values;
+      var hint = v.date ? '<div class="muted text-s">' + offsetText(diffDays(t.startDate, v.date)) + ' (выход ' + fmtDate(t.startDate) + ')</div>' : '';
+      return field('Пункт', inputText('name', 'ПолеНаименованиеПункта'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПункта' }) +
+        field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', [
+          { value: 'head', text: D.ROLE_TITLES.head }, { value: 'hr', text: D.ROLE_TITLES.hr }, { value: 'mentor', text: D.ROLE_TITLES.mentor }], ' data-rerender="1"'), { forId: 'f_role' }) +
+        field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions()), { forId: 'f_userId' }) +
+        field('Срок', inputDate('date', 'ПолеСрокПункта') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
+    },
+    validate: function (t, v) {
+      var e = {};
+      if (!required(v.name)) e.name = 'Укажите пункт';
+      if (!required(v.date)) e.date = 'Укажите срок';
+      return e;
+    },
+    apply: function (t, v) {
+      D.checklist.push({
+        id: 'cl-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: v.userId,
+        offsetDays: diffDays(t.startDate, v.date), done: false, doneBy: null, doneAt: null, linkedDocType: null, linkedDocNumber: null
+      });
+      toast('Пункт добавлен');
+    }
+  };
+
+  DIALOGS.checklistFill = {
+    title: 'Заполнить по шаблону', form: 'ФормаЗаполнитьЧекЛист', submit: 'Заполнить по шаблону', danger: true,
+    body: function (t) {
+      return '<div class="note note-warning"' + a1c('ГруппаГоризонтальная', 'ГруппаПредупреждениеЗаполнение') + '><span class="tone-warning">' + icon('alert') + '</span>' +
+        '<span class="grow">Текущий список будет заменён. Отметки о выполнении и ссылки на заявки будут удалены.</span></div>' +
+        '<p class="dlg-text">В шаблоне ' + pluralN(D.checklistTemplate.length, ['пункт', 'пункта', 'пунктов']) + '.</p>';
+    },
+    apply: function (t) {
+      D.checklist = D.checklist.filter(function (c) { return c.traineeId !== t.id; });
+      var hasProgram = !!programOf(t);
+      D.checklistTemplate.forEach(function (c, i) {
+        var item = {
+          id: 'cl-tpl-' + Date.now() + '-' + i, traineeId: t.id, name: c.name, responsibleRole: c.responsibleRole,
+          responsibleId: roleDefaultUser(t, c.responsibleRole), offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
+          linkedDocType: c.linkedDocType, linkedDocNumber: null
+        };
+        if (c.linkedDocType === 'program' && hasProgram) markChecklistDone(item, true);
+        D.checklist.push(item);
+      });
+      state.checklistSel = null;
+      toast('Чек-лист заполнен по шаблону');
+    }
+  };
+
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
   var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'reviewers', 'addFromTemplate'];
 
@@ -1835,6 +2047,7 @@
     ctx = ctx || {};
     var lock = editLock(t);
     if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
+    if (checklistLock(t) && ['checklistItem', 'checklistFill', 'request0911'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
     state.openMenu = null;
     state.dialog = { type: type, traineeId: traineeId, ctx: ctx, readOnly: type === 'task' && !!lock && !!ctx.taskId, values: {}, errors: {} };
     if (type === 'task' && lock && !ctx.taskId) { state.dialog = null; toast(lock); return; }
@@ -1893,6 +2106,10 @@
     state.taskSort = { key: null, dir: 1 };
     state.selectedTasks = {};
     state.collapsedBlocks = {};
+    state.checklistMode = 'all';
+    state.checklistSort = 1;
+    state.checklistFilter = null;
+    state.checklistSel = null;
     deptChain(t.departmentId).forEach(function (d) { delete state.collapsed[d.id]; });
     render();
   }
@@ -1960,6 +2177,8 @@
         renderCenter();
       } else if (n.action === 'showChecklistOverdue') {
         state.traineeTab = 'prepare';
+        state.checklistMode = 'all';
+        state.checklistFilter = 'overdue';
         renderCenter();
       }
     },
@@ -1981,7 +2200,9 @@
     // Диалоги
     openDialog: function (btn) {
       var taskId = btn.getAttribute('data-task');
-      openDialog(btn.getAttribute('data-dialog'), state.selectedTraineeId, taskId ? { taskId: taskId, taskIds: [taskId] } : {});
+      var itemId = btn.getAttribute('data-item');
+      openDialog(btn.getAttribute('data-dialog'), state.selectedTraineeId,
+        taskId ? { taskId: taskId, taskIds: [taskId] } : itemId ? { itemId: itemId } : {});
     },
     dlgPickAll: function (box) {
       var tp = byId(D.templates, state.dialog.values.template);
@@ -2028,6 +2249,32 @@
       render();
     },
     openForus: function () { toast('Переход в Forus Team в прототипе не реализован'); },
+
+    // Чек-лист подготовки
+    clSelect: function (row, e) {
+      if (e.target.closest('input, button')) return;
+      state.checklistSel = row.getAttribute('data-id');
+      renderCenter();
+    },
+    clMove: function (btn) {
+      var t = trainee(state.selectedTraineeId);
+      var list = checklistOf(t);
+      var c = checklistItemById(state.checklistSel);
+      var other = list[list.indexOf(c) + Number(btn.getAttribute('data-dir'))];
+      if (!c || !other) return;
+      var i = D.checklist.indexOf(c), j = D.checklist.indexOf(other);
+      D.checklist[i] = other;
+      D.checklist[j] = c;
+      renderCenter();
+    },
+    clMode: function (btn) { state.checklistMode = btn.getAttribute('data-value'); renderCenter(); },
+    clSort: function () {
+      state.checklistSort = state.checklistSort === 1 ? -1 : state.checklistSort === -1 ? 0 : 1;
+      renderCenter();
+    },
+    clFilter: function () { state.checklistFilter = null; renderCenter(); },
+    clOpenRequest: function () { toast('Откроется документ'); },
+    clOpenBitrix: function () { toast('Переход во внешнюю систему в прототипе не реализован'); },
     dialogSubmit: function () { submitDialog(); },
     dialogCancel: function () { closeDialog(); },
     dlgChoose: function (btn) {
@@ -2088,8 +2335,9 @@
     var f = tgt.getAttribute('data-field');
     if (f && state.dialog) {
       state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
-      if (tgt.hasAttribute('data-rerender')) {
+      if (tgt.hasAttribute('data-rerender') || (state.dialog.type === 'checklistItem' && f === 'date')) {
         if (f === 'template') state.dialog.values.picked = [];
+        if (f === 'role') state.dialog.values.userId = roleDefaultUser(trainee(state.dialog.traineeId), tgt.value);
         renderDialog();
       }
       return;
@@ -2102,6 +2350,12 @@
       state.dialog.values[list] = cur;
       delete state.dialog.errors[list];
       if (list === 'picked') renderDialog();
+      return;
+    }
+    // Флажок «выполнено» в чек-листе подготовки — отметка выполнения
+    if (tgt.hasAttribute('data-cl-done')) {
+      markChecklistDone(checklistItemById(tgt.getAttribute('data-cl-done')), tgt.checked);
+      render();
       return;
     }
     // Флажки выбора строк таблицы задач: только выбор, статус задачи не меняется

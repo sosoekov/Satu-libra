@@ -454,3 +454,15 @@ th.num, td.num { text-align: right; }
 .input-num { width: 100px; }
 .dlg-list { margin: 0; padding-left: var(--sp-5); }
 .modal-wide .field-label { flex-basis: 170px; }
+
+/* ================= Вкладка «Подготовка к выходу» ================= */
+.prepare-progress { max-width: 360px; }
+.checklist-table { table-layout: fixed; }
+.checklist-table .w-check { width: 36px; }
+.checklist-table .w-resp { width: 190px; }
+.checklist-table .w-date { width: 150px; }
+.checklist-table .w-cl-status { width: 160px; }
+.checklist-table .w-action { width: 150px; }
+.checklist-table td { vertical-align: middle; }
+.checklist-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
+.checklist-table input[type="checkbox"]:disabled { cursor: default; }
