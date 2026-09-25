@@ -268,3 +268,73 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 
 .page-body { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; min-width: 0; }
 .demo-btn:disabled { opacity: 1; color: var(--c-text-secondary); }
+
+/* ================= Левая панель ================= */
+.left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); min-height: 0; }
+.left-inner > * { flex-shrink: 0; }
+.left-inner > .tree { flex-shrink: 1; }
+.counter-row { align-items: stretch; }
+.left-strip { align-items: center; padding: var(--sp-2) 0; }
+.left-bottom { justify-content: center; }
+
+.counter-card {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: var(--sp-2) var(--sp-1);
+  border: 1px solid var(--c-border); border-radius: var(--radius);
+  background: var(--c-bg); cursor: pointer; text-align: center;
+  transition: border-color 100ms;
+}
+.counter-card:hover { border-color: var(--c-primary); }
+.counter-card.on { border-color: var(--c-primary); background: var(--c-bg-selected); }
+.counter-head { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.counter-num { font-size: var(--fs-xl); font-weight: bold; color: var(--c-text); }
+.counter-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
+.tone-warning { color: var(--c-warning); display: inline-flex; }
+.tone-info    { color: var(--c-info);    display: inline-flex; }
+.tone-success { color: var(--c-success); display: inline-flex; }
+.tone-danger  { color: var(--c-danger);  display: inline-flex; }
+.filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius); }
+
+.toggle-full { display: flex; }
+.toggle-full button { flex: 1 1 0; }
+
+/* Дерево и список */
+.tree {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
+  padding: var(--sp-1) 0;
+}
+.tree-row {
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  min-height: 28px; padding-right: var(--sp-2); cursor: pointer;
+}
+.tree-row:hover { background: var(--c-bg-panel); }
+.tree-row.selected { background: var(--c-bg-selected); }
+.tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
+.tree-count { flex: 0 0 auto; }
+.tree-marker { flex: 0 0 auto; }
+.list-row { padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-2); }
+
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-3); color: var(--c-text-secondary); text-align: center;
+}
+.empty .row { gap: var(--sp-4); }
+
+/* ================= Сводная таблица ================= */
+.summary-table { table-layout: fixed; }
+.summary-table .w-stage { width: 150px; }
+.summary-table .w-tasks { width: 130px; }
+.summary-table .w-overdue { width: 96px; }
+.summary-table .w-date { width: 108px; }
+.summary-table .indicator-wrap .indicator { min-width: 0; }
+.summary-table td { vertical-align: middle; }
+.pct { flex: 0 0 36px; text-align: right; }
+th.num, td.num { text-align: right; }
+.nowrap { white-space: nowrap; }
+.th-sort {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: inherit; font-size: inherit; white-space: nowrap;
+}
+.th-sort:hover, .th-sort.on { color: var(--c-text); }

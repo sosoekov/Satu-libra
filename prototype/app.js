@@ -263,6 +263,7 @@
     user: '<circle cx="8" cy="5.5" r="2.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.8 13.5c.6-2.6 2.7-4 5.2-4s4.6 1.4 5.2 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
     users: '<circle cx="6" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.8 13c.5-2.2 2.2-3.4 4.2-3.4s3.7 1.2 4.2 3.4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M10.3 3.4a2.3 2.3 0 0 1 0 4.3M11.6 9.8c1.3.4 2.2 1.5 2.6 3.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     clock: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.8V8l2.2 1.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    docCheck: '<path d="M4 2.5h5.5L12 5v8.5H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 9l1.5 1.5L10.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     alert: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".9" fill="currentColor"/>',
     flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 3 1.8 3h-8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
@@ -347,8 +348,8 @@
       a1c('Гиперссылка', opts.name || 'ДекорацияСсылка') + '>' + esc(text) + '</button>';
   }
   // Тумблер: items [{value, text}]
-  function toggle(name, action, items, current) {
-    return '<div class="toggle"' + a1c('Тумблер', name) + ' role="group">' +
+  function toggle(name, action, items, current, cls) {
+    return '<div class="toggle' + (cls ? ' ' + cls : '') + '"' + a1c('Тумблер', name) + ' role="group">' +
       items.map(function (it) {
         return '<button type="button" class="' + (it.value === current ? 'on' : '') + '" data-action="' + action +
           '" data-value="' + esc(it.value) + '"' + a1c('Тумблер', name + 'Вариант' + it.name) + '>' + esc(it.text) + '</button>';
@@ -365,6 +366,12 @@
     traineeTab: null,            // 'program' | 'prepare'
     leftCollapsed: false,
     helpOpen: false,
+    counterFilter: null,         // id карточки-счётчика: 'awaitProgram' | 'approval' | 'active' | 'closing'
+    search: '',
+    hideEmpty: true,             // «Скрыть подразделения без стажёров»
+    leftMode: 'tree',            // 'tree' | 'attention'
+    collapsed: {},               // свёрнутые узлы дерева: {deptId: true}
+    summarySort: { key: null, dir: 1 },
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     toasts: []
   };
@@ -403,65 +410,295 @@
     }).join('');
   }
 
-  function renderLeft() {
-    el('leftZone').innerHTML =
-      '<div class="stub" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаглушкаЛевойПанели">Левая панель — фаза 1</div>';
+  /* ---------------------------------------------------------------------
+   * Левая панель (раздел 7.2)
+   * --------------------------------------------------------------------- */
+
+  var COUNTERS = [
+    { id: 'awaitProgram', title: 'Ожидают АП',       stages: ['found', 'draft'], tone: 'warning', icon: 'clock',
+      verb: ['ожидает АП', 'ожидают АП'], name: 'ОжидаютАП' },
+    { id: 'approval',     title: 'На согласовании',  stages: ['approval'],       tone: 'info',    icon: 'docCheck',
+      verb: ['на согласовании', 'на согласовании'], name: 'НаСогласовании' },
+    { id: 'active',       title: 'Идёт стажировка',  stages: ['active'],         tone: 'success', icon: 'users',
+      verb: ['проходит стажировку', 'проходят стажировку'], name: 'ИдетСтажировка' },
+    { id: 'closing',      title: 'Ожидают закрытия', stages: ['closing'],        tone: 'warning', icon: 'flag',
+      verb: ['ожидает закрытия', 'ожидают закрытия'], name: 'ОжидаютЗакрытия' }
+  ];
+  function counterById(id) {
+    for (var i = 0; i < COUNTERS.length; i++) if (COUNTERS[i].id === id) return COUNTERS[i];
+    return null;
+  }
+  function counterValue(c) {
+    return D.trainees.filter(function (t) { return c.stages.indexOf(t.stage) >= 0; }).length;
+  }
+  // «1 стажёр ожидает АП», «3 стажёра ожидают АП»; число выводится отдельно крупно
+  function counterLabel(c, n) {
+    return plural(n, W_TRAINEES) + ' ' + (plural(n, [0, 1, 1]) === 0 ? c.verb[0] : c.verb[1]);
   }
 
+  function searchQuery() { return state.search.trim().toLowerCase(); }
+  // Подразделение и все его родители, начиная с самого подразделения
+  function deptChain(deptId) {
+    var list = [];
+    var d = dept(deptId);
+    while (d) { list.push(d); d = d.parentId ? dept(d.parentId) : null; }
+    return list;
+  }
+  function childDepts(parentId) { return D.departments.filter(function (d) { return d.parentId === parentId; }); }
+  function deptMatches(d, q) { return d.name.toLowerCase().indexOf(q) >= 0; }
+  function traineeMatchesSearch(t, q) {
+    if (!q) return true;
+    if (t.fullName.toLowerCase().indexOf(q) >= 0) return true;
+    return deptChain(t.departmentId).some(function (d) { return deptMatches(d, q); });
+  }
+  function traineeMatchesCounter(t) {
+    return !state.counterFilter || counterById(state.counterFilter).stages.indexOf(t.stage) >= 0;
+  }
+  // Стажёры с учётом фильтра по карточке и поиска — общий источник для дерева, списка и сводной таблицы
+  function visibleTrainees() {
+    var q = searchQuery();
+    return D.trainees.filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q); });
+  }
+
+  // Дерево подразделений с учётом фильтров: [{dept, children, trainees, count}]
+  function buildTree() {
+    var q = searchQuery();
+    var list = visibleTrainees();
+    function node(d) {
+      var children = childDepts(d.id).map(node).filter(Boolean);
+      var own = list.filter(function (t) { return t.departmentId === d.id; });
+      var count = own.length + children.reduce(function (s, c) { return s + c.count; }, 0);
+      var visible;
+      if (count > 0) visible = true;
+      else if (state.hideEmpty) visible = false;
+      else if (q) visible = children.length > 0 || deptChain(d.id).some(function (x) { return deptMatches(x, q); });
+      else visible = true;
+      return visible ? { dept: d, children: children, trainees: own, count: count } : null;
+    }
+    return childDepts(null).map(node).filter(Boolean);
+  }
+  function isExpanded(d) { return searchQuery() ? true : !state.collapsed[d.id]; }
+
+  // Дата для колонки «Срок» и сортировки: до выхода — дата выхода, иначе — дата окончания
+  function summaryDate(t) { return t.stage === 'found' ? t.startDate : t.endDate; }
+  // Ближайший срок для списка «Требуют внимания»: до начала стажировки важна дата выхода
+  function attentionDate(t) { return stageIndex(t.stage) <= stageIndex('approval') ? t.startDate : t.endDate; }
+  function hasDanger(t) { return getNotifications(t).some(function (n) { return n.tone === 'danger'; }); }
+  function overdueChecklistCount(t) { return checklistOf(t).filter(checklistOverdue).length; }
+
+  function markerBadge(t) {
+    var m = topMarker(t);
+    return m ? '<span class="tree-marker">' + badge(m.tone, m.marker, 'ДеревоПодразделенийМаркер') + '</span>' : '';
+  }
+  function stageDot(t) {
+    return '<span class="dot dot-' + stageMeta(t.stage).tone + '" title="' + esc(stageMeta(t.stage).title) + '"></span>';
+  }
+
+  function renderLeft() {
+    var zone = el('leftZone');
+    zone.classList.toggle('collapsed', state.leftCollapsed);
+    if (state.leftCollapsed) {
+      zone.innerHTML = '<div class="col left-strip">' +
+        button('', { cls: 'btn-icon btn-flat', icon: 'expand', title: 'Развернуть панель', action: 'toggleLeft', name: 'КнопкаРазвернутьПанель' }) +
+        '</div>';
+      return;
+    }
+
+    // Поле поиска перерисовывается вместе с панелью — сохраняем фокус и курсор
+    var active = document.activeElement;
+    var keepFocus = active && active.getAttribute && active.getAttribute('data-input') === 'search';
+    var selStart = keepFocus ? active.selectionStart : 0;
+    var selEnd = keepFocus ? active.selectionEnd : 0;
+
+    var filter = state.counterFilter ? counterById(state.counterFilter) : null;
+    var html = '<div class="left-inner">' +
+      '<div class="col"' + a1c('ГруппаВертикальная', 'ГруппаОбзор') + '>' +
+        '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокОбзор') + '>Обзор по подразделениям</div>' +
+        '<div class="row counter-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСчетчикиСтрока1') + '>' + counterCard(COUNTERS[0]) + counterCard(COUNTERS[1]) + '</div>' +
+        '<div class="row counter-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСчетчикиСтрока2') + '>' + counterCard(COUNTERS[2]) + counterCard(COUNTERS[3]) + '</div>' +
+        (filter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрПоЭтапу') + '>' +
+          '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрПоЭтапу') + '>Фильтр: <b>' + esc(filter.title) + '</b></span>' +
+          button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'clearCounterFilter', name: 'КнопкаСброситьФильтрПоЭтапу' }) +
+          '</div>' : '') +
+      '</div>' +
+      '<input type="text" class="input" data-input="search" placeholder="Поиск по ФИО или подразделению" value="' + esc(state.search) + '"' +
+        ' title="Поиск по ФИО или подразделению"' + a1c('ПолеВвода', 'ПолеПоиска') + '>' +
+      '<div class="row">' +
+        '<label class="check"><input type="checkbox" data-change="hideEmpty"' + (state.hideEmpty ? ' checked' : '') +
+          a1c('Флажок', 'ФлажокСкрытьПустыеПодразделения') + '> Скрыть подразделения без стажёров</label>' +
+      '</div>' +
+      toggle('ТумблерРежимПанели', 'leftMode', [
+        { value: 'tree', text: 'Структура', name: 'Структура' },
+        { value: 'attention', text: 'Требуют внимания', name: 'ТребуютВнимания' }
+      ], state.leftMode, 'toggle-full') +
+      (state.leftMode === 'tree' ? renderTree() : renderAttentionList()) +
+      '<div class="row left-bottom">' +
+        button('Свернуть', { cls: 'btn-flat', icon: 'collapse', action: 'toggleLeft', name: 'КнопкаСвернутьПанель', title: 'Свернуть панель' }) +
+      '</div>' +
+      '</div>';
+    zone.innerHTML = html;
+
+    if (keepFocus) {
+      var input = zone.querySelector('[data-input="search"]');
+      input.focus();
+      input.setSelectionRange(selStart, selEnd);
+    }
+    var sel = zone.querySelector('.tree-row.selected');
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+  }
+
+  function counterCard(c) {
+    var n = counterValue(c);
+    var on = state.counterFilter === c.id;
+    return '<button type="button" class="counter-card' + (on ? ' on' : '') + '" data-action="counterFilter" data-id="' + c.id + '"' +
+      ' aria-pressed="' + on + '" title="' + (on ? 'Сбросить фильтр «' + c.title + '»' : 'Показать: ' + c.title) + '"' +
+      a1c('ГруппаВертикальная', 'ГруппаСчетчик' + c.name, 'check') + '>' +
+      '<span class="counter-head"><span class="tone-' + c.tone + '"' + a1c('Картинка', 'Картинка' + c.name) + '>' + icon(c.icon) + '</span>' +
+      '<span class="counter-num"' + a1c('Гиперссылка', 'Надпись' + c.name + 'Число') + '>' + n + '</span></span>' +
+      '<span class="counter-label"' + a1c('Надпись', 'Надпись' + c.name + 'Подпись') + '>' + esc(counterLabel(c, n)) + '</span>' +
+      '</button>';
+  }
+
+  function emptyFilterState() {
+    var parts = [];
+    if (searchQuery()) parts.push(link('Сбросить поиск', { action: 'resetSearch', name: 'ГиперссылкаСброситьПоиск' }));
+    if (state.counterFilter) parts.push(link('Сбросить фильтр', { action: 'clearCounterFilter', name: 'ГиперссылкаСброситьФильтр' }));
+    var text = searchQuery() ? 'Никого не нашли' : 'Нет стажёров на этапе «' + counterById(state.counterFilter).title + '»';
+    return '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаПустойРезультат') + '>' +
+      '<span' + a1c('Надпись', 'ДекорацияПустойРезультат') + '>' + esc(text) + '</span>' +
+      '<div class="row">' + parts.join('') + '</div></div>';
+  }
+
+  function renderTree() {
+    var nodes = buildTree();
+    if (!nodes.length) return '<div class="tree">' + emptyFilterState() + '</div>';
+    var out = [];
+    (function walk(list, level) {
+      list.forEach(function (n) {
+        var hasKids = n.children.length + n.trainees.length > 0;
+        var open = isExpanded(n.dept);
+        out.push('<div class="tree-row tree-dept" role="treeitem" tabindex="0" aria-expanded="' + open + '"' +
+          ' data-action="toggleDept" data-id="' + n.dept.id + '" style="padding-left:' + (8 + level * 16) + 'px"' +
+          (hasKids ? ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' : '') + '>' +
+          '<span class="tree-arrow">' + (hasKids ? icon(open ? 'chevronDown' : 'chevronRight') : '') + '</span>' +
+          '<span class="ellipsis bold" title="' + esc(n.dept.name) + '">' + esc(n.dept.name) + '</span>' +
+          '<span class="muted tree-count">(' + n.count + ')</span></div>');
+        if (open) {
+          walk(n.children, level + 1);
+          n.trainees.forEach(function (t) {
+            out.push('<div class="tree-row tree-trainee' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" role="treeitem" tabindex="0"' +
+              ' data-action="selectTrainee" data-id="' + t.id + '" style="padding-left:' + (8 + (level + 1) * 16) + 'px">' +
+              '<span class="tree-arrow">' + stageDot(t) + '</span>' +
+              '<span class="ellipsis grow" title="' + esc(t.fullName + ' — ' + stageMeta(t.stage).title) + '">' + esc(t.fullName) + '</span>' +
+              markerBadge(t) + '</div>');
+          });
+        }
+      });
+    })(nodes, 0);
+    return '<div class="tree" role="tree"' + a1c('ДеревоФормы', 'ДеревоПодразделений') + '>' + out.join('') + '</div>';
+  }
+
+  function renderAttentionList() {
+    var list = visibleTrainees().filter(needsAttention).sort(function (a, b) {
+      return (hasDanger(b) - hasDanger(a)) || attentionDate(a).localeCompare(attentionDate(b));
+    });
+    var body;
+    if (!list.length) {
+      body = (searchQuery() || state.counterFilter) && !visibleTrainees().length ? emptyFilterState() :
+        '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетДействий') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияДействийНеТребуется') + '>Действий не требуется</span>' +
+        link('Показать структуру', { action: 'leftMode', data: { value: 'tree' }, name: 'ГиперссылкаПоказатьСтруктуру' }) + '</div>';
+    } else {
+      body = list.map(function (t) {
+        return '<div class="tree-row list-row' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" tabindex="0"' +
+          ' data-action="selectTrainee" data-id="' + t.id + '">' +
+          '<span class="tree-arrow">' + stageDot(t) + '</span>' +
+          '<span class="col gap-0 grow">' +
+            '<span class="ellipsis" title="' + esc(t.fullName) + '">' + esc(t.fullName) + '</span>' +
+            '<span class="ellipsis muted text-s" title="' + esc(dept(t.departmentId).name) + '">' + esc(dept(t.departmentId).name) + '</span>' +
+          '</span>' + markerBadge(t) + '</div>';
+      }).join('');
+    }
+    return '<div class="tree"' + a1c('ТаблицаФормы', 'СписокТребуютВнимания') + '>' + body + '</div>';
+  }
+
+  /* ---------------------------------------------------------------------
+   * Центральная область
+   * --------------------------------------------------------------------- */
+
   function renderCenter() {
-    el('centerZone').innerHTML = renderPhase0Debug();
+    var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
+    el('centerZone').innerHTML = t ? renderTraineeCard(t) : renderSummary();
+  }
+
+  // Сводная таблица (раздел 7.3)
+  var SUMMARY_SORT = {
+    stage: function (t) { return stageIndex(t.stage); },
+    overdue: function (t) { return overdueCount(t) + overdueChecklistCount(t); },
+    deadline: function (t) { return summaryDate(t); }
+  };
+
+  function renderSummary() {
+    var list = visibleTrainees().slice();
+    var sort = state.summarySort;
+    if (sort.key) {
+      var key = SUMMARY_SORT[sort.key];
+      list.sort(function (a, b) {
+        var x = key(a), y = key(b);
+        return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
+      });
+    }
+    function th(text, keyName, cls) {
+      if (!keyName) return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + text + '</th>';
+      var on = sort.key === keyName;
+      return '<th' + (cls ? ' class="' + cls + '"' : '') + ' aria-sort="' + (on ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
+        '<button type="button" class="th-sort' + (on ? ' on' : '') + '" data-action="sortSummary" data-key="' + keyName + '"' +
+        ' title="Сортировать по колонке «' + text + '»"' + a1c('ТаблицаФормы', 'ТаблицаСтажеровСортировка' + keyName) + '>' +
+        text + (on ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
+    }
+
+    var rows = list.map(function (t) {
+      var st = statsOf(t);
+      var overTasks = overdueCount(t);
+      var overChecklist = overdueChecklistCount(t);
+      var over = overTasks + overChecklist;
+      var d = dept(t.departmentId).name;
+      return '<tr class="clickable" tabindex="0" data-action="selectTrainee" data-id="' + t.id + '" title="Открыть карточку стажёра">' +
+        '<td><div class="ellipsis" title="' + esc(t.fullName) + '">' + esc(t.fullName) + '</div>' +
+          '<div class="muted text-s ellipsis" title="' + esc(t.position) + '">' + esc(t.position) + '</div></td>' +
+        '<td><div class="ellipsis" title="' + esc(d) + '">' + esc(d) + '</div></td>' +
+        '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
+        '<td>' + (st ? '<div class="indicator-wrap">' + indicator(st.pct, 'ТаблицаСтажеровИндикаторЗадач') +
+          '<span class="pct">' + st.pct + '%</span></div>' : '<span class="muted">—</span>') + '</td>' +
+        '<td class="num">' + (over ? '<span class="danger-text bold" title="' + esc('Задач: ' + overTasks + ', пунктов подготовки: ' + overChecklist) + '">' + over + '</span>' : '') + '</td>' +
+        '<td class="nowrap">' + (t.stage === 'found' ? 'Выход ' + fmtDate(t.startDate) : 'до ' + fmtDate(t.endDate)) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
+      '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + list.length + '</div>' +
+      (list.length ?
+        '<div class="table-box">' +
+        '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
+        '<colgroup><col><col><col class="w-stage"><col class="w-tasks"><col class="w-overdue"><col class="w-date"></colgroup>' +
+        '<thead><tr>' + th('Стажёр') + th('Подразделение') + th('Этап', 'stage') + th('Задачи') + th('Просрочено', 'overdue', 'num') + th('Срок', 'deadline') +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : emptyFilterState()) +
+      '</div>';
+  }
+
+  // Карточка стажёра — фаза 2. Пока только переход назад и имя.
+  function renderTraineeCard(t) {
+    return '<div class="col gap-4"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
+      '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
+      '<div class="row gap-3"><span class="text-xl bold">' + esc(t.fullName) + '</span>' + stageBadge(t) + '</div>' +
+      '<div class="debug-note muted"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ЗаглушкаКарточкиСтажера') + '>Карточка стажёра появится в фазе 2</div>' +
+      '</div>';
   }
 
   function renderHelp() {
     el('helpZone').classList.toggle('hidden', !state.helpOpen);
     el('helpZone').innerHTML = '';
-  }
-
-  // НЕ_ПЕРЕНОСИТЬ: отладочная таблица фазы 0 — производные значения и образцы компонентов
-  function renderPhase0Debug() {
-    var rows = D.trainees.map(function (t) {
-      var st = statsOf(t);
-      var notes = getNotifications(t);
-      return '<tr class="clickable' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" data-action="debugSelect" data-id="' + t.id + '">' +
-        '<td><div>' + esc(t.fullName) + '</div><div class="muted text-s">' + esc(t.position) + '</div></td>' +
-        '<td>' + stageBadge(t) + '</td>' +
-        '<td>' + (st ? '<div class="indicator-wrap" style="width:140px">' + indicator(st.pct, 'ИндикаторЗадач') + '<span>' + st.pct + '%</span></div>' +
-                       '<div class="muted text-s">' + st.done + ' / ' + st.progress + ' / ' + st.overdue + ' / ' + st.todo + '</div>' : '—') + '</td>' +
-        '<td>' + timePct(t) + '%<div class="muted text-s">день ' + dayNo(t) + ' из ' + totalDays(t) + '</div></td>' +
-        '<td>' + (lag(t) ? '<span class="danger-text">да</span>' : 'нет') + '</td>' +
-        '<td>' + (daysToStart(t) > 0 ? 'выход через ' + pluralN(daysToStart(t), W_DAYS) : 'до конца ' + pluralN(daysToEnd(t), W_DAYS)) + '</td>' +
-        '<td>' + (notes.length ? notes.map(function (n) { return badge(n.tone, n.marker || n.key); }).join(' ') : '<span class="muted">—</span>') + '</td>' +
-        '</tr>';
-    }).join('');
-
-    return '<div class="col gap-4" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ОтладкаФазы0">' +
-      '<div class="debug-note col gap-1"><div class="h-block">Фаза 0: каркас</div>' +
-      '<div class="muted">Отладочный экран: производные значения из data.js и образцы компонентов. В фазе 1 заменяется сводной таблицей. ' +
-      'Клик по строке выбирает стажёра для демо-переключателя этапа.</div></div>' +
-      '<div class="table-box"><table class="grid"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ТаблицаОтладки') + '><thead><tr>' +
-      '<th>Стажёр</th><th>Этап</th><th>Задачи (вып./раб./проср./не нач.)</th><th>Срок прошёл</th><th>Отставание</th><th>Сроки</th><th>Уведомления</th>' +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="panel col gap-3">' +
-      '<div class="h-block">Компоненты</div>' +
-      '<div class="row wrap">' + button('Основная кнопка', { cls: 'btn-primary', name: 'ОбразецОсновная' }) +
-        button('Обычная кнопка', { name: 'ОбразецОбычная' }) +
-        button('С иконкой', { icon: 'print', name: 'ОбразецСИконкой' }) +
-        button('', { cls: 'btn-icon', icon: 'more', title: 'Ещё', name: 'ОбразецИконка' }) +
-        button('Неактивная', { disabled: true, title: 'Причина неактивности', name: 'ОбразецНеактивная' }) +
-        link('Гиперссылка', { name: 'ОбразецСсылка' }) + '</div>' +
-      '<div class="row wrap">' + badge('neutral', 'Не начата') + badge('info', 'В работе') + badge('success', 'Выполнена') +
-        badge('danger', 'Просрочена') + badge('warning', 'Черновик АП') + '</div>' +
-      '<div class="row" style="width:360px">' + indicator(58, 'ОбразецИндикатор') + '<span>58%</span></div>' +
-      '<div class="indicator stacked" style="width:360px"' + a1c('Индикатор', 'ОбразецСоставнаяПолоса', 'high') + '>' +
-        '<span class="seg-done" style="width:58%"></span><span class="seg-progress" style="width:29%"></span>' +
-        '<span class="seg-overdue" style="width:13%"></span></div>' +
-      '<div class="row wrap gap-4">' +
-        '<label class="check"><input type="checkbox" checked' + a1c('Флажок', 'ОбразецФлажок') + '> Флажок</label>' +
-        toggle('ОбразецТумблер', 'noop', [{ value: 'a', text: 'Структура', name: 'Структура' }, { value: 'b', text: 'Требуют внимания', name: 'ТребуютВнимания' }], 'a') +
-        '<input class="input" placeholder="Поле ввода" style="width:220px"' + a1c('ПолеВвода', 'ОбразецПолеВвода') + '>' +
-      '</div>' +
-      '<div class="muted">Склонение: ' + [1, 2, 5, 11, 21, 24].map(function (n) { return pluralN(n, W_TRAINEES); }).join(', ') + '</div>' +
-      '</div></div>';
   }
 
   // НЕ_ПЕРЕНОСИТЬ: демо-переключатель этапа выбранного стажёра
@@ -523,12 +760,47 @@
     }
   }
 
+  // Выбор стажёра из любого места: дерево раскрывается до него, вкладка — по этапу (раздел 5.4)
+  function selectTrainee(id) {
+    var t = trainee(id);
+    state.selectedTraineeId = id;
+    state.traineeTab = t.stage === 'found' ? 'prepare' : 'program';
+    deptChain(t.departmentId).forEach(function (d) { delete state.collapsed[d.id]; });
+    render();
+  }
+
   var actions = {
     topTab: function (btn) { state.topTab = btn.getAttribute('data-tab'); render(); },
     noop: function () {},
 
+    // Левая панель
+    counterFilter: function (btn) {
+      var id = btn.getAttribute('data-id');
+      state.counterFilter = state.counterFilter === id ? null : id;
+      render();
+    },
+    clearCounterFilter: function () { state.counterFilter = null; render(); },
+    resetSearch: function () { state.search = ''; render(); },
+    leftMode: function (btn) { state.leftMode = btn.getAttribute('data-value'); renderLeft(); },
+    toggleDept: function (row) {
+      if (searchQuery()) return; // при поиске ветки раскрыты
+      var id = row.getAttribute('data-id');
+      state.collapsed[id] = !state.collapsed[id];
+      renderLeft();
+    },
+    toggleLeft: function () { state.leftCollapsed = !state.leftCollapsed; renderLeft(); },
+    selectTrainee: function (row) { selectTrainee(row.getAttribute('data-id')); },
+    backToList: function () { state.selectedTraineeId = null; render(); },
+
+    // Сводная таблица
+    sortSummary: function (btn) {
+      var key = btn.getAttribute('data-key');
+      if (state.summarySort.key === key) state.summarySort.dir = -state.summarySort.dir;
+      else state.summarySort = { key: key, dir: 1 };
+      renderCenter();
+    },
+
     // НЕ_ПЕРЕНОСИТЬ
-    debugSelect: function (row) { state.selectedTraineeId = row.getAttribute('data-id'); render(); },
     demoToggle: function () { state.demoMenuOpen = !state.demoMenuOpen; renderDemo(); },
     demoSetStage: function (btn) {
       var t = trainee(state.selectedTraineeId);
@@ -554,6 +826,31 @@
     }
     var fn = actions[target.getAttribute('data-action')];
     if (fn) fn(target, e);
+  });
+
+  // Поле поиска: фильтрация по мере ввода
+  document.addEventListener('input', function (e) {
+    if (e.target.getAttribute('data-input') === 'search') {
+      state.search = e.target.value;
+      renderLeft();
+      renderCenter();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.getAttribute('data-change') === 'hideEmpty') {
+      state.hideEmpty = e.target.checked;
+      renderLeft();
+    }
+  });
+  // Строки дерева и таблиц открываются с клавиатуры
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if ((e.key === 'Enter' || e.key === ' ') && t.hasAttribute && t.hasAttribute('data-action') &&
+        t.tagName !== 'BUTTON' && t.tagName !== 'INPUT') {
+      e.preventDefault();
+      t.click();
+    }
+    if (e.key === 'Escape' && state.demoMenuOpen) { state.demoMenuOpen = false; renderDemo(); }
   });
 
   /* =====================================================================
