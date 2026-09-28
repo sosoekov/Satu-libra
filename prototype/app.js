@@ -321,7 +321,7 @@
     found: 'ПодготовкаКВыходу', draft: 'ЧерновикАП', approval: 'Согласование', active: 'Стажировка', closing: 'Закрытие', closed: 'Закрыта',
     no_program: 'НетАП', prep_overdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draft_stale: 'ЧерновикНеОтправлен',
     changed_after_approval: 'ИзмененаПослеСогласования', tasks_overdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
-    close_soon: 'СкороОкончание', stage_action: 'ДействиеЭтапа',
+    close_soon: 'СкороОкончание',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
     stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
@@ -797,9 +797,10 @@
   function isClosed(t) { return t.stage === 'closed'; }
 
   function renderTraineeCard(t) {
-    // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажёры», карточка, блок процесса, вкладки
+    // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажёры» с ⋮ ?, карточка, уведомления, вкладки
     return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
-      '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
+      '<div class="row back-row"' + a1c('ГруппаГоризонтальная', 'ГруппаНавигацияСтажера') + '>' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) +
+        '<span class="grow"></span>' + renderTraineeMenu(t) + '</div>' +
       renderHeader(t) +
       renderProcess(t) +
       renderTraineePages(t) +
@@ -817,34 +818,30 @@
     });
   }
 
-  // Карточка стажёра (фаза 9, раздел 3.2): только данные о человеке и стажировке, единственный блок с рамкой
+  // Карточка стажёра (фаза 10, 2.2): справа «Даты стажировки», под ней — даты и строка по этапу; рядом — действие этапа
   function renderHeader(t) {
-    var st = statsOf(t);
-    var right = '<div class="tcard-line"' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</div>';
-    function bar(label, pct, text, name, textName) {
-      return '<span class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
-        '<span class="muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
-        indicator(pct, 'Индикатор' + name) +
-        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></span>';
-    }
+    // Первая строка — «Даты стажировки» и даты; вторая — по этапу; третья — отставание (фаза 10, 2.2)
+    var line2 = '';
+    var line3 = '';
     if (isClosed(t)) {
       var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
-      right += '<div class="tcard-line"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
-        (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</div>';
+      line2 += '<span' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
+        (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</span>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
-      right += '<div class="tcard-line' + (ds <= 3 ? ' c-warning' : '') + '"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
-        (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>';
+      line2 += '<span' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+        (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</span>';
     } else {
-      // Две компактные полосы в строку; при нехватке места «Задачи» переносятся третьей строкой
-      var dev = '';
-      if (lag(t)) dev = '<span class="c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, отстаёт от графика</span>';
-      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) dev = '<span class="muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, опережает график</span>';
-      right += '<div class="row tcard-bars"' + a1c('ГруппаГоризонтальная', 'ГруппаПолосы') + '>' +
-        bar('Срок', timePct(t), dayNo(t) + '/' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
-        (st ? '<span class="row gap-0">' + bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') + dev + '</span>' : '') +
-        '</div>';
+      // Полоса срока и «До закрытия: N дней» — дни до даты окончания
+      var de = daysToEnd(t);
+      line2 += indicator(timePct(t), 'ИндикаторСрок') +
+        '<span' + a1c('Надпись', 'ДекорацияДоЗакрытия') + ' title="' + esc('день ' + dayNo(t) + ' из ' + totalDays(t)) + '">' +
+          (de >= 0 ? 'До закрытия: ' + pluralN(de, W_DAYS) : 'Срок окончания прошёл ' + fmtDate(t.endDate)) + '</span>';
+      if (lag(t)) line3 = '<div class="tcard-line c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Задачи отстают от графика</div>';
     }
+    // Действие этапа в карточке (фаза 10, 2.1): «Продлить срок» — active/closing, «Отозвать с согласования» — approval
+    var act = t.stage === 'approval' ? button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' })
+      : (t.stage === 'active' || t.stage === 'closing') ? button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }) : '';
 
     return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка') + '>' +
       // 1. Аватар, ФИО и должность
@@ -860,54 +857,22 @@
         '<div class="tcard-line" title="' + esc('Наставник: ' + user(t.mentorId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
         '<div class="tcard-line" title="' + esc('Руководитель: ' + user(t.headId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
       '</div>' +
-      // 3. Даты и вторая строка по этапу — прижаты вправо
-      '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
+      // 3. Даты стажировки и строка по этапу
+      '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' +
+        '<div class="row tcard-line tcard-term"><span class="muted"' + a1c('Надпись', 'ДекорацияЗаголовокДаты') + '>Даты стажировки</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</span></div>' +
+        '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаСрок') + '>' + line2 + '</div>' +
+        line3 +
+      '</div>' +
+      (act ? '<div class="tcard-action"' + a1c('ГруппаГоризонтальная', 'ГруппаДействиеКарточки') + '>' + act + '</div>' : '') +
       '</div>';
   }
 
-  // Степпер этапов (блок процесса). Подписи: текущий шаг — «с даты» (для found — «выход»),
-  // «Закрытие» в будущем при active — дата доступности закрытия, «Закрыта» — дата закрытия или отмены
-  function renderStepper(t) {
-    var cur = stageIndex(t.stage);
-    var allDone = isClosed(t);
-    return '<div class="stepper-wrap"><div class="stepper"' + a1c('ГруппаГоризонтальная', 'ГруппаСтеппер', 'check') + '>' +
-      STAGES.map(function (s, i) {
-        var state_ = allDone || i < cur ? 'done' : i === cur ? 'current' : 'future';
-        var date = t.stageDates[s.code];
-        var sub = '';
-        if (allDone && s.code === 'closed') sub = (t.closeKind === 'cancelled' ? 'отменена ' : '') + fmtDate(t.closedAt);
-        else if (state_ === 'current') sub = s.code === 'found' ? 'выход ' + fmtDate(t.startDate) : date ? 'с ' + fmtDate(date) : '';
-        else if (s.code === 'closing' && state_ === 'future' && t.stage === 'active') sub = 'с ' + fmtDate(closeAvailableFrom(t));
-        return '<div class="step step-' + state_ + '"' + a1c('Надпись', 'ДекорацияШаг' + n1c(s.code)) +
-          ' title="' + esc(s.title + (sub ? ': ' + sub : '')) + '">' +
-          '<span class="step-mark">' + (state_ === 'done' ? icon('check') : (i + 1)) + '</span>' +
-          '<span class="col gap-0 step-text"><span class="step-title">' + esc(s.title) + '</span>' +
-          (sub ? '<span class="step-sub muted">' + esc(sub) + '</span>' : '') +
-          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line"></span>' : '');
-      }).join('') + '</div></div>';
-  }
 
   // Что делает кнопка action-уведомления
   var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
     changed_after_approval: 'sendToApproval', close_soon: 'startClosing' };
-  function noteActionOf(t, n) {
-    return n.id === 'stage_action' ? (t.stage === 'closing' ? 'startClosing' : 'sendToApproval') : NOTE_ACTION[n.id];
-  }
-
-  // Главное действие этапа, если среди уведомлений блока процесса нет action (решение 2 фазы 9).
-  // Не уведомление: в дерево, счётчики и сводную не попадает.
-  function stageFallbackStep(t) {
-    var program = programOf(t);
-    if ((t.stage === 'draft' || t.stage === 'found') && program) {
-      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Черновик АП готов к отправке на согласование',
-        buttonText: 'Отправить на согласование' };
-    }
-    if (t.stage === 'closing') {
-      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Стажировка на этапе закрытия',
-        buttonText: 'Начать закрытие стажировки' };
-    }
-    return null;
-  }
+  function noteActionOf(t, n) { return NOTE_ACTION[n.id]; }
 
   // Навигационное уведомление, ведущее туда, где пользователь уже находится, в блоке процесса не показывается (раздел 2.3)
   var TARGET_TAB = { prep: 'prepare', program: 'program' };
@@ -917,24 +882,13 @@
     if (TARGET_TAB[n.target.tab] !== state.traineeTab) return false;
     return !n.target.filter || TARGET_FILTER[n.target.filter] === state.taskFilter;
   }
-  // Уведомления блока процесса: без скрытых по 2.3; без action — первым главное действие этапа
   function processNotifications(t) {
-    var list = getNotifications(t).filter(function (n) { return !leadsToCurrentView(n); });
-    if (!list.some(function (n) { return n.kind === 'action'; })) {
-      var f = stageFallbackStep(t);
-      if (f) list.unshift(f);
-    }
-    return list;
+    return getNotifications(t).filter(function (n) { return !leadsToCurrentView(n); });
   }
 
-  // Второстепенные действия стажировки (состав — фаза 8, 3.2): справа на первой строке блока процесса
-  function renderTraineeActions(t) {
+  // Меню ⋮ и справка ? — справа в строке «← Все стажёры» (фаза 10, 2.1)
+  function renderTraineeMenu(t) {
     var program = programOf(t);
-    var s_ = t.stage;
-    var parts = [];
-    if (s_ === 'approval') parts.push(button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' }));
-    if (s_ === 'active' || s_ === 'closing') parts.push(button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }));
-    if (program) parts.push(button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }));
     var menuItems = [];
     if (program) {
       menuItems.push(menuItem('История изменений АП', 'openDialog', { dialog: 'history' }, 'КнопкаИсторияИзмененийАП'));
@@ -945,22 +899,19 @@
       menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
     }
     return '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
-      parts.join('') +
       (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
       button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
         title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправка' }) +
       '</div>';
   }
 
-  // Блок процесса (фаза 9, раздел 3.3): без рамки и фона. Степпер; через 8px — строки уведомлений.
-  // Видны первые две строки; основная кнопка — у первого action среди видимых строк; «ещё N» — в конце второй строки.
-  // В 1С строки — заранее созданные группы-слоты ГруппаСтрокаУведомления1…N, содержимое задаётся программно.
+  // Уведомления стажёра: строки 32px, все кнопки обычные (фаза 10: основные действия — во вкладках)
   var NOTES_VISIBLE = 2;
   function renderProcess(t) {
     var list = processNotifications(t);
+    if (!list.length) return '';
     var hidden = Math.max(0, list.length - NOTES_VISIBLE);
     var shown = state.notesExpanded ? list : list.slice(0, NOTES_VISIBLE);
-    var primary = shown.filter(function (n) { return n.kind === 'action'; })[0] || null;
     function row(n, i) {
       var k = i + 1;
       var more = i === NOTES_VISIBLE - 1 && hidden ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + hidden, { action: 'toggleNotes',
@@ -968,20 +919,10 @@
       return '<div class="row note-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаУведомления' + k) + '>' +
         '<span class="note-icon c-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомления' + k) + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
         '<span class="note-text" title="' + esc(n.text) + '"' + a1c('Надпись', 'ДекорацияУведомления' + k) + '>' + esc(n.text) + '</span>' +
-        button(n.buttonText, { cls: n === primary ? 'btn-primary' : '', action: 'noteAction', data: { key: n.id }, name: 'КнопкаУведомления' + k }) +
+        button(n.buttonText, { action: 'noteAction', data: { key: n.id }, name: 'КнопкаУведомления' + k }) +
         more + '</div>';
     }
-    var rows = shown.map(row);
-    return '<div class="col gap-2 process"' + a1c('ГруппаВертикальная', 'ГруппаПроцесс') + '>' +
-      renderStepper(t) +
-      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаУведомленияИДействия') + '>' +
-        '<div class="row process-first"' + a1c('ГруппаГоризонтальная', 'ГруппаПерваяСтрокаПроцесса') + '>' +
-          (rows[0] || '<span class="grow"></span>') + renderTraineeActions(t) +
-        '</div>' +
-        (rows[1] || '') +
-        (rows.length > NOTES_VISIBLE ? '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' + rows.slice(NOTES_VISIBLE).join('') + '</div>' : '') +
-      '</div>' +
-      '</div>';
+    return '<div class="col gap-0 process"' + a1c('ГруппаВертикальная', 'ГруппаПроцесс') + '>' + shown.map(row).join('') + '</div>';
   }
 
   function menuItem(text, action, data, name, cls) {
@@ -1176,8 +1117,7 @@
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
-      (sel ? '<span class="grow"></span>' +
-        '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
+      (sel ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
             menuItem('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего'),
@@ -1188,8 +1128,15 @@
           ], { text: 'Действия с выбранными ▾' }) +
           link('Снять выделение', { action: 'clearTaskSelection', name: 'ГиперссылкаСнятьВыделение' }) +
         '</span>' : '') +
+      // Справа (фаза 10, 2.1): «Печать АП» и основная «Отправить на согласование» — черновик или АП изменена после согласования
+      '<span class="grow"></span>' +
+      '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаДействияАП') + '>' +
+        button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }) +
+        (canSendToApproval(t) ? button('Отправить на согласование', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' }) : '') +
+      '</span>' +
       '</div>';
   }
+  function canSendToApproval(t) { return t.stage === 'draft' || !!t.changedAfterApproval && (t.stage === 'active' || t.stage === 'closing'); }
 
   // Таблица задач (8.4, 5.3–5.4): всегда сгруппирована по блокам
   function renderTaskTable(t, all) {
@@ -2396,7 +2343,7 @@
     noteAction: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var id = btn.getAttribute('data-key');
-      var n = id === 'stage_action' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.id === id; })[0];
+      var n = getNotifications(t).filter(function (x) { return x.id === id; })[0];
       if (!n) return;
       if (n.kind === 'action') {
         var a = noteActionOf(t, n);
