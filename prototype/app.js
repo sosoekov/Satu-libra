@@ -1030,7 +1030,7 @@
     } else {
       body = renderPrepareTab(t);
     }
-    return '<div class="col gap-3"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
+    return '<div class="col gap-4"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
       '<div class="tabs">' + tabs.map(function (x) {
         // Цветной текст в заголовке страницы в 1С не штатный — статус передаётся картинкой страницы
         var pic = x.pic ? '<span class="tab-pic ' + x.pic.cls + '" title="' + esc(x.pic.title) + '"' +
@@ -1171,7 +1171,7 @@
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
       (sel ? '<span class="grow"></span>' +
         '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
-          '<span class="bold"' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
             menuItem('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего'),
             menuItem('Наблюдатели', 'openDialog', { dialog: 'massObservers' }, 'КнопкаНаблюдатели'),
@@ -1301,7 +1301,7 @@
     var ds = daysToStart(t);
     function option(title, text, extra, btnText, dialog, name) {
       return '<div class="panel col gap-2 create-option"' + a1c('ГруппаВертикальная', 'ГруппаСоздание' + name) + '>' +
-        '<div class="bold"' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
+        '<div' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
         '<div class="muted grow"' + a1c('Надпись', 'ДекорацияСоздание' + name + 'Пояснение') + '>' + esc(text) + '</div>' +
         (extra || '') +
         '<div>' + button(btnText, { action: 'openDialog', data: { dialog: dialog }, name: 'КнопкаСоздание' + name }) + '</div>' +
@@ -1392,12 +1392,12 @@
 
     var summary = '<div class="panel row gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаСводкаПодготовки') + '>' +
       '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаДоВыхода') + '>' +
-        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
-          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
-          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
+        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
+          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
+          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
       '</div>' +
       '<div class="col gap-1 grow prepare-progress"' + a1c('ГруппаВертикальная', 'ГруппаГотовность') + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: <b>' + done + ' из ' + all.length + '</b></span>' +
+        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: ' + done + ' из ' + all.length + '</span>' +
         '<div class="indicator-wrap">' + indicator(all.length ? done / all.length * 100 : 0, 'ИндикаторГотовность', 'success') + '</div>' +
       '</div>' +
       '</div>';
@@ -1417,7 +1417,7 @@
       '</div>';
 
     var filterLine = state.checklistFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЧекЛиста') + '>' +
-      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: <b>Просрочено</b></span>' +
+      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: Просрочено</span>' +
       button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'clFilter', name: 'КнопкаСброситьФильтрЧекЛиста' }) + '</div>' : '';
 
     var body;
@@ -1440,7 +1440,7 @@
         ' title="Сортировать по сроку"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовкиСортировкаСрок') + '>Срок' + (sortOn ? (sortOn > 0 ? ' ▲' : ' ▼') : '') + '</button></th>' +
       '<th>Статус</th><th>Действие</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 
-    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
   }
 
   function checklistRow(t, c, lock, sel) {
@@ -1642,7 +1642,7 @@
       title: 'Начать закрытие стажировки', form: 'ФормаЗакрытиеСтажировки', submit: 'Начать закрытие стажировки',
       body: function (t) {
         var st = statsOf(t) || { done: 0, total: 0, overdue: 0 };
-        return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: <b>' + st.done + ' из ' + st.total + '</b>' +
+        return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: ' + st.done + ' из ' + st.total +
           (st.overdue ? ', просрочено: <b class="danger-text">' + st.overdue + '</b>' : ', просроченных нет') + '</div>' +
           field('Результат', choice('result', 'ПолеРезультатСтажировки', [
             { value: 'passed', text: 'Стажировка пройдена', name: 'Пройдена' },
@@ -1781,7 +1781,7 @@
             a1c('ПолеВвода', 'ТаблицаСсылкиКомментарий') + '>') + '</td></tr>';
     }).join('');
     return '<div class="col gap-2 tf-links"' + a1c('ГруппаВертикальная', 'ГруппаСсылкиДляОзнакомления') + '>' +
-      '<div class="bold"' + a1c('Надпись', 'ДекорацияСсылкиДляОзнакомления') + '>Ссылки для ознакомления</div>' +
+      '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияСсылкиДляОзнакомления') + '>Ссылки для ознакомления</div>' +
       (ro_ ? '' : '<div class="row tf-links-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельСсылки') + '>' +
         button('Создать', { cls: 'btn-flat', icon: 'plus', action: 'linkAdd', name: 'КнопкаСоздатьСсылку' }) +
         button('Удалить', { cls: 'btn-flat', action: 'linkDelete', disabled: !sel, title: sel ? '' : 'Отметьте ссылки флажками', name: 'КнопкаУдалитьСсылки' }) + '</div>') +

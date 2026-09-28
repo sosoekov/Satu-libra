@@ -57,7 +57,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bold { font-weight: bold; }
 .danger-text { color: var(--c-danger); }
 .success-text { color: var(--c-success); }
-.h-block { font-size: var(--fs-l); font-weight: bold; margin: 0; }
+.h-block { font-size: var(--fs-l); font-weight: normal; margin: 0; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* ================= Оболочка клиента 1С 8.5 (НЕ_ПЕРЕНОСИТЬ, раздел 2.4) ================= */
@@ -120,7 +120,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Зоны */
 .zone-left {
   flex: 0 0 360px; width: 360px;
-  border: 1px solid var(--c-border); border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   display: flex; flex-direction: column; min-height: 0;
@@ -129,7 +128,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .zone-center { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 var(--sp-5) var(--sp-4); }
 .zone-help {
   flex: 0 0 280px; width: 280px;
-  border: 1px solid var(--c-border); border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   overflow: auto; padding: var(--sp-4);
@@ -214,15 +212,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-right: 1px solid var(--c-border); white-space: nowrap;
 }
 .toggle button:last-child { border-right: none; }
-.toggle button:hover:not(.on) { background: var(--c-bg-selected); }
-.toggle button.on { background: var(--c-primary); color: var(--c-bg); }
+.toggle button:hover:not(.on) { background: var(--c-bg-panel); }
+/* Фаза 9, 4.5: выбранный вариант — фон --c-bg-selected и текст --c-primary; сплошной заливки primary нет */
+.toggle button { color: var(--c-text); }
+.toggle button.on { background: var(--c-bg-selected); color: var(--c-primary); }
 
 /* ================= Таблицы ================= */
-.table-box { border: 1px solid var(--c-border); border-radius: var(--radius); overflow: auto; }
+.table-box { overflow: auto; }  /* фаза 9, 4.2: таблицы без внешней рамки */
 table.grid { width: 100%; border-collapse: collapse; }
 table.grid th {
   text-align: left; font-weight: normal; color: var(--c-text-secondary); font-size: var(--fs-s);
-  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg-panel);
+  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg);
   white-space: nowrap; position: sticky; top: 0;
 }
 table.grid td { padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); vertical-align: top; }
@@ -232,7 +232,8 @@ table.grid tbody tr.clickable:hover td { background: var(--c-bg-panel); }
 table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 
 /* ================= Карточки/блоки ================= */
-.panel { border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg); padding: var(--sp-4); }
+.panel { border-radius: var(--radius); background: var(--c-bg); padding: var(--sp-4); }
+.panel.tcard { border: 1px solid var(--c-border); }  /* фаза 9, 4.2: рамка — только у карточки стажёра и у диалогов */
 
 /* ================= Подменю ================= */
 .menu-host { display: inline-flex; flex-direction: column; }
@@ -285,7 +286,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Дерево и список */
 .tree {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
+  border-radius: var(--radius); background: var(--c-bg);
   padding: var(--sp-1) 0;
 }
 .tree-row {
@@ -324,7 +325,7 @@ th.num, td.num { text-align: right; }
 .avatar {
   flex: 0 0 56px; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-xl); font-weight: bold;
+  background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-xl); font-weight: normal;
 }
 
 /* Степпер */
@@ -369,7 +370,10 @@ th.num, td.num { text-align: right; }
 .menu .danger-text { color: var(--c-danger); }
 
 /* Вкладки стажёра */
-.trainee-card .tabs .tab { font-size: var(--fs-l); font-weight: bold; }
+/* Фаза 9, 4.4: 13px, обычное начертание; неактивная — серым, активная — --c-text и подчёркивание 2px */
+.trainee-card .tabs .tab { font-size: var(--fs-m); font-weight: normal; color: var(--c-text-secondary); border-bottom-width: 2px; }
+.trainee-card .tabs .tab.active { color: var(--c-text); }
+.trainee-card .tabs .tab:hover { color: var(--c-primary); }
 
 /* ================= Диалоги ================= */
 .modal-backdrop {
@@ -397,9 +401,9 @@ th.num, td.num { text-align: right; }
 [aria-invalid="true"], .toggle.invalid { border-color: var(--c-danger); }
 
 /* ================= Вкладка «Адаптационная программа» ================= */
-.link.on { font-weight: bold; text-decoration: underline; }
+.link.on { text-decoration: underline; }
 .note-neutral { background: var(--c-neutral-bg); }
-.command-bar-flat { border-top: none; padding-top: 0; }
+.command-bar-flat { border-top: none; border-bottom: none; padding-top: 0; padding-bottom: 0; }
 .bar-sep { width: 1px; height: 20px; background: var(--c-border); margin: 0 var(--sp-1); }
 
 .task-table { table-layout: fixed; }
@@ -581,7 +585,7 @@ body.markup-1c table[data-1c]::before {
 /* Фаза 8.4: вкладка «Адаптационная программа» */
 .defaults-row { min-height: 24px; }
 .toggle button.tv-danger:not(.on) { color: var(--c-danger); }
-.toggle button.tv-danger.on { background: var(--c-danger); }
+.toggle button.tv-danger.on { background: var(--c-bg-selected); color: var(--c-danger); }
 .task-table tr.task-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
 .task-table tr.group-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
 .group-indicator { display: inline-flex; width: 80px; }
