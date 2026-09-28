@@ -2697,6 +2697,9 @@
       }
       var hadClosure = hasClosureTab(t);
       setStage(t, code);
+      // Фаза 10, 6: перевод в «Стажировку» при сроке до окончания ≤ CLOSE_AVAILABLE_DAYS сразу даёт «Закрытие» (правило 5.1);
+      // перевод в «Закрытие» создаёт чек-лист закрытия (в setStage)
+      if (code === 'active' && syncClosingStage(t) === 'closing') toast('Этап изменён на «Закрытие»: до окончания ' + Math.max(0, daysToEnd(t)) + ' дн.');
       // Фаза 10, 5.1: появившаяся вкладка «Закрытие стажировки» открывается по умолчанию; скрытая — возвращает к АП
       if (hasClosureTab(t) && !hadClosure) state.traineeTab = 'closure';
       if (!hasClosureTab(t) && state.traineeTab === 'closure') state.traineeTab = 'program';
