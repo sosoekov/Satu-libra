@@ -57,7 +57,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bold { font-weight: bold; }
 .danger-text { color: var(--c-danger); }
 .success-text { color: var(--c-success); }
-.h-block { font-size: var(--fs-l); font-weight: bold; margin: 0; }
+.h-block { font-size: var(--fs-l); font-weight: normal; margin: 0; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* ================= Оболочка клиента 1С 8.5 (НЕ_ПЕРЕНОСИТЬ, раздел 2.4) ================= */
@@ -120,7 +120,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Зоны */
 .zone-left {
   flex: 0 0 360px; width: 360px;
-  border: 1px solid var(--c-border); border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   display: flex; flex-direction: column; min-height: 0;
@@ -129,7 +128,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .zone-center { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 var(--sp-5) var(--sp-4); }
 .zone-help {
   flex: 0 0 280px; width: 280px;
-  border: 1px solid var(--c-border); border-bottom: none;
   border-radius: var(--radius) var(--radius) 0 0;
   background: var(--c-bg-panel);
   overflow: auto; padding: var(--sp-4);
@@ -214,15 +212,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-right: 1px solid var(--c-border); white-space: nowrap;
 }
 .toggle button:last-child { border-right: none; }
-.toggle button:hover:not(.on) { background: var(--c-bg-selected); }
-.toggle button.on { background: var(--c-primary); color: var(--c-bg); }
+.toggle button:hover:not(.on) { background: var(--c-bg-panel); }
+/* Фаза 9, 4.5: выбранный вариант — фон --c-bg-selected и текст --c-primary; сплошной заливки primary нет */
+.toggle button { color: var(--c-text); }
+.toggle button.on { background: var(--c-bg-selected); color: var(--c-primary); }
 
 /* ================= Таблицы ================= */
-.table-box { border: 1px solid var(--c-border); border-radius: var(--radius); overflow: auto; }
+.table-box { overflow: auto; }  /* фаза 9, 4.2: таблицы без внешней рамки */
 table.grid { width: 100%; border-collapse: collapse; }
 table.grid th {
   text-align: left; font-weight: normal; color: var(--c-text-secondary); font-size: var(--fs-s);
-  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg-panel);
+  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg);
   white-space: nowrap; position: sticky; top: 0;
 }
 table.grid td { padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); vertical-align: top; }
@@ -232,7 +232,8 @@ table.grid tbody tr.clickable:hover td { background: var(--c-bg-panel); }
 table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 
 /* ================= Карточки/блоки ================= */
-.panel { border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg); padding: var(--sp-4); }
+.panel { border-radius: var(--radius); background: var(--c-bg); padding: var(--sp-4); }
+.panel.tcard { border: 1px solid var(--c-border); }  /* фаза 9, 4.2: рамка — только у карточки стажёра и у диалогов */
 
 /* ================= Подменю ================= */
 .menu-host { display: inline-flex; flex-direction: column; }
@@ -285,7 +286,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Дерево и список */
 .tree {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
+  border-radius: var(--radius); background: var(--c-bg);
   padding: var(--sp-1) 0;
 }
 .tree-row {
@@ -324,7 +325,7 @@ th.num, td.num { text-align: right; }
 .avatar {
   flex: 0 0 56px; width: 56px; height: 56px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-xl); font-weight: bold;
+  background: var(--c-info-bg); color: var(--c-primary); font-size: var(--fs-xl); font-weight: normal;
 }
 
 /* Степпер */
@@ -339,16 +340,17 @@ th.num, td.num { text-align: right; }
 .step { min-width: min-content; }
 .stepper-wrap { container-type: inline-size; }
 /* Узкая центральная область (открыта справка при 1366px): подписи только у текущего шага, у остальных — в title */
-@container (max-width: 760px) {
+@container (max-width: 840px) {
   .step:not(.step-current) .step-text { display: none; }
 }
-.step-done { color: var(--c-success); }
-.step-done .step-mark { border-color: var(--c-success); background: var(--c-success-bg); }
+/* Фаза 9, 3.3: пройденный — зелёная галочка и обычный текст; текущий — залитый кружок, текст primary полужирный;
+   будущий — контур и серый текст; линии одного цвета */
+.step-done { color: var(--c-text); }
+.step-done .step-mark { border-color: var(--c-success); color: var(--c-success); }
 .step-current { color: var(--c-primary); font-weight: bold; }
 .step-current .step-mark { border-color: var(--c-primary); background: var(--c-primary); color: var(--c-bg); }
 .step-current .muted { font-weight: normal; }
 .step-line { flex: 1 1 16px; min-width: 8px; height: 1px; background: var(--c-border); margin-top: 11px; }
-.step-line.done { background: var(--c-success); }
 
 /* Плашки уведомлений */
 .note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius); min-height: 40px; }
@@ -368,7 +370,10 @@ th.num, td.num { text-align: right; }
 .menu .danger-text { color: var(--c-danger); }
 
 /* Вкладки стажёра */
-.trainee-card .tabs .tab { font-size: var(--fs-l); font-weight: bold; }
+/* Фаза 9, 4.4: 13px, обычное начертание; неактивная — серым, активная — --c-text и подчёркивание 2px */
+.trainee-card .tabs .tab { font-size: var(--fs-m); font-weight: normal; color: var(--c-text-secondary); border-bottom-width: 2px; }
+.trainee-card .tabs .tab.active { color: var(--c-text); }
+.trainee-card .tabs .tab:hover { color: var(--c-primary); }
 
 /* ================= Диалоги ================= */
 .modal-backdrop {
@@ -396,9 +401,9 @@ th.num, td.num { text-align: right; }
 [aria-invalid="true"], .toggle.invalid { border-color: var(--c-danger); }
 
 /* ================= Вкладка «Адаптационная программа» ================= */
-.link.on { font-weight: bold; text-decoration: underline; }
+.link.on { text-decoration: underline; }
 .note-neutral { background: var(--c-neutral-bg); }
-.command-bar-flat { border-top: none; padding-top: 0; }
+.command-bar-flat { border-top: none; border-bottom: none; padding-top: 0; padding-bottom: 0; }
 .bar-sep { width: 1px; height: 20px; background: var(--c-border); margin: 0 var(--sp-1); }
 
 .task-table { table-layout: fixed; }
@@ -545,37 +550,33 @@ body.markup-1c table[data-1c]::before {
 .obs-text::placeholder { color: var(--c-text-secondary); }
 .picker-list { max-height: 280px; }
 
-/* ================= Фаза 8: карточка стажёра ================= */
-.tcard { display: flex; flex-direction: column; gap: 3px; padding: 5px var(--sp-4); }
-.tcard-top { gap: 4px 32px; flex-wrap: wrap; }
-.tcard-dates { margin-left: auto; }
-.tcard-who { flex: 0 0 auto; }
+/* ================= Фаза 9: карточка стажёра (3.2) ================= */
+.tcard { display: flex; flex-direction: row; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); flex-wrap: nowrap; }
+.tcard-who { flex: 0 0 auto; align-items: center; }
 .avatar.avatar-s { flex: 0 0 40px; width: 40px; height: 40px; font-size: var(--fs-l); }
-.tcard-name { line-height: 22px; white-space: nowrap; }
-.tcard-people { flex: 0 1 auto; min-width: 0; }
-.tcard-line { line-height: 16px; white-space: nowrap; }
-.tcard-people .tcard-line { line-height: 20px; }
-.tcard-dates { flex: 0 0 auto; }
-.tcard-bar { gap: var(--sp-2); height: 16px; flex-wrap: nowrap; }
-.tcard-lbl { flex: 0 0 48px; }
-.tcard-bar .indicator { flex: 0 0 140px; width: 140px; min-width: 140px; }
-.tcard-sep { height: 1px; background: var(--c-border); flex: 0 0 1px; margin: 1px 0; }
-.tcard .stepper { padding: 0; }
-.tcard .step-mark { flex: 0 0 18px; width: 18px; height: 18px; }
-.tcard .step-line { margin-top: 9px; }
-.tcard .step-text { padding-top: 1px; }
-.tcard .step-title { line-height: 16px; }
+.tcard-name { font-size: 18px; line-height: 24px; white-space: nowrap; }
+.tcard-people { flex: 0 0 auto; min-width: 0; }
+.tcard-line { line-height: 20px; white-space: nowrap; }
+.tcard-people .tcard-line { display: flex; flex-direction: row; align-items: baseline; min-width: 0; }
+.tcard-people .tcard-line > .muted { flex: 0 0 auto; margin-right: 4px; }
+.tcard-people .tcard-line > .link, .tcard-people .tcard-line > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tcard-dates { flex: 0 1 auto; margin-left: auto; align-items: flex-end; min-width: min-content; }
+/* Узкое окно: наставник и руководитель сжимаются (многоточие, полное ФИО — в подсказке), полосы переносятся третьей строкой */
+@media (max-width: 1500px) { .tcard-people { flex: 0 1 auto; } }
+.tcard-bars { gap: 2px var(--sp-4); flex-wrap: wrap; justify-content: flex-end; }
+.tcard-bar { gap: var(--sp-2); height: 20px; flex-wrap: nowrap; white-space: nowrap; }
+.tcard-bars span { white-space: nowrap; }
+.tcard-bar .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
 .step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
 
-/* ================= Фаза 8: строка следующего шага ================= */
-.next-step-row { min-height: 44px; gap: var(--sp-3); flex-wrap: nowrap; }
-.next-step { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 44px; padding: 0 var(--sp-3); border-radius: var(--radius); flex: 0 1 auto; min-width: 0; }
-.next-step-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.next-step .link { white-space: nowrap; }
+/* ================= Фаза 9: блок процесса (3.3) ================= */
+.process .stepper { padding: 0; }
+.process-first { gap: var(--sp-3); flex-wrap: nowrap; min-height: 32px; }
+.note-row { height: 32px; gap: var(--sp-2); flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; }
+.note-icon { display: inline-flex; flex: 0 0 16px; }
+.note-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--c-text); }
+.note-row .btn, .note-row .link { flex: 0 0 auto; white-space: nowrap; }
 .trainee-actions { margin-left: auto; flex: 0 0 auto; gap: var(--sp-2); border: none; padding: 0; flex-wrap: nowrap; }
-.more-notes { padding: 0; }
-.more-note { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); height: 32px; padding: 0 var(--sp-3); border-radius: var(--radius); }
-.btn-small-text { height: 24px; padding: 0 var(--sp-2); }
 
 /* Фаза 8: картинка страницы «Подготовка к выходу» */
 .tab-pic { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
@@ -584,7 +585,7 @@ body.markup-1c table[data-1c]::before {
 /* Фаза 8.4: вкладка «Адаптационная программа» */
 .defaults-row { min-height: 24px; }
 .toggle button.tv-danger:not(.on) { color: var(--c-danger); }
-.toggle button.tv-danger.on { background: var(--c-danger); }
+.toggle button.tv-danger.on { background: var(--c-bg-selected); color: var(--c-danger); }
 .task-table tr.task-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
 .task-table tr.group-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
 .group-indicator { display: inline-flex; width: 80px; }
@@ -593,3 +594,4 @@ body.markup-1c table[data-1c]::before {
 .task-bar { border-bottom: none; padding-bottom: 0; }
 .task-table thead th { padding-top: 5px; padding-bottom: 5px; }
 @media (max-width: 1500px) { .task-table .w-person, .task-table .w-observers { width: 13%; } }
+.lock-note { min-height: 24px; gap: var(--sp-2); flex-wrap: nowrap; }

@@ -143,6 +143,10 @@
 
   var TONE_ORDER = { danger: 0, warning: 1, info: 2 };
 
+  // Уведомления стажёра (фаза 9, раздел 2.1). Поля: id, severity, kind, text, shortText, buttonText, target.
+  // kind: 'action' — кнопка меняет данные; 'navigation' — кнопка только переключает вид (target: {tab, filter}).
+  var NOTE_IDS = ['no_program', 'prep_overdue', 'draft_stale', 'rejected', 'changed_after_approval', 'tasks_overdue', 'lag', 'close_soon'];
+  var KIND_ORDER = { action: 0, navigation: 1 };
   function getNotifications(t) {
     var list = [];
     var s = t.stage;
@@ -152,56 +156,49 @@
     if (s === 'found' && !program) {
       var ds = daysToStart(t);
       list.push({
-        key: 'noProgram', tone: 'warning',
+        id: 'no_program', severity: 'warning', kind: 'action',
         text: 'Для стажёра нужно создать адаптационную программу. ' +
               (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)),
-        button: 'Создать АП', action: 'createProgram',
-        short: 'Создать АП' + (ds > 0 ? ', выход через ' + ds + ' дн.' : ds === 0 ? ', выход сегодня' : '')
+        shortText: 'Создать АП' + (ds > 0 ? ', выход через ' + ds + ' дн.' : ds === 0 ? ', выход сегодня' : ''),
+        buttonText: 'Создать АП'
       });
     }
 
     var clOver = checklistOf(t).filter(checklistOverdue).length;
     if (clOver > 0) {
       list.push({
-        key: 'checklistOverdue', tone: 'danger',
+        id: 'prep_overdue', severity: 'danger', kind: 'navigation',
         text: 'Просрочено пунктов подготовки к выходу: ' + clOver,
-        button: 'Показать', action: 'showChecklistOverdue',
-        short: 'Просрочено пунктов подготовки: ' + clOver
+        shortText: 'Просрочено пунктов подготовки: ' + clOver,
+        buttonText: 'Показать', target: { tab: 'prep' }
+      });
+    }
+
+    if (s === 'draft' && t.draftSince && !t.rejectionComment && diffDays(t.draftSince, D.TODAY) >= 2) {
+      var dd = diffDays(t.draftSince, D.TODAY);
+      list.push({
+        id: 'draft_stale', severity: 'warning', kind: 'action',
+        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
+        shortText: 'Не отправлена на согласование ' + dd + ' дн.',
+        buttonText: 'Отправить на согласование'
       });
     }
 
     if (s === 'draft' && t.rejectionComment) {
       list.push({
-        key: 'rejected', tone: 'danger',
+        id: 'rejected', severity: 'danger', kind: 'action',
         text: 'АП возвращена на доработку: «' + t.rejectionComment + '»',
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Возвращена на доработку'
-      });
-    } else if (s === 'draft' && t.draftSince && diffDays(t.draftSince, D.TODAY) >= 2) {
-      var dd = diffDays(t.draftSince, D.TODAY);
-      list.push({
-        key: 'draftStale', tone: 'warning',
-        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Не отправлена на согласование ' + dd + ' дн.'
-      });
-    }
-
-    if (s === 'approval') {
-      list.push({
-        key: 'onApproval', tone: 'info',
-        text: 'АП на согласовании с ' + fmtDate(t.stageDates.approval),
-        button: null, action: null,
-        short: 'На согласовании с ' + fmtDate(t.stageDates.approval).slice(0, 5)
+        shortText: 'Возвращена на доработку',
+        buttonText: 'Отправить на согласование'
       });
     }
 
     if (t.changedAfterApproval && (s === 'active' || s === 'closing')) {
       list.push({
-        key: 'changed', tone: 'warning',
+        id: 'changed_after_approval', severity: 'warning', kind: 'action',
         text: 'АП изменена после согласования. Отправьте её на повторное согласование',
-        button: 'Отправить на согласование', action: 'sendToApproval',
-        short: 'Изменена после согласования'
+        shortText: 'Изменена после согласования',
+        buttonText: 'Отправить на согласование'
       });
     }
 
@@ -209,18 +206,18 @@
       var st = statsOf(t);
       if (st && st.overdue > 0) {
         list.push({
-          key: 'tasksOverdue', tone: 'danger',
+          id: 'tasks_overdue', severity: 'danger', kind: 'navigation',
           text: 'Просрочено задач: ' + st.overdue,
-          button: 'Показать', action: 'showTasksOverdue',
-          short: 'Просрочено задач: ' + st.overdue
+          shortText: 'Просрочено задач: ' + st.overdue,
+          buttonText: 'Показать', target: { tab: 'program', filter: 'overdue' }
         });
       }
       if (lag(t)) {
         list.push({
-          key: 'lag', tone: 'warning',
+          id: 'lag', severity: 'warning', kind: 'navigation',
           text: 'Задачи отстают от графика: выполнено ' + st.pct + '% при прошедших ' + timePct(t) + '% срока',
-          button: 'Показать невыполненные', action: 'showTasksUndone',
-          short: 'Отстаёт от графика'
+          shortText: 'Отстаёт от графика',
+          buttonText: 'Показать', target: { tab: 'program', filter: 'in_progress' }
         });
       }
     }
@@ -228,20 +225,23 @@
     if ((s === 'active' || s === 'closing') && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS) {
       var de = Math.max(0, daysToEnd(t));
       list.push({
-        key: 'closeSoon', tone: 'info',
+        id: 'close_soon', severity: 'info', kind: 'action',
         text: 'До окончания стажировки ' + pluralN(de, W_DAYS),
-        button: 'Начать закрытие стажировки', action: 'startClosing',
-        short: 'До окончания ' + de + ' дн.'
+        shortText: 'До окончания ' + de + ' дн.',
+        buttonText: 'Начать закрытие стажировки'
       });
     }
 
-    // danger → warning → info, внутри типа — порядок правил
-    return list
-      .map(function (n, i) { n.order = i; return n; })
-      .sort(function (a, b) { return TONE_ORDER[a.tone] - TONE_ORDER[b.tone] || a.order - b.order; });
+    // Порядок (раздел 2.2): danger → warning → info; внутри важности action выше navigation; затем порядок таблицы 2.1
+    return list.sort(function (a, b) {
+      return TONE_ORDER[a.severity] - TONE_ORDER[b.severity] || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
+        NOTE_IDS.indexOf(a.id) - NOTE_IDS.indexOf(b.id);
+    });
   }
+  // Требуют внимания, иконка в дереве, счётчик на вкладке — только danger и warning (раздел 2.4)
+  function isAttention(n) { return n.severity === 'danger' || n.severity === 'warning'; }
   function needsAttention(t) {
-    return getNotifications(t).some(function (n) { return n.tone === 'danger' || n.tone === 'warning'; });
+    return getNotifications(t).some(isAttention);
   }
   // Самый важный маркер для дерева и списка
 
@@ -318,9 +318,9 @@
   // Русские части имён элементов 1С для ключей кода (имена в стиле 1С, раздел 3.2)
   var NAME_1C = {
     found: 'ПодготовкаКВыходу', draft: 'ЧерновикАП', approval: 'Согласование', active: 'Стажировка', closing: 'Закрытие', closed: 'Закрыта',
-    noProgram: 'НетАП', checklistOverdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draftStale: 'ЧерновикНеОтправлен',
-    onApproval: 'НаСогласовании', changed: 'ИзмененаПослеСогласования', tasksOverdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
-    closeSoon: 'СкороОкончание',
+    no_program: 'НетАП', prep_overdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draft_stale: 'ЧерновикНеОтправлен',
+    changed_after_approval: 'ИзмененаПослеСогласования', tasks_overdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
+    close_soon: 'СкороОкончание', stage_action: 'ДействиеЭтапа',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
     stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
@@ -512,10 +512,11 @@
   // Значок главного уведомления в дереве (фаза 7, раздел 2.4): только иконка, тип — самого важного уведомления
   var TONE_ICONS = { danger: 'alert', warning: 'warn', info: 'info' };
   var TONE_TITLES = { danger: 'Критично', warning: 'Требует внимания', info: 'Информация' };
-  function mainNotification(t) { return getNotifications(t)[0] || null; }
+  // Дерево показывает только danger и warning (фаза 9, раздел 2.4); сводная — все уведомления
+  function treeNotification(t) { return getNotifications(t).filter(isAttention)[0] || null; }
   function treeRowTitle(t) {
-    var n = mainNotification(t);
-    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.short : '');
+    var n = treeNotification(t);
+    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.shortText : '');
   }
 
   function renderLeft() {
@@ -605,13 +606,13 @@
         if (open) {
           walk(n.children, level + 1);
           n.trainees.forEach(function (t) {
-            var n = mainNotification(t);
+            var n = treeNotification(t);
             out.push('<div class="tree-row tree-trainee' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" role="treeitem" tabindex="0"' +
               ' data-action="selectTrainee" data-id="' + t.id + '" style="padding-left:' + (8 + (level + 1) * 14) + 'px" title="' + esc(treeRowTitle(t)) + '">' +
               '<span class="tree-arrow"></span>' +
               '<span class="tree-name grow"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
-              (n ? '<span class="tree-marker c-' + n.tone + '" aria-label="' + esc(TONE_TITLES[n.tone] + ': ' + n.short) + '"' +
-                a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.tone]) + '</span>' : '') + '</div>');
+              (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
+                a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</div>');
           });
         }
       });
@@ -649,7 +650,7 @@
   // Сводная таблица (фаза 7, раздел 3)
   var TONE_RANK = { danger: 0, warning: 1, info: 2 };
   // Важность главного уведомления: danger → warning → info → нет уведомлений
-  function actionRank(t) { var n = mainNotification(t); return n ? TONE_RANK[n.tone] : 3; }
+  function actionRank(t) { var n = getNotifications(t)[0]; return n ? TONE_RANK[n.severity] : 3; }
   // Дата колонки «Срок»: выход — для found, дата закрытия — для closed, иначе окончание
   function summaryDate(t) {
     if (t.stage === 'found') return t.startDate;
@@ -682,11 +683,11 @@
     var list = getNotifications(t);
     if (!list.length) return '';
     var n = list[0];
-    return '<div class="row gap-1 top ' + ACTION_COLORS[n.tone] + '">' +
-        '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.tone]) + '</span>' +
-        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.short) + '</span></div>' +
+    return '<div class="row gap-1 top ' + ACTION_COLORS[n.severity] + '">' +
+        '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
+        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.shortText) + '</span></div>' +
       (list.length > 1 ? '<div class="muted text-s action-more"' + a1c('Надпись', 'ТаблицаСтажеровЕщеУведомлений') + ' title="' +
-        esc(list.slice(1).map(function (x) { return x.short; }).join('; ')) + '">ещё ' +
+        esc(list.slice(1).map(function (x) { return x.shortText; }).join('; ')) + '">ещё ' +
         pluralN(list.length - 1, ['уведомление', 'уведомления', 'уведомлений']) + '</div>' : '');
   }
   // «Задачи»: нет АП / количество задач / полоса с процентом и просрочкой
@@ -790,10 +791,11 @@
   function isClosed(t) { return t.stage === 'closed'; }
 
   function renderTraineeCard(t) {
-    return '<div class="col gap-3 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
+    // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажёры», карточка, блок процесса, вкладки
+    return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
       '<div class="row">' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) + '</div>' +
       renderHeader(t) +
-      renderNextStepRow(t) +
+      renderProcess(t) +
       renderTraineePages(t) +
       '</div>';
   }
@@ -809,57 +811,55 @@
     });
   }
 
-  // Карточка стажёра (фаза 8, раздел 2): одна рамка, сверху — имя, ответственные, сроки; снизу — степпер
+  // Карточка стажёра (фаза 9, раздел 3.2): только данные о человеке и стажировке, единственный блок с рамкой
   function renderHeader(t) {
     var st = statsOf(t);
     var right = '<div class="tcard-line"' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</div>';
     function bar(label, pct, text, name, textName) {
-      return '<div class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
-        '<span class="tcard-lbl muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
+      return '<span class="row tcard-bar"' + a1c('ГруппаГоризонтальная', 'Группа' + name) + '>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияПодпись' + name) + '>' + label + '</span>' +
         indicator(pct, 'Индикатор' + name) +
-        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></div>';
+        '<span' + a1c('Надпись', textName) + '>' + esc(text) + '</span></span>';
     }
     if (isClosed(t)) {
       var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
-      right += '<div class="tcard-line bold"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
+      right += '<div class="tcard-line"' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
         (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</div>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
-      right += '<div class="tcard-line bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+      right += '<div class="tcard-line' + (ds <= 3 ? ' c-warning' : '') + '"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
         (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</div>';
     } else {
-      right += bar('Срок', timePct(t), 'день ' + dayNo(t) + ' из ' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
-        (st ? bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') : '');
-      // Вывод — только при отклонении от графика
-      if (lag(t)) right += '<div class="tcard-line c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Отстаёт от графика</div>';
-      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) right += '<div class="tcard-line muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Опережает график</div>';
+      // Две компактные полосы в строку; при нехватке места «Задачи» переносятся третьей строкой
+      var dev = '';
+      if (lag(t)) dev = '<span class="c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, отстаёт от графика</span>';
+      else if (st && st.pct - timePct(t) > D.LAG_THRESHOLD) dev = '<span class="muted"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>, опережает график</span>';
+      right += '<div class="row tcard-bars"' + a1c('ГруппаГоризонтальная', 'ГруппаПолосы') + '>' +
+        bar('Срок', timePct(t), dayNo(t) + '/' + totalDays(t), 'Срок', 'ДекорацияСрокДень') +
+        (st ? '<span class="row gap-0">' + bar('Задачи', st.pct, st.pct + '%', 'Задачи', 'ДекорацияЗадачиПроцент') + dev + '</span>' : '') +
+        '</div>';
     }
 
-    return '<div class="panel tcard"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажераШапка') + '>' +
-      '<div class="row top tcard-top"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаСтажера') + '>' +
-        // 1. Аватар и имя
-        '<div class="row top gap-2 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
-          '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
-          '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
-            '<div class="text-xl bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-            '<div class="muted"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
-          '</div>' +
+    return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка') + '>' +
+      // 1. Аватар, ФИО и должность
+      '<div class="row gap-3 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
+        '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
+        '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
+          '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
+          '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
         '</div>' +
-        // 2. Наставник и руководитель — сразу после имени
-        '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
-          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
-          '<div class="tcard-line"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
-        '</div>' +
-        '<span class="grow"></span>' +
-        // 3. Даты и полосы — прижаты вправо
-        '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
       '</div>' +
-      '<div class="tcard-sep"></div>' +
-      renderStepper(t) +
+      // 2. Наставник и руководитель
+      '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
+        '<div class="tcard-line" title="' + esc('Наставник: ' + user(t.mentorId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
+        '<div class="tcard-line" title="' + esc('Руководитель: ' + user(t.headId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
+      '</div>' +
+      // 3. Даты и вторая строка по этапу — прижаты вправо
+      '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' + right + '</div>' +
       '</div>';
   }
 
-  // Степпер этапов внутри карточки. Подписи: текущий шаг — «с даты» (для found — «выход»),
+  // Степпер этапов (блок процесса). Подписи: текущий шаг — «с даты» (для found — «выход»),
   // «Закрытие» в будущем при active — дата доступности закрытия, «Закрыта» — дата закрытия или отмены
   function renderStepper(t) {
     var cur = stageIndex(t.stage);
@@ -877,58 +877,52 @@
           '<span class="step-mark">' + (state_ === 'done' ? icon('check') : (i + 1)) + '</span>' +
           '<span class="col gap-0 step-text"><span class="step-title">' + esc(s.title) + '</span>' +
           (sub ? '<span class="step-sub muted">' + esc(sub) + '</span>' : '') +
-          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line' + (state_ === 'done' ? ' done' : '') + '"></span>' : '');
+          '</span></div>' + (i < STAGES.length - 1 ? '<span class="step-line"></span>' : '');
       }).join('') + '</div></div>';
   }
 
-  var NOTE_ICONS = { danger: 'alert', warning: 'clock', info: 'info' };
-  // Уведомления с действием меняют данные; остальные — навигационные (кнопка только переключает вид)
-  var ACTION_NOTES = ['createProgram', 'sendToApproval', 'startClosing'];
-  function isActionNote(n) { return ACTION_NOTES.indexOf(n.action) >= 0; }
+  // Что делает кнопка action-уведомления
+  var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
+    changed_after_approval: 'sendToApproval', close_soon: 'startClosing' };
+  function noteActionOf(t, n) {
+    return n.id === 'stage_action' ? (t.stage === 'closing' ? 'startClosing' : 'sendToApproval') : NOTE_ACTION[n.id];
+  }
 
-  // Главное действие этапа, если уведомления с действием нет (решение 2 фазы 8)
+  // Главное действие этапа, если среди уведомлений блока процесса нет action (решение 2 фазы 9).
+  // Не уведомление: в дерево, счётчики и сводную не попадает.
   function stageFallbackStep(t) {
     var program = programOf(t);
     if ((t.stage === 'draft' || t.stage === 'found') && program) {
-      return { key: 'stageAction', tone: 'info', text: 'Черновик АП готов к отправке на согласование',
-        button: 'Отправить на согласование', action: 'sendToApproval' };
+      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Черновик АП готов к отправке на согласование',
+        buttonText: 'Отправить на согласование' };
     }
     if (t.stage === 'closing') {
-      return { key: 'stageAction', tone: 'info', text: 'Стажировка на этапе закрытия',
-        button: 'Начать закрытие стажировки', action: 'startClosing' };
+      return { id: 'stage_action', severity: 'info', kind: 'action', text: 'Стажировка на этапе закрытия',
+        buttonText: 'Начать закрытие стажировки' };
     }
     return null;
   }
 
-  // Следующий шаг (фаза 8, раздел 3.1): главное уведомление и остальные
-  function getNextStep(t) {
-    var list = getNotifications(t);
-    var main = null;
-    if (t.stage === 'approval') main = list.filter(function (n) { return n.key === 'onApproval'; })[0] || null;
-    if (!main) main = list.filter(isActionNote)[0] || null;
-    if (!main) main = stageFallbackStep(t);
-    if (!main) main = list[0] || null;
-    return { main: main, rest: list.filter(function (n) { return n !== main; }) };
+  // Навигационное уведомление, ведущее туда, где пользователь уже находится, в блоке процесса не показывается (раздел 2.3)
+  var TARGET_TAB = { prep: 'prepare', program: 'program' };
+  var TARGET_FILTER = { overdue: 'overdue', in_progress: 'progress' };
+  function leadsToCurrentView(n) {
+    if (n.kind !== 'navigation' || !n.target) return false;
+    if (TARGET_TAB[n.target.tab] !== state.traineeTab) return false;
+    return !n.target.filter || TARGET_FILTER[n.target.filter] === state.taskFilter;
+  }
+  // Уведомления блока процесса: без скрытых по 2.3; без action — первым главное действие этапа
+  function processNotifications(t) {
+    var list = getNotifications(t).filter(function (n) { return !leadsToCurrentView(n); });
+    if (!list.some(function (n) { return n.kind === 'action'; })) {
+      var f = stageFallbackStep(t);
+      if (f) list.unshift(f);
+    }
+    return list;
   }
 
-  // Строка следующего шага: слева — главное уведомление с кнопкой, справа — второстепенные действия
-  function renderNextStepRow(t) {
-    var step = getNextStep(t);
-    var m = step.main;
-    var left = '';
-    if (m) {
-      var primary = isActionNote(m);
-      left = '<div class="next-step note-' + m.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаСледующийШаг') + '>' +
-        '<span class="tone-' + m.tone + '"' + a1c('Картинка', 'КартинкаСледующийШаг') + '>' + icon(NOTE_ICONS[m.tone]) + '</span>' +
-        '<span class="next-step-text" title="' + esc(m.text) + '"' + a1c('Надпись', 'ДекорацияСледующийШаг') + '>' + esc(m.text) + '</span>' +
-        (m.button ? button(primary ? m.button : 'Показать', { cls: primary ? 'btn-primary' : '', action: 'noteAction', data: { key: m.key },
-          name: 'КнопкаСледующийШаг' }) : '') +
-        (step.rest.length ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + step.rest.length, { action: 'toggleNotes',
-          title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '') +
-        '</div>';
-    }
-
-    // Правая часть: позиция не зависит от левой
+  // Второстепенные действия стажировки (состав — фаза 8, 3.2): справа на первой строке блока процесса
+  function renderTraineeActions(t) {
     var program = programOf(t);
     var s_ = t.stage;
     var parts = [];
@@ -944,29 +938,44 @@
       if (menuItems.length) menuItems.push('<div class="menu-sep"></div>');
       menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
     }
-    var right = '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
+    return '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
       parts.join('') +
       (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
       button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
         title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправка' }) +
       '</div>';
+  }
 
-    // «ещё N» раскрывает под строкой группу с остальными уведомлениями — одна строка на уведомление
-    var more = step.rest.length && state.notesExpanded
-      ? '<div class="col gap-1 more-notes"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' +
-        step.rest.map(function (n) {
-          return '<div class="more-note note-' + n.tone + '"' + a1c('ГруппаГоризонтальная', 'ГруппаУведомление' + n1c(n.key)) + '>' +
-            '<span class="tone-' + n.tone + '"' + a1c('Картинка', 'КартинкаУведомление' + n1c(n.key)) + '>' + icon(NOTE_ICONS[n.tone]) + '</span>' +
-            '<span class="grow"' + a1c('Надпись', 'ДекорацияУведомление' + n1c(n.key)) + '>' + esc(n.text) + '</span>' +
-            (n.button ? button(isActionNote(n) ? n.button : 'Показать', { cls: 'btn-small-text', action: 'noteAction', data: { key: n.key },
-              name: 'КнопкаУведомление' + n1c(n.key) }) : '') +
-            '</div>';
-        }).join('') + '</div>'
-      : '';
-
-    return '<div class="col gap-1"' + a1c('ГруппаВертикальная', 'ГруппаСледующийШагИДействия') + '>' +
-      '<div class="row next-step-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаСледующегоШага') + '>' + left + right + '</div>' +
-      more + '</div>';
+  // Блок процесса (фаза 9, раздел 3.3): без рамки и фона. Степпер; через 8px — строки уведомлений.
+  // Видны первые две строки; основная кнопка — у первого action среди видимых строк; «ещё N» — в конце второй строки.
+  // В 1С строки — заранее созданные группы-слоты ГруппаСтрокаУведомления1…N, содержимое задаётся программно.
+  var NOTES_VISIBLE = 2;
+  function renderProcess(t) {
+    var list = processNotifications(t);
+    var hidden = Math.max(0, list.length - NOTES_VISIBLE);
+    var shown = state.notesExpanded ? list : list.slice(0, NOTES_VISIBLE);
+    var primary = shown.filter(function (n) { return n.kind === 'action'; })[0] || null;
+    function row(n, i) {
+      var k = i + 1;
+      var more = i === NOTES_VISIBLE - 1 && hidden ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + hidden, { action: 'toggleNotes',
+        title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '';
+      return '<div class="row note-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаУведомления' + k) + '>' +
+        '<span class="note-icon c-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомления' + k) + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
+        '<span class="note-text" title="' + esc(n.text) + '"' + a1c('Надпись', 'ДекорацияУведомления' + k) + '>' + esc(n.text) + '</span>' +
+        button(n.buttonText, { cls: n === primary ? 'btn-primary' : '', action: 'noteAction', data: { key: n.id }, name: 'КнопкаУведомления' + k }) +
+        more + '</div>';
+    }
+    var rows = shown.map(row);
+    return '<div class="col gap-2 process"' + a1c('ГруппаВертикальная', 'ГруппаПроцесс') + '>' +
+      renderStepper(t) +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаУведомленияИДействия') + '>' +
+        '<div class="row process-first"' + a1c('ГруппаГоризонтальная', 'ГруппаПерваяСтрокаПроцесса') + '>' +
+          (rows[0] || '<span class="grow"></span>') + renderTraineeActions(t) +
+        '</div>' +
+        (rows[1] || '') +
+        (rows.length > NOTES_VISIBLE ? '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОстальныеУведомления') + '>' + rows.slice(NOTES_VISIBLE).join('') + '</div>' : '') +
+      '</div>' +
+      '</div>';
   }
 
   function menuItem(text, action, data, name, cls) {
@@ -1021,7 +1030,7 @@
     } else {
       body = renderPrepareTab(t);
     }
-    return '<div class="col gap-3"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
+    return '<div class="col gap-4"' + a1c('Страницы', 'СтраницыСтажера') + '>' +
       '<div class="tabs">' + tabs.map(function (x) {
         // Цветной текст в заголовке страницы в 1С не штатный — статус передаётся картинкой страницы
         var pic = x.pic ? '<span class="tab-pic ' + x.pic.cls + '" title="' + esc(x.pic.title) + '"' +
@@ -1118,8 +1127,9 @@
     syncTaskFilter(all);
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
       renderDefaultsRow(t, program) +
-      (lock ? '<div class="note note-' + (t.stage === 'approval' ? 'info' : 'neutral') + '"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
-        '<span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
+      // Запрет редактирования — строка без заливки (фаза 9, 4.x): иконка и серый текст
+      (lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
+        '<span class="note-icon c-info">' + icon('info') + '</span><span class="muted"' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
       renderTaskCommandBar(t, all) +
       renderTaskTable(t, all) +
       '</div>';
@@ -1162,7 +1172,7 @@
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
       (sel ? '<span class="grow"></span>' +
         '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
-          '<span class="bold"' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
             menuItem('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего'),
             menuItem('Наблюдатели', 'openDialog', { dialog: 'massObservers' }, 'КнопкаНаблюдатели'),
@@ -1292,7 +1302,7 @@
     var ds = daysToStart(t);
     function option(title, text, extra, btnText, dialog, name) {
       return '<div class="panel col gap-2 create-option"' + a1c('ГруппаВертикальная', 'ГруппаСоздание' + name) + '>' +
-        '<div class="bold"' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
+        '<div' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
         '<div class="muted grow"' + a1c('Надпись', 'ДекорацияСоздание' + name + 'Пояснение') + '>' + esc(text) + '</div>' +
         (extra || '') +
         '<div>' + button(btnText, { action: 'openDialog', data: { dialog: dialog }, name: 'КнопкаСоздание' + name }) + '</div>' +
@@ -1383,12 +1393,12 @@
 
     var summary = '<div class="panel row gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаСводкаПодготовки') + '>' +
       '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаДоВыхода') + '>' +
-        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
-          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
-          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl bold"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
+        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
+          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
+          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
       '</div>' +
       '<div class="col gap-1 grow prepare-progress"' + a1c('ГруппаВертикальная', 'ГруппаГотовность') + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: <b>' + done + ' из ' + all.length + '</b></span>' +
+        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: ' + done + ' из ' + all.length + '</span>' +
         '<div class="indicator-wrap">' + indicator(all.length ? done / all.length * 100 : 0, 'ИндикаторГотовность', 'success') + '</div>' +
       '</div>' +
       '</div>';
@@ -1408,7 +1418,7 @@
       '</div>';
 
     var filterLine = state.checklistFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЧекЛиста') + '>' +
-      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: <b>Просрочено</b></span>' +
+      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: Просрочено</span>' +
       button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'clFilter', name: 'КнопкаСброситьФильтрЧекЛиста' }) + '</div>' : '';
 
     var body;
@@ -1431,7 +1441,7 @@
         ' title="Сортировать по сроку"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовкиСортировкаСрок') + '>Срок' + (sortOn ? (sortOn > 0 ? ' ▲' : ' ▼') : '') + '</button></th>' +
       '<th>Статус</th><th>Действие</th></tr></thead><tbody>' + body + '</tbody></table></div>';
 
-    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
   }
 
   function checklistRow(t, c, lock, sel) {
@@ -1633,7 +1643,7 @@
       title: 'Начать закрытие стажировки', form: 'ФормаЗакрытиеСтажировки', submit: 'Начать закрытие стажировки',
       body: function (t) {
         var st = statsOf(t) || { done: 0, total: 0, overdue: 0 };
-        return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: <b>' + st.done + ' из ' + st.total + '</b>' +
+        return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: ' + st.done + ' из ' + st.total +
           (st.overdue ? ', просрочено: <b class="danger-text">' + st.overdue + '</b>' : ', просроченных нет') + '</div>' +
           field('Результат', choice('result', 'ПолеРезультатСтажировки', [
             { value: 'passed', text: 'Стажировка пройдена', name: 'Пройдена' },
@@ -1772,7 +1782,7 @@
             a1c('ПолеВвода', 'ТаблицаСсылкиКомментарий') + '>') + '</td></tr>';
     }).join('');
     return '<div class="col gap-2 tf-links"' + a1c('ГруппаВертикальная', 'ГруппаСсылкиДляОзнакомления') + '>' +
-      '<div class="bold"' + a1c('Надпись', 'ДекорацияСсылкиДляОзнакомления') + '>Ссылки для ознакомления</div>' +
+      '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияСсылкиДляОзнакомления') + '>Ссылки для ознакомления</div>' +
       (ro_ ? '' : '<div class="row tf-links-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельСсылки') + '>' +
         button('Создать', { cls: 'btn-flat', icon: 'plus', action: 'linkAdd', name: 'КнопкаСоздатьСсылку' }) +
         button('Удалить', { cls: 'btn-flat', action: 'linkDelete', disabled: !sel, title: sel ? '' : 'Отметьте ссылки флажками', name: 'КнопкаУдалитьСсылки' }) + '</div>') +
@@ -2410,24 +2420,27 @@
     toggleNotes: function () { state.notesExpanded = !state.notesExpanded; renderCenter(); },
     noteAction: function (btn) {
       var t = trainee(state.selectedTraineeId);
-      var key = btn.getAttribute('data-key');
-      var n = key === 'stageAction' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.key === key; })[0];
+      var id = btn.getAttribute('data-key');
+      var n = id === 'stage_action' ? stageFallbackStep(t) : getNotifications(t).filter(function (x) { return x.id === id; })[0];
       if (!n) return;
-      if (n.action === 'createProgram') actions.createProgram();
-      else if (n.action === 'sendToApproval') openDialog('sendToApproval', t.id);
-      else if (n.action === 'startClosing') openDialog('close', t.id);
-      else if (n.action === 'showTasksOverdue' || n.action === 'showTasksUndone') {
-        state.traineeTab = 'program';
+      if (n.kind === 'action') {
+        var a = noteActionOf(t, n);
+        if (a === 'createProgram') actions.createProgram();
+        else if (a === 'sendToApproval') openDialog('sendToApproval', t.id);
+        else if (a === 'startClosing') openDialog('close', t.id);
+        return;
+      }
+      // navigation: переключить вид на target — вкладку и, для задач, тумблер статусов
+      state.traineeTab = TARGET_TAB[n.target.tab];
+      if (n.target.tab === 'program') {
         state.selectedTasks = {};
         state.collapsedBlocks = {};
-        state.taskFilter = n.action === 'showTasksOverdue' ? 'overdue' : 'progress'; // отставание — «В работе»
-        renderCenter();
-      } else if (n.action === 'showChecklistOverdue') {
-        state.traineeTab = 'prepare';
+        state.taskFilter = n.target.filter ? TARGET_FILTER[n.target.filter] : null;
+      } else {
         state.checklistMode = 'all';
         state.checklistFilter = 'overdue';
-        renderCenter();
       }
+      renderCenter();
     },
     createProgram: function () {
       state.traineeTab = 'program';
@@ -2746,10 +2759,13 @@
       taskPct: taskPct(t), timePct: timePct(t), overdue: s ? s.overdue : 0, lag: lag(t),
       day: 'день ' + dayNo(t) + ' из ' + totalDays(t),
       daysToStart: daysToStart(t), daysToEnd: daysToEnd(t),
-      notifications: getNotifications(t).map(function (n) { return n.tone + ': ' + n.text; })
+      notifications: getNotifications(t).map(function (n) { return n.severity + ': ' + n.text; })
     };
   };
   window.plural = plural;
+  // НЕ_ПЕРЕНОСИТЬ: уведомления стажёра с полями раздела 2.1 фазы 9 и перерисовка после правки DATA из консоли
+  window.getNotifications = function (id) { return getNotifications(trainee(id)); };
+  window.rerender = function () { render(); };
 
   // НЕ_ПЕРЕНОСИТЬ: элементы без атрибутов соответствия 1С (раздел 7.9)
   window.check1c = function () {
