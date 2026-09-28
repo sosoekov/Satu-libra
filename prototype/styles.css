@@ -594,3 +594,4 @@ body.markup-1c table[data-1c]::before {
 .task-bar { border-bottom: none; padding-bottom: 0; }
 .task-table thead th { padding-top: 5px; padding-bottom: 5px; }
 @media (max-width: 1500px) { .task-table .w-person, .task-table .w-observers { width: 13%; } }
+.lock-note { min-height: 24px; gap: var(--sp-2); flex-wrap: nowrap; }

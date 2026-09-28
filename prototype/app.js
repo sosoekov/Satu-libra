@@ -1127,8 +1127,9 @@
     syncTaskFilter(all);
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
       renderDefaultsRow(t, program) +
-      (lock ? '<div class="note note-' + (t.stage === 'approval' ? 'info' : 'neutral') + '"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
-        '<span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
+      // Запрет редактирования — строка без заливки (фаза 9, 4.x): иконка и серый текст
+      (lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
+        '<span class="note-icon c-info">' + icon('info') + '</span><span class="muted"' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
       renderTaskCommandBar(t, all) +
       renderTaskTable(t, all) +
       '</div>';
