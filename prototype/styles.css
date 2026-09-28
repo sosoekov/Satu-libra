@@ -589,7 +589,6 @@ body.markup-1c table[data-1c]::before {
 .c-success { color: var(--c-success); }
 
 /* Фаза 8.4: вкладка «Адаптационная программа» */
-.defaults-row { min-height: 24px; }
 .toggle button.tv-danger:not(.on) { color: var(--c-danger); }
 .toggle button.tv-danger.on { background: var(--c-bg-selected); color: var(--c-danger); }
 .task-table tr.task-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }

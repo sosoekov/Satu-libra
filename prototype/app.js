@@ -1090,8 +1090,19 @@
     return Object.keys(state.selectedTasks).filter(function (id) { return state.selectedTasks[id] && ids.indexOf(id) >= 0; });
   }
   function taskById(id) { return byId(D.tasks, id); }
-  function reviewerOf(program, task) { return task.reviewerId || program.defaultReviewerId; }
-  function observersOf(program, task) { return task.observerIds.length ? task.observerIds : program.defaultObserverIds; }
+  // Проверяющего и наблюдателей по умолчанию нет (FT_6): у задачи — только свои значения.
+  // Ответственный за подразделение — ближайший заданный вверх по иерархии
+  function deptResponsible(deptId) {
+    var d = dept(deptId);
+    while (d && !d.responsibleId) d = d.parentId ? dept(d.parentId) : null;
+    return d ? d.responsibleId : null;
+  }
+  // Наблюдатели новой задачи: руководитель стажировки, наставник, HR-менеджер, ответственный за подразделение
+  function newTaskObservers(t) {
+    var list = [];
+    [t.headId, t.mentorId, D.HR_ID, deptResponsible(t.departmentId)].forEach(function (id) { if (id && list.indexOf(id) < 0) list.push(id); });
+    return list;
+  }
 
   // ФИО через запятую; если больше max — «ФИО и ещё N» (фаза 8, раздел 5)
   function namesBrief(ids, max) {
@@ -1119,7 +1130,6 @@
     var lock = editLock(t);
     syncTaskFilter(all);
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
-      renderDefaultsRow(t, program) +
       // Запрет редактирования — строка без заливки (фаза 9, 4.x): иконка и серый текст
       (lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретРедактирования') + '>' +
         '<span class="note-icon c-info">' + icon('info') + '</span><span class="muted"' + a1c('Надпись', 'ДекорацияЗапретРедактирования') + '>' + esc(lock) + '</span></div>' : '') +
@@ -1128,26 +1138,6 @@
       '</div>';
   }
 
-  // Строка умолчаний (8.4, 5.1): проверяющий и наблюдатели по умолчанию, «Изменить»
-  function renderDefaultsRow(t, program) {
-    var lock = editLock(t);
-    var rev = program.defaultReviewerId;
-    var obs = program.defaultObserverIds || [];
-    var edit = isClosed(t) ? '' : link(rev ? 'Изменить' : 'Назначить', {
-      action: 'openDialog', data: { dialog: 'reviewers' }, disabled: !!lock,
-      title: lock || 'Проверяющий и наблюдатели по умолчанию для задач АП', name: 'ГиперссылкаИзменитьУмолчания'
-    });
-    return '<div class="row wrap gap-5 defaults-row"' + a1c('ГруппаГоризонтальная', 'ГруппаУмолчания') + '>' +
-      (rev
-        ? '<span class="row gap-1"><span class="muted"' + a1c('Надпись', 'ДекорацияПроверяющийПоУмолчаниюЗаголовок') + '>Проверяющий по умолчанию:</span>' +
-          '<span' + a1c('Надпись', 'ДекорацияПроверяющийПоУмолчанию') + '>' + esc(userName(rev)) + '</span></span>'
-        : '<span class="c-warning"' + a1c('Надпись', 'ДекорацияПроверяющийНеНазначен') + '>Проверяющий по умолчанию не назначен</span>') +
-      '<span class="row gap-1"><span class="muted"' + a1c('Надпись', 'ДекорацияНаблюдателиПоУмолчаниюЗаголовок') + '>Наблюдатели по умолчанию:</span>' +
-        '<span' + (obs.length > 2 ? ' title="' + esc(namesOf(obs)) + '"' : '') + a1c('Надпись', 'ДекорацияНаблюдателиПоУмолчанию') + '>' +
-          (obs.length ? esc(namesBrief(obs, 2)) : '<span class="muted">не назначены</span>') + '</span></span>' +
-      edit +
-      '</div>';
-  }
 
   // Командная панель таблицы (8.4, 5.2): тумблер статусов, «Добавить», действия с выбранными
   function renderTaskCommandBar(t, all) {
@@ -1234,20 +1224,19 @@
           (ids.length && selCount === ids.length ? ' checked' : '') + (ids.length ? '' : ' disabled') +
           (selCount && selCount < ids.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаЗадачАПВыбратьВсе') + '></th>' : '') +
         '<th>Задача</th>' + thSort('Статус', 'status') + thSort('Срок', 'deadline') +
-        '<th title="Пусто — проверяющий по умолчанию">Проверяющий</th><th title="Пусто — наблюдатели по умолчанию">Наблюдатели</th><th>Результат</th><th></th>' +
+        '<th>Проверяющий</th><th>Наблюдатели</th><th>Результат</th><th></th>' +
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
-  // Строка задачи: проверяющий и наблюдатели — только если отличаются от умолчаний (8.4, 5.4)
+  // Строка задачи: проверяющий и наблюдатели задачи
   function taskRow(t, program, x, selectable) {
     var v = viewStatus(x);
     var sm = STATUS_META[v];
     var selected = !!state.selectedTasks[x.id];
     var late = v === 'overdue' ? diffDays(x.deadline, D.TODAY) : 0;
-    var rev = x.reviewerId && x.reviewerId !== program.defaultReviewerId
-      ? '<span title="' + esc(userName(x.reviewerId)) + '">' + esc(userName(x.reviewerId)) + '</span>' : '';
-    var obs = x.observerIds.length && !sameIds(x.observerIds, program.defaultObserverIds || [])
-      ? '<span title="' + esc(namesOf(x.observerIds)) + '">' + esc(namesBrief(x.observerIds, 1)) + '</span>' : '';
+    // Проверяющий и наблюдатели задачи (FT_6: умолчаний нет — пусто, если не назначены)
+    var rev = x.reviewerId ? '<span title="' + esc(userName(x.reviewerId)) + '">' + esc(userName(x.reviewerId)) + '</span>' : '';
+    var obs = x.observerIds.length ? '<span title="' + esc(namesOf(x.observerIds)) + '">' + esc(namesBrief(x.observerIds, 1)) + '</span>' : '';
     return '<tr class="task-row' + (selected ? ' selected' : '') + '" data-task-id="' + x.id + '" title="Двойной клик — открыть карточку задачи">' +
       (selectable ? '<td><input type="checkbox" data-select-task="' + x.id + '"' + (selected ? ' checked' : '') +
         ' title="Выбрать задачу" aria-label="Выбрать задачу «' + esc(x.name) + '»"' + a1c('Флажок', 'ТаблицаЗадачАПВыбрана') + '></td>' : '') +
@@ -1327,10 +1316,10 @@
   function createProgram(t, templateId, historyText, taskSpecs) {
     var program = {
       id: 'pr-' + t.id + '-' + Date.now(), traineeId: t.id, templateId: templateId,
-      defaultReviewerId: t.mentorId, defaultObserverIds: [t.headId], history: []
+      history: []
     };
     D.programs.push(program);
-    taskSpecs.forEach(function (s) { D.tasks.push(newTask(program, s)); });
+    taskSpecs.forEach(function (s) { D.tasks.push(newTask(program, withObservers(t, s))); });
     addHistory(program, historyText);
     setStage(t, 'draft');
     t.draftSince = D.TODAY;
@@ -1342,6 +1331,7 @@
     toast('АП создана');
   }
   var newTaskSeq = 1;
+  function withObservers(t, s) { s.observerIds = newTaskObservers(t); return s; }
   function newTask(program, s) {
     return {
       id: 'task-new-' + (newTaskSeq++), programId: program.id, block: s.block, name: s.name, description: s.description || '',
@@ -1903,12 +1893,14 @@
       var x = ctx.taskId ? taskById(ctx.taskId) : null;
       var tt = ctx.templateId ? templateTaskOf(ctx) : null;
       var links = function (list) { return (list || []).map(function (l) { return { url: l.url, comment: l.comment, sel: false }; }); };
+      // Новая задача и задача шаблона: проверяющий — из шаблона (если есть), наблюдатели — руководитель стажировки, наставник,
+      // HR-менеджер и ответственный за подразделение (FT_6)
       if (tt) return { name: tt.name, block: tt.block, description: tt.description, deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
-        reviewerId: '', obsInherit: true, observers: [], result: '', type: tt.type, required: tt.required, links: links(tt.links) };
+        reviewerId: tt.reviewerId || '', observers: newTaskObservers(t), result: '', type: tt.type, required: tt.required, links: links(tt.links) };
       if (!x) return { name: '', block: 'corp', description: '', deadline: '', status: 'not_started',
-        reviewerId: '', obsInherit: true, observers: [], result: '', type: 'task', required: false, links: [] };
+        reviewerId: '', observers: newTaskObservers(t), result: '', type: 'task', required: false, links: [] };
       return { name: x.name, block: x.block, description: x.description, deadline: x.deadline, status: x.status,
-        reviewerId: x.reviewerId || '', obsInherit: !x.observerIds.length, observers: x.observerIds.slice(), result: x.result || '',
+        reviewerId: x.reviewerId || '', observers: x.observerIds.slice(), result: x.result || '',
         type: x.type || 'task', required: !!x.required, links: links(x.links) };
     },
     body: function (t) {
@@ -1920,18 +1912,17 @@
         ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблона') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаШаблона') + '>' +
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
         : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>' : '';
-      var reviewerId = dlgValue('reviewerId') || program.defaultReviewerId;
-      var obs = dlgValue('obsInherit') ? [] : state.dialog.values.observers;
-      var obsDefault = 'По умолчанию (' + namesOf(program.defaultObserverIds) + ')';
+      var reviewerId = dlgValue('reviewerId');
+      var obs = state.dialog.values.observers;
       var obsText = namesBrief(obs, 2);
-      var obsTitle = obs.length ? obs.map(function (id) { return user(id).fullName; }).join(', ') : obsDefault;
-      // Наблюдатели: поле со списком через запятую, выбор — форма с флажками, «✕» — вернуть «по умолчанию»
+      var obsTitle = obs.length ? namesOf(obs) : 'Наблюдатели не назначены';
+      // Наблюдатели: поле со списком через запятую, выбор — форма с флажками, «✕» — очистить
       var observersField = fromTemplate || dlgRO()
-        ? '<input type="text" class="input grow" disabled value="' + esc(fromTemplate ? 'По умолчанию' : obs.length ? obsText : obsDefault) + '" title="' + esc(obsTitle) + '"' + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>'
+        ? '<input type="text" class="input grow" disabled value="' + esc(obs.length ? obsText : 'Не назначены') + '" title="' + esc(obsTitle) + '"' + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>'
         : '<div class="input obs-field row gap-1" title="' + esc(obsTitle) + '">' +
             '<input type="text" readonly class="obs-text grow' + (obs.length ? '' : ' muted') + '" id="f_observers" data-action="openObserversPicker"' +
-              ' value="' + esc(obs.length ? obsText : '') + '" placeholder="' + esc(obsDefault) + '"' + (e.observers ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>' +
-            (obs.length ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Очистить: наблюдатели по умолчанию', action: 'observersClear', name: 'КнопкаОчиститьНаблюдателей' }) : '') +
+              ' value="' + esc(obs.length ? obsText : '') + '" placeholder="Не назначены"' + (e.observers ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеНаблюдатели') + '>' +
+            (obs.length ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Очистить наблюдателей', action: 'observersClear', name: 'КнопкаОчиститьНаблюдателей' }) : '') +
             button('…', { cls: 'btn-icon btn-flat btn-small', title: 'Выбрать наблюдателей', action: 'openObserversPicker', name: 'КнопкаВыбратьНаблюдателей' }) +
           '</div>';
       return note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
@@ -1942,10 +1933,10 @@
         '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПроверяющийНаблюдатели') + '>' +
           tfField('Проверяющий', '<div class="row gap-2">' +
               (fromTemplate
-                ? '<input type="text" class="input grow" disabled value="Назначается в АП (по умолчанию — наставник)"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
-                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('По умолчанию (' + userName(program.defaultReviewerId) + ')'))) +
-              (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard',
-                title: 'Открыть карточку сотрудника: ' + user(reviewerId).fullName, name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
+                ? '<input type="text" class="input grow" disabled value="' + esc(reviewerId ? userName(reviewerId) : 'Не назначен') + '"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
+                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен'))) +
+              (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
+                title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
             { forId: 'f_reviewerId' }) +
           tfField('Наблюдатели', observersField, { forId: 'f_observers', error: e.observers, name: 'Наблюдатели' }) +
         '</div>' +
@@ -1974,7 +1965,6 @@
       var e = {};
       if (!required(v.name)) e.name = 'Укажите название задачи';
       if (!required(v.deadline)) e.deadline = 'Укажите срок выполнения';
-      if (!v.obsInherit && !(v.observers || []).length) e.observers = 'Выберите наблюдателей или отметьте «Как в АП»';
       if (v.links.some(function (l) { return !required(l.url) && required(l.comment); })) e.links = 'Укажите адрес ссылки или удалите строку';
       return e;
     },
@@ -1982,7 +1972,7 @@
       var program = programOf(t);
       var spec = {
         name: v.name.trim(), block: v.block, description: (v.description || '').trim(), deadline: v.deadline, status: v.status,
-        reviewerId: v.reviewerId || null, observerIds: v.obsInherit ? [] : v.observers.slice(), result: required(v.result) ? v.result.trim() : null,
+        reviewerId: v.reviewerId || null, observerIds: v.observers.slice(), result: required(v.result) ? v.result.trim() : null,
         type: v.type, required: !!v.required,
         links: v.links.filter(function (l) { return required(l.url); }).map(function (l) { return { url: l.url.trim(), comment: (l.comment || '').trim() }; })
       };
@@ -2010,39 +2000,32 @@
     }
   };
 
-  // Выбор наблюдателей задачи: список сотрудников с флажками и поиском; «Как в АП» — наблюдатели по умолчанию
+  // Выбор наблюдателей задачи: список сотрудников с флажками и поиском (FT_6: без «Как в АП» — умолчаний нет)
   DIALOGS.observersPicker = {
     title: 'Выбор наблюдателей', form: 'ФормаВыборНаблюдателей', submit: 'Выбрать',
     init: function (t, ctx) {
       var owner = state.dialogStack[state.dialogStack.length - 1]; // карточка задачи — форма-владелец
-      return { inherit: !!owner.values.obsInherit || !owner.values.observers.length, picked: owner.values.observers.slice(), q: '' };
+      return { picked: owner.values.observers.slice(), q: '' };
     },
     body: function (t) {
-      var program = programOf(t);
       var v = state.dialog.values;
       var q = v.q.trim().toLowerCase();
       var list = D.users.filter(function (u) { return !q || u.fullName.toLowerCase().indexOf(q) >= 0; });
-      return '<label class="check"><input type="checkbox" data-field="inherit" data-rerender="1"' + (v.inherit ? ' checked' : '') +
-          a1c('Флажок', 'ПолеКакВАП') + '> Как в АП (по умолчанию: ' + esc(namesOf(program.defaultObserverIds)) + ')</label>' +
-        '<input type="text" class="input" data-field="q" placeholder="Поиск по ФИО" value="' + esc(v.q) + '"' + (v.inherit ? ' disabled' : '') +
+      return '<input type="text" class="input" data-field="q" placeholder="Поиск по ФИО" value="' + esc(v.q) + '"' +
           ' title="Поиск по ФИО"' + a1c('ПолеВвода', 'ПолеПоискНаблюдателя') + '>' +
-        '<div class="check-list picker-list' + (state.dialog.errors.picked ? ' invalid' : '') + '"' + a1c('ТаблицаФормы', 'ТаблицаВыборНаблюдателей') + '>' +
+        '<div class="check-list picker-list"' + a1c('ТаблицаФормы', 'ТаблицаВыборНаблюдателей') + '>' +
           (list.length ? list.map(function (u) {
-            return '<label class="check' + (v.inherit ? ' muted' : '') + '"><input type="checkbox" data-field-list="picked" value="' + u.id + '"' +
-              (v.picked.indexOf(u.id) >= 0 ? ' checked' : '') + (v.inherit ? ' disabled' : '') + a1c('Флажок', 'ТаблицаВыборНаблюдателейПометка') + '> ' +
+            return '<label class="check"><input type="checkbox" data-field-list="picked" value="' + u.id + '"' +
+              (v.picked.indexOf(u.id) >= 0 ? ' checked' : '') + a1c('Флажок', 'ТаблицаВыборНаблюдателейПометка') + '> ' +
               esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
           }).join('') : '<span class="muted"' + a1c('Надпись', 'ДекорацияНикогоНеНашли') + '>Никого не нашли</span>') +
         '</div>' +
-        (state.dialog.errors.picked ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаВыборНаблюдателей') + '>' + esc(state.dialog.errors.picked) + '</div>' : '') +
-        (!v.inherit && v.picked.length ? '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияВыбраноНаблюдателей') + '>Выбрано: ' + v.picked.length + '</div>' : '');
+        '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияВыбраноНаблюдателей') + '>' + (v.picked.length ? 'Выбрано: ' + v.picked.length : 'Никто не выбран') + '</div>';
     },
-    validate: function (t, v) { return v.inherit || v.picked.length ? {} : { picked: 'Отметьте наблюдателей или включите «Как в АП»' }; },
     // Результат выбора возвращается в карточку задачи (форму-владельца), изменение АП — при её сохранении
     apply: function (t, v) {
       var owner = state.dialogStack[state.dialogStack.length - 1];
-      owner.values.obsInherit = v.inherit;
-      owner.values.observers = v.inherit ? [] : v.picked.slice();
-      delete owner.errors.observers;
+      owner.values.observers = v.picked.slice();
     }
   };
 
@@ -2080,7 +2063,7 @@
       list.forEach(function (x) {
         if (v.mode === 'replace') x.observerIds = v.observers.slice();
         else {
-          var cur = observersOf(program, x).slice();
+          var cur = x.observerIds.slice();
           v.observers.forEach(function (id) { if (cur.indexOf(id) < 0) cur.push(id); });
           x.observerIds = cur;
         }
@@ -2138,37 +2121,6 @@
     }
   };
 
-  DIALOGS.reviewers = {
-    title: 'Проверяющие и наблюдатели', form: 'ФормаПроверяющиеИНаблюдатели', submit: 'Сохранить',
-    init: function (t) {
-      var p = programOf(t);
-      return { reviewerId: p.defaultReviewerId, observers: p.defaultObserverIds.slice(), replaceAll: false };
-    },
-    body: function (t) {
-      return '<p class="dlg-text muted">Применяются к задачам, у которых проверяющий и наблюдатели не заданы явно.</p>' +
-        field('Проверяющий по умолчанию', selectOptions('reviewerId', 'ПолеПроверяющийПоУмолчанию', userOptions()), { required: true, forId: 'f_reviewerId' }) +
-        field('Наблюдатели по умолчанию', userCheckList('observers', 'ТаблицаНаблюдателиПоУмолчанию'),
-          { required: true, error: state.dialog.errors.observers, name: 'НаблюдателиПоУмолчанию' }) +
-        field('', '<label class="check"><input type="checkbox" data-field="replaceAll"' + (dlgValue('replaceAll') ? ' checked' : '') +
-          a1c('Флажок', 'ПолеЗаменитьУЗадачСДругимПроверяющим') + '> Заменить также у задач с другим проверяющим</label>');
-    },
-    validate: function (t, v) { return v.observers.length ? {} : { observers: 'Выберите хотя бы одного наблюдателя' }; },
-    apply: function (t, v) {
-      var p = programOf(t);
-      var changed = [];
-      if (p.defaultReviewerId !== v.reviewerId) changed.push('проверяющий по умолчанию: ' + userName(v.reviewerId));
-      if (!sameList(p.defaultObserverIds, v.observers)) changed.push('наблюдатели по умолчанию: ' + namesOf(v.observers));
-      p.defaultReviewerId = v.reviewerId;
-      p.defaultObserverIds = v.observers.slice();
-      if (v.replaceAll) {
-        var n = 0;
-        tasksOf(p).forEach(function (x) { if (x.reviewerId) { x.reviewerId = null; n++; } });
-        if (n) changed.push('проверяющий заменён у задач: ' + n);
-      }
-      if (changed.length) programChanged(t, 'Изменено: ' + changed.join('; '));
-      toast('Проверяющие и наблюдатели сохранены');
-    }
-  };
 
   // Выбор шаблона для создания АП
   function templateTable(field_, oneC) {
@@ -2188,7 +2140,7 @@
   function templateTasksFor(t, tp) {
     return tp.tasks.map(function (x) {
       return { block: x.block, name: x.name, description: x.description, deadline: addDays(t.startDate, x.offsetDays),
-        type: x.type, required: x.required, links: x.links };
+        type: x.type, required: x.required, links: x.links, reviewerId: x.reviewerId || null };  // проверяющий — из шаблона, если есть
     });
   }
 
@@ -2231,7 +2183,7 @@
     apply: function (t, v) {
       var src = trainee(v.source);
       var specs = tasksOf(programOf(src)).map(function (x) {
-        return { block: x.block, name: x.name, description: x.description,
+        return { block: x.block, name: x.name, description: x.description, reviewerId: x.reviewerId || null,
           deadline: addDays(t.startDate, diffDays(src.startDate, x.deadline)), type: x.type, required: x.required, links: x.links };
       });
       createProgram(t, programOf(src).templateId, 'АП создана копированием у стажёра ' + src.fullName, specs);
@@ -2276,7 +2228,7 @@
       var tp = byId(D.templates, v.template);
       var program = programOf(t);
       var specs = templateTasksFor(t, tp).filter(function (x, i) { return v.picked.indexOf(String(i)) >= 0; });
-      specs.forEach(function (s) { D.tasks.push(newTask(program, s)); });
+      specs.forEach(function (s) { D.tasks.push(newTask(program, withObservers(t, s))); });
       programChanged(t, 'Добавлено задач из шаблона «' + tp.name + '»: ' + specs.length);
       toast('Добавлено задач: ' + specs.length);
     }
@@ -2400,7 +2352,7 @@
   };
 
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
-  var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'reviewers', 'addFromTemplate'];
+  var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
 
   // Диалоги открываются стеком: вложенная форма (например, задача шаблона поверх «Добавить из шаблона»)
   // закрывается и возвращает к форме-владельцу. opts.stack — открыть поверх текущей формы.
@@ -2663,14 +2615,12 @@
       openDialog('observersPicker', state.dialog.traineeId, {}, { stack: true });
     },
     observersClear: function () {
-      state.dialog.values.obsInherit = true;
       state.dialog.values.observers = [];
       renderDialog();
     },
     openLinkUrl: function (btn) { toast('Ссылка откроется в браузере: ' + btn.getAttribute('data-url')); },
     openReviewerCard: function () {
-      var program = programOf(trainee(state.dialog.traineeId));
-      toast('Откроется карточка сотрудника: ' + user(state.dialog.values.reviewerId || program.defaultReviewerId).fullName);
+      if (state.dialog.values.reviewerId) toast('Откроется карточка сотрудника: ' + userName(state.dialog.values.reviewerId));
     },
     openTemplateTask: function (btn) {
       openDialog('task', state.dialog.traineeId, { templateId: state.dialog.values.template, index: Number(btn.getAttribute('data-index')) }, { stack: true });
