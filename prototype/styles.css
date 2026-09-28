@@ -608,3 +608,15 @@ body.markup-1c table[data-1c]::before {
 .tcard-term .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
 .tcard-dates { align-items: flex-start; }
 .tcard-action { flex: 0 0 auto; }
+
+/* ================= Фаза 10.2: блок «Аналитика по адаптационной программе» ================= */
+.analytics { gap: 0; }
+.analytics.open { gap: var(--sp-2); }
+.analytics-head {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 4px; align-self: flex-start;
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--c-primary); font: inherit; font-size: var(--fs-m); font-weight: normal; line-height: 20px;
+}
+.analytics-head:hover { text-decoration: underline; }
+.analytics-arrow { display: inline-flex; width: 16px; justify-content: center; }
+.analytics-list { padding-left: 20px; }

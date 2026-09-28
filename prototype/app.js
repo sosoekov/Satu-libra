@@ -178,7 +178,7 @@
       var dd = diffDays(t.draftSince, D.TODAY);
       list.push({
         id: 'draft_stale', severity: 'warning', kind: 'action',
-        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
+        text: 'АП не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
         shortText: 'Не отправлена на согласование ' + dd + ' дн.',
         buttonText: 'Отправить на согласование'
       });
@@ -217,7 +217,7 @@
           id: 'lag', severity: 'warning', kind: 'navigation',
           text: 'Задачи отстают от графика: выполнено ' + st.pct + '% при прошедших ' + timePct(t) + '% срока',
           shortText: 'Отстаёт от графика',
-          buttonText: 'Показать', target: { tab: 'program', filter: 'in_progress' }
+          buttonText: 'Показать невыполненные', target: { tab: 'program', filter: 'in_progress' }
         });
       }
     }
@@ -225,10 +225,10 @@
     if ((s === 'active' || s === 'closing') && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS) {
       var de = Math.max(0, daysToEnd(t));
       list.push({
-        id: 'close_soon', severity: 'info', kind: 'action',
-        text: 'До окончания стажировки ' + pluralN(de, W_DAYS),
+        id: 'close_soon', severity: 'info', kind: 'navigation',
+        text: 'До окончания стажировки ' + de + ' дн. Пора закрывать стажировку',
         shortText: 'До окончания ' + de + ' дн.',
-        buttonText: 'Начать закрытие стажировки'
+        buttonText: 'Перейти к закрытию', target: { tab: 'closure' }
       });
     }
 
@@ -395,7 +395,7 @@
     summarySort: { key: 'action', dir: 1 },  // по умолчанию — по важности главного уведомления
     summaryCurrent: null,        // текущая строка сводной таблицы (одиночный клик, ↑ ↓)
     summaryFocus: false,         // вернуть фокус текущей строке после перерисовки
-    notesExpanded: false,        // «Ещё N уведомлений» раскрыто
+    analyticsOpen: false,        // блок «Аналитика по адаптационной программе» развёрнут — общий для всех стажёров до перезагрузки
     openMenu: null,              // открытое подменю
     dialog: null,                // открытый диалог (верхний)
     dialogStack: [],             // формы-владельцы под открытым диалогом
@@ -802,7 +802,7 @@
       '<div class="row back-row"' + a1c('ГруппаГоризонтальная', 'ГруппаНавигацияСтажера') + '>' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) +
         '<span class="grow"></span>' + renderTraineeMenu(t) + '</div>' +
       renderHeader(t) +
-      renderProcess(t) +
+      renderAnalytics(t) +
       renderTraineePages(t) +
       '</div>';
   }
@@ -871,19 +871,18 @@
 
   // Что делает кнопка action-уведомления
   var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
-    changed_after_approval: 'sendToApproval', close_soon: 'startClosing' };
+    changed_after_approval: 'sendToApproval' };
   function noteActionOf(t, n) { return NOTE_ACTION[n.id]; }
+  // Вкладка «Закрытие стажировки» (фаза 10, 5.1) — появится в 10.4
+  function hasClosureTab(t) { return false; }
 
-  // Навигационное уведомление, ведущее туда, где пользователь уже находится, в блоке процесса не показывается (раздел 2.3)
-  var TARGET_TAB = { prep: 'prepare', program: 'program' };
+  // Уведомление, ведущее туда, где пользователь уже находится: строка остаётся, кнопка скрывается (фаза 10, 3.3)
+  var TARGET_TAB = { prep: 'prepare', program: 'program', closure: 'closure' };
   var TARGET_FILTER = { overdue: 'overdue', in_progress: 'progress' };
   function leadsToCurrentView(n) {
     if (n.kind !== 'navigation' || !n.target) return false;
     if (TARGET_TAB[n.target.tab] !== state.traineeTab) return false;
     return !n.target.filter || TARGET_FILTER[n.target.filter] === state.taskFilter;
-  }
-  function processNotifications(t) {
-    return getNotifications(t).filter(function (n) { return !leadsToCurrentView(n); });
   }
 
   // Меню ⋮ и справка ? — справа в строке «← Все стажёры» (фаза 10, 2.1)
@@ -905,24 +904,29 @@
       '</div>';
   }
 
-  // Уведомления стажёра: строки 32px, все кнопки обычные (фаза 10: основные действия — во вкладках)
-  var NOTES_VISIBLE = 2;
-  function renderProcess(t) {
-    var list = processNotifications(t);
+  // Блок «Аналитика по адаптационной программе» (фаза 10, раздел 3): сворачиваемая группа без рамки и фона.
+  // N — все уведомления стажёра с кнопкой, без учёта вкладки и фильтров; при N = 0 блока нет. По умолчанию свёрнут,
+  // состояние общее для всех стажёров до перезагрузки. Все кнопки обычные; кнопка уведомления, ведущего в текущий вид, скрыта (3.3).
+  // В 1С — обычная группа с Поведение = Свертываемая, заголовок с числом задаётся кодом; строки — заранее созданные слоты.
+  function renderAnalytics(t) {
+    var list = getNotifications(t);
     if (!list.length) return '';
-    var hidden = Math.max(0, list.length - NOTES_VISIBLE);
-    var shown = state.notesExpanded ? list : list.slice(0, NOTES_VISIBLE);
+    var open = state.analyticsOpen;
     function row(n, i) {
       var k = i + 1;
-      var more = i === NOTES_VISIBLE - 1 && hidden ? link(state.notesExpanded ? 'Скрыть' : 'ещё ' + hidden, { action: 'toggleNotes',
-        title: state.notesExpanded ? 'Скрыть остальные уведомления' : 'Показать остальные уведомления', name: 'ГиперссылкаЕщеУведомления' }) : '';
-      return '<div class="row note-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаУведомления' + k) + '>' +
-        '<span class="note-icon c-' + n.severity + '"' + a1c('Картинка', 'КартинкаУведомления' + k) + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
-        '<span class="note-text" title="' + esc(n.text) + '"' + a1c('Надпись', 'ДекорацияУведомления' + k) + '>' + esc(n.text) + '</span>' +
-        button(n.buttonText, { action: 'noteAction', data: { key: n.id }, name: 'КнопкаУведомления' + k }) +
-        more + '</div>';
+      return '<div class="row note-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаАналитики' + k) + '>' +
+        '<span class="note-icon c-' + n.severity + '"' + a1c('Картинка', 'КартинкаАналитики' + k) + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
+        '<span class="note-text" title="' + esc(n.text) + '"' + a1c('Надпись', 'ДекорацияАналитики' + k) + '>' + esc(n.text) + '</span>' +
+        (leadsToCurrentView(n) ? '' : button(n.buttonText, { action: 'noteAction', data: { key: n.id }, name: 'КнопкаАналитики' + k })) +
+        '</div>';
     }
-    return '<div class="col gap-0 process"' + a1c('ГруппаВертикальная', 'ГруппаПроцесс') + '>' + shown.map(row).join('') + '</div>';
+    return '<div class="col analytics' + (open ? ' open' : '') + '"' + a1c('ГруппаВертикальная', 'ГруппаАналитика') + '>' +
+      '<button type="button" class="analytics-head" data-action="toggleAnalytics" aria-expanded="' + open + '"' +
+        ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' + a1c('ЗаголовокГруппы', 'ГруппаАналитикаЗаголовок') + '>' +
+        '<span class="analytics-arrow">' + icon(open ? 'chevronDown' : 'chevronRight') + '</span>' +
+        '<span>Аналитика по адаптационной программе (' + list.length + ')</span></button>' +
+      (open ? '<div class="col gap-0 analytics-list"' + a1c('ГруппаВертикальная', 'ГруппаСписокАналитики') + '>' + list.map(row).join('') + '</div>' : '') +
+      '</div>';
   }
 
   function menuItem(text, action, data, name, cls) {
@@ -2276,7 +2280,6 @@
     var t = trainee(id);
     state.selectedTraineeId = id;
     state.traineeTab = t.stage === 'found' ? 'prepare' : 'program';
-    state.notesExpanded = false;
     state.taskFilter = null;
     state.openMenu = null;
     state.taskSort = { key: null, dir: 1 };
@@ -2339,7 +2342,7 @@
     },
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
     openHelp: function () { toast('Инструкция откроется в базе знаний'); },
-    toggleNotes: function () { state.notesExpanded = !state.notesExpanded; renderCenter(); },
+    toggleAnalytics: function () { state.analyticsOpen = !state.analyticsOpen; renderCenter(); },
     noteAction: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var id = btn.getAttribute('data-key');
@@ -2353,6 +2356,7 @@
         return;
       }
       // navigation: переключить вид на target — вкладку и, для задач, тумблер статусов
+      if (n.target.tab === 'closure' && !hasClosureTab(t)) { openDialog('close', t.id); return; }  // до вкладки закрытия (10.4) — прежний диалог
       state.traineeTab = TARGET_TAB[n.target.tab];
       if (n.target.tab === 'program') {
         state.selectedTasks = {};
