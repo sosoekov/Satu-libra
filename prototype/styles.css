@@ -97,7 +97,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: var(--sp-5) var(--sp-5) 0;
 }
 .window-title { font-size: var(--fs-xl); margin: 0; font-weight: normal; }
-.window-tools { gap: var(--sp-2); }
+.window-tools { gap: var(--sp-2); flex: 0 0 auto; }  /* фаза 9, 8.1: кнопки окна прижаты вправо и не сжимаются */
+.window-head-row { flex-wrap: nowrap; min-width: 0; }
+.window-head-row .window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .form-tool {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 50%;
@@ -258,7 +260,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Фаза 8.5: в строке заголовка формы, слева от ⟳ ⋮; меню этапов раскрывается вниз */
 .demo-dock { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); flex: 0 1 auto; min-width: 0; }
 .demo-dock > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
-.demo-btn { max-width: 100%; }
+.demo-btn { max-width: 240px; min-width: 0; }  /* фаза 9, 8.1 */
 .demo-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-btn { border-style: dashed; }
 

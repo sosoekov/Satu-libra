@@ -298,7 +298,8 @@
     account: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 18.2c1.2-2 3.2-3.2 5.5-3.2s4.3 1.2 5.5 3.2" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     refresh: '<path d="M18 12a6 6 0 1 1-1.8-4.3M18 5.5v3.3h-3.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
     expand: '<path d="M14 5h5v5M19 5l-5.5 5.5M10 19H5v-5M5 19l5.5-5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
-    more: '<circle cx="12" cy="6.5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17.5" r="1.6" fill="currentColor"/>'
+    more: '<circle cx="12" cy="6.5" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17.5" r="1.6" fill="currentColor"/>',
+    close: '<path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'
   };
   var SHELL_LOGO = '<svg viewBox="0 0 46 22" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
     '<path d="M3 6.5L7 4v15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>' +
@@ -368,7 +369,8 @@
   }
   // Тумблер: items [{value, text, name, cls, risk}]
   function toggle(name, action, items, current, cls) {
-    return '<div class="toggle' + (cls ? ' ' + cls : '') + '"' + a1c('Тумблер', name) + ' role="group">' +
+    // Вид тумблера (выбранный вариант, рамка) рисует платформа — сверить с 1С 8.5 (фаза 9, 4.5)
+    return '<div class="toggle' + (cls ? ' ' + cls : '') + '"' + a1c('Тумблер', name, 'check') + ' role="group">' +
       items.map(function (it) {
         var cls = (it.value === current ? 'on' : '') + (it.cls ? ' ' + it.cls : '');
         return '<button type="button" class="' + cls.trim() + '" data-action="' + action +
@@ -1567,7 +1569,7 @@
       }).join('') + '</select>';
   }
   function choice(name, oneC, items) {
-    return '<div class="toggle' + (state.dialog.errors[name] ? ' invalid' : '') + '" role="radiogroup"' + a1c('Тумблер', oneC) + '>' +
+    return '<div class="toggle' + (state.dialog.errors[name] ? ' invalid' : '') + '" role="radiogroup"' + a1c('Тумблер', oneC, 'check') + '>' +
       items.map(function (it) {
         return '<button type="button" role="radio" aria-checked="' + (dlgValue(name) === it.value) + '" class="' + (dlgValue(name) === it.value ? 'on' : '') + '"' +
           ' data-action="dlgChoose" data-field="' + name + '" data-value="' + it.value + '"' + a1c('Тумблер', oneC + 'Вариант' + it.name) + '>' + esc(it.text) + '</button>';
@@ -2530,12 +2532,11 @@
     demoSetStage: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var code = btn.getAttribute('data-stage');
+      // Фаза 9, 8.2: дальше «Подготовки к выходу» без АП — создать её по шаблону должности (иначе «Базовый»),
+      // со сроками от даты выхода; пункт «Создать АП» отмечается, в истории — запись. При возврате на found АП не удаляется.
       if (code !== 'found' && !programOf(t)) {
-        D.programs.push({
-          id: 'pr-' + t.id + '-' + Date.now(), traineeId: t.id, templateId: null,
-          defaultReviewerId: t.mentorId, defaultObserverIds: [t.headId],
-          history: [{ at: nowStamp(), userId: D.CURRENT_USER_ID, action: 'АП создана (демо)' }]
-        });
+        var tp = recommendedTemplate(t) || byId(D.templates, 'tpl-base');
+        createProgram(t, tp.id, 'Создана при смене этапа (демо)', templateTasksFor(t, tp));
       }
       setStage(t, code);
       state.demoMenuOpen = false;
