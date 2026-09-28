@@ -118,6 +118,16 @@
 
   function checklistDate(item) { return addDays(trainee(item.traineeId).startDate, item.offsetDays); }
   function checklistOverdue(item) { return !item.done && checklistDate(item) < D.TODAY; }
+  // Чек-лист закрытия (фаза 10, 5.2): срок — от даты окончания стажировки
+  function closureOf(t) { return D.closureChecklist.filter(function (c) { return c.traineeId === t.id; }); }
+  function closureDate(item) { return addDays(trainee(item.traineeId).endDate, item.offsetDays); }
+  function closureOverdue(item) { return !item.done && closureDate(item) < D.TODAY; }
+  function closureRequired(t) { return closureOf(t).filter(function (c) { return !c.optional; }); }
+  function closureLeft(t) { return closureRequired(t).filter(function (c) { return !c.done; }).length; }
+  function closureReady(t) { return closureRequired(t).length > 0 && closureLeft(t) === 0; }
+  function ensureClosureChecklist(t) {
+    if (!closureOf(t).length) Array.prototype.push.apply(D.closureChecklist, D.buildClosureChecklist(t));
+  }
 
   /* =====================================================================
    * Этапы (раздел 5.4)
@@ -145,7 +155,7 @@
 
   // Уведомления стажёра (фаза 9, раздел 2.1). Поля: id, severity, kind, text, shortText, buttonText, target.
   // kind: 'action' — кнопка меняет данные; 'navigation' — кнопка только переключает вид (target: {tab, filter}).
-  var NOTE_IDS = ['no_program', 'prep_overdue', 'draft_stale', 'rejected', 'changed_after_approval', 'tasks_overdue', 'lag', 'close_soon'];
+  var NOTE_IDS = ['no_program', 'prep_overdue', 'draft_stale', 'rejected', 'changed_after_approval', 'tasks_overdue', 'lag', 'close_soon', 'closure_overdue', 'closure_ready'];
   var KIND_ORDER = { action: 0, navigation: 1 };
   function getNotifications(t) {
     var list = [];
@@ -222,14 +232,35 @@
       }
     }
 
-    if ((s === 'active' || s === 'closing') && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS) {
-      var de = Math.max(0, daysToEnd(t));
-      list.push({
-        id: 'close_soon', severity: 'info', kind: 'navigation',
-        text: 'До окончания стажировки ' + de + ' дн. Пора закрывать стажировку',
-        shortText: 'До окончания ' + de + ' дн.',
-        buttonText: 'Перейти к закрытию', target: { tab: 'closure' }
-      });
+    // Закрытие (фаза 10, 3.4): «Пора закрывать» — пока этап closing и обязательные пункты закрытия не выполнены
+    if (s === 'closing') {
+      var ready = closureReady(t);
+      if (!ready) {
+        var de = Math.max(0, daysToEnd(t));
+        list.push({
+          id: 'close_soon', severity: 'info', kind: 'navigation',
+          text: 'До окончания стажировки ' + de + ' дн. Пора закрывать стажировку',
+          shortText: 'До окончания ' + de + ' дн.',
+          buttonText: 'Перейти к закрытию', target: { tab: 'closure' }
+        });
+      }
+      var ccOver = closureOf(t).filter(closureOverdue).length;
+      if (ccOver > 0) {
+        list.push({
+          id: 'closure_overdue', severity: 'danger', kind: 'navigation',
+          text: 'Просрочено пунктов закрытия стажировки: ' + ccOver,
+          shortText: 'Просрочено пунктов закрытия: ' + ccOver,
+          buttonText: 'Показать', target: { tab: 'closure' }
+        });
+      }
+      if (ready) {
+        list.push({
+          id: 'closure_ready', severity: 'info', kind: 'action',
+          text: 'Все обязательные пункты закрытия выполнены',
+          shortText: 'Можно завершить стажировку',
+          buttonText: 'Завершить стажировку'
+        });
+      }
     }
 
     // Порядок (раздел 2.2): danger → warning → info; внутри важности action выше navigation; затем порядок таблицы 2.1
@@ -322,7 +353,7 @@
     found: 'ПодготовкаКВыходу', draft: 'ЧерновикАП', approval: 'Согласование', active: 'Стажировка', closing: 'Закрытие', closed: 'Закрыта',
     no_program: 'НетАП', prep_overdue: 'ПросроченаПодготовка', rejected: 'ВозвратНаДоработку', draft_stale: 'ЧерновикНеОтправлен',
     changed_after_approval: 'ИзмененаПослеСогласования', tasks_overdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
-    close_soon: 'СкороОкончание',
+    close_soon: 'СкороОкончание', closure_overdue: 'ПросроченоЗакрытие', closure_ready: 'ЗакрытиеГотово',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
     stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
@@ -405,6 +436,7 @@
     selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
     collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
     checklistMode: 'all',        // 'all' | 'mine'
+    closureMode: 'all',          // чек-лист закрытия: 'all' | 'mine'
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
     toasts: []
@@ -872,10 +904,10 @@
 
   // Что делает кнопка action-уведомления
   var NOTE_ACTION = { no_program: 'createProgram', draft_stale: 'sendToApproval', rejected: 'sendToApproval',
-    changed_after_approval: 'sendToApproval' };
+    changed_after_approval: 'sendToApproval', closure_ready: 'finishInternship' };
   function noteActionOf(t, n) { return NOTE_ACTION[n.id]; }
-  // Вкладка «Закрытие стажировки» (фаза 10, 5.1) — появится в 10.4
-  function hasClosureTab(t) { return false; }
+  // Вкладка «Закрытие стажировки» (фаза 10, 5.1) — на этапах «Закрытие» и «Закрыта»
+  function hasClosureTab(t) { return t.stage === 'closing' || t.stage === 'closed'; }
 
   // Уведомление, ведущее туда, где пользователь уже находится: строка остаётся, кнопка скрывается (фаза 10, 3.3)
   var TARGET_TAB = { prep: 'prepare', program: 'program', closure: 'closure' };
@@ -976,9 +1008,17 @@
       { id: 'prepare', text: 'Подготовка к выходу ' + cl.text, name: 'СтраницаПодготовкаКВыходу', pic: cl.pic, done: prepCompleted(t) },
       { id: 'program', text: 'Адаптационная программа', name: 'СтраницаАдаптационнаяПрограмма' }
     ];
+    // Третья вкладка — «Закрытие стажировки X/Y» на этапах «Закрытие» и «Закрыта» (фаза 10, 5.1, 5.3)
+    if (hasClosureTab(t)) {
+      var cs = closureSummary(t);
+      tabs.push({ id: 'closure', text: 'Закрытие стажировки' + (cs.text ? ' ' + cs.text : ''), name: 'СтраницаЗакрытие', pic: cs.pic });
+    }
+    if (state.traineeTab === 'closure' && !hasClosureTab(t)) state.traineeTab = 'program';
     var body;
     if (state.traineeTab === 'program') {
       body = renderProgramTab(t);
+    } else if (state.traineeTab === 'closure') {
+      body = renderClosureTab(t);
     } else {
       body = renderPrepareTab(t);
     }
@@ -986,7 +1026,7 @@
       '<div class="tabs">' + tabs.map(function (x) {
         // Цветной текст в заголовке страницы в 1С не штатный — статус передаётся картинкой страницы
         var pic = x.pic ? '<span class="tab-pic ' + x.pic.cls + '" title="' + esc(x.pic.title) + '"' +
-          a1c('Картинка', 'КартинкаСтраницыПодготовка', 'check') + '>' + icon(x.pic.icon) + '</span>' : '';
+          a1c('Картинка', x.id === 'closure' ? 'КартинкаСтраницыЗакрытие' : 'КартинкаСтраницыПодготовка', 'check') + '>' + icon(x.pic.icon) + '</span>' : '';
         // завершённая подготовка — название серым и на активной вкладке (фаза 10, 4.2)
         return '<button type="button" class="tab' + (state.traineeTab === x.id ? ' active' : '') + (x.done ? ' tab-done' : '') + '" data-tab="' + x.id + '" data-action="traineeTab"' +
           (x.pic ? ' title="' + esc(x.pic.title) + '"' : '') + a1c('Страница', x.name) + '>' + pic + esc(x.text) + '</button>';
@@ -1119,10 +1159,10 @@
     }).filter(Boolean));
     return '<div class="row wrap command-bar command-bar-flat task-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
       toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
-      submenu('addTask', 'ПодменюДобавитьЗадачу', [
+      (isClosed(t) ? '' : submenu('addTask', 'ПодменюДобавитьЗадачу', [
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
-      ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' }) +
+      ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' })) +  // закрытая — только просмотр (фаза 10, 5.4)
       (sel ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
@@ -1383,6 +1423,105 @@
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + lockRow + bar + table + '</div>';
   }
 
+  /* ---------------------------------------------------------------------
+   * Вкладка «Закрытие стажировки» (фаза 10, раздел 5)
+   * --------------------------------------------------------------------- */
+
+  // Название «Закрытие стажировки X/Y»: Y — обязательные пункты, X — выполненные обязательные.
+  // Картинка страницы: все обязательные выполнены — галочка; есть просроченные — «!»; иначе нет
+  function closureSummary(t) {
+    var all = closureOf(t);
+    if (!all.length) return { text: '', pic: null };
+    var req = closureRequired(t);
+    var done = req.filter(function (c) { return c.done; }).length;
+    var over = all.filter(closureOverdue).length;
+    var pic = req.length && done === req.length ? { icon: 'check', cls: 'c-success', title: 'Все обязательные пункты закрытия выполнены' }
+      : over ? { icon: 'alert', cls: 'c-danger', title: 'Просрочено пунктов закрытия: ' + over } : null;
+    return { text: done + '/' + req.length, pic: pic };
+  }
+  function closureLock(t) {
+    if (!isClosed(t)) return null;
+    return (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка завершена ') + fmtDate(t.closedAt) + '. Изменения недоступны.';
+  }
+  // Имя ответственного или исполнителя: сотрудник или сам стажёр (роль «Стажёр»)
+  function personById(id) { var u = user(id); if (u) return u.fullName; var tr = trainee(id); return tr ? tr.fullName : '—'; }
+  function closureOffsetText(n) {
+    if (n < 0) return 'за ' + (-n) + ' дн. до окончания';
+    if (n === 0) return 'в день окончания';
+    return 'через ' + n + ' дн. после окончания';
+  }
+  function visibleClosure(t) {
+    var all = closureOf(t);
+    return all.filter(function (c) { return state.closureMode === 'all' || c.responsibleId === D.CURRENT_USER_ID; })
+      .sort(function (a, b) {
+        var x = closureDate(a), y = closureDate(b);
+        return x < y ? -1 : x > y ? 1 : all.indexOf(a) - all.indexOf(b);
+      });
+  }
+
+  function renderClosureTab(t) {
+    var lock = closureLock(t);
+    var list = visibleClosure(t);
+    var left = closureLeft(t);
+    var lockRow = lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретИзмененияЗакрытия') + '>' +
+      '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаЗапретИзмененияЗакрытия') + '>' + icon('lock') + '</span>' +
+      '<span class="muted"' + a1c('Надпись', 'ДекорацияЗапретИзмененияЗакрытия') + '>' + esc(lock) + '</span></div>' : '';
+    // [+ Добавить пункт] … [Все | Мои] … «Осталось обязательных пунктов: N» [Завершить стажировку] — основная
+    var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛистаЗакрытия') + '>' +
+      (lock ? '' : button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'closureItem' }, name: 'КнопкаДобавитьПунктЗакрытия' })) +
+      '<span class="grow"></span>' +
+      toggle('ТумблерМоиПунктыЗакрытия', 'ccMode', [
+        { value: 'all', text: 'Все', name: 'Все' },
+        { value: 'mine', text: 'Мои', name: 'Мои' }
+      ], state.closureMode) +
+      (lock ? '' : '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаЗавершение') + '>' +
+        (left ? '<span class="muted"' + a1c('Надпись', 'ДекорацияОсталосьОбязательных') + '>Осталось обязательных пунктов: ' + left + '</span>' : '') +
+        button('Завершить стажировку', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'close' }, disabled: left > 0,
+          title: left ? 'Сначала выполните обязательные пункты закрытия' : '', name: 'КнопкаЗавершитьСтажировку' }) +
+        '</span>') +
+      '</div>';
+
+    var body;
+    if (!closureOf(t).length) {
+      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияПуст') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияНеФормировался') + '>Чек-лист закрытия не формировался</span></div></td></tr>';
+    } else if (!list.length) {
+      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияМоиПуст') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияМоиПуст') + '>У вас нет пунктов закрытия</span>' +
+        link('Показать все', { action: 'ccMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПунктыЗакрытия' }) + '</div></td></tr>';
+    } else {
+      body = list.map(function (c) { return closureRow(t, c, lock); }).join('');
+    }
+    var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
+      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Действие</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаЗакрытие') + '>' + lockRow + bar + table + '</div>';
+  }
+
+  function closureRow(t, c, lock) {
+    var date = closureDate(c);
+    var over = closureOverdue(c);
+    var due = c.done ? { text: 'выполнено ' + fmtDate(c.doneAt).slice(0, 5), cls: 'muted' }
+      : over ? { text: 'просрочено на ' + diffDays(date, D.TODAY) + ' дн.', cls: 'danger-text' }
+      : { text: closureOffsetText(c.offsetDays), cls: 'muted' };
+    var who = c.done && c.doneBy && c.doneBy !== c.responsibleId ? 'Выполнил: ' + personById(c.doneBy) : personById(c.responsibleId);
+    var boxTitle = lock || (c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
+    var action = c.linkedDocType === 'forus' ? link('Открыть Forus Team', { action: 'ccOpenForus', name: 'ТаблицаЧекЛистЗакрытияОткрытьForusTeam' })
+      : c.linkedDocType === 'sit' ? link('Открыть СИТ', { action: 'ccOpenSit', name: 'ТаблицаЧекЛистЗакрытияОткрытьСИТ' }) : '';
+    return '<tr data-id="' + c.id + '">' +
+      '<td><input type="checkbox" data-cc-done="' + c.id + '"' + (c.done ? ' checked' : '') + (lock ? ' disabled' : '') +
+        ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистЗакрытияВыполнено') + '></td>' +
+      '<td><div class="ellipsis" title="' + esc(c.name) + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияПункт') + '>' + esc(c.name) + '</div>' +
+        (c.optional ? '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияНеобязательно') + '>необязательно</div>' : '') + '</td>' +
+      '<td><div class="ellipsis"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияРоль') + '>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div>' +
+        '<div class="muted text-s ellipsis" title="' + esc(who) + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияОтветственный') + '>' + esc(who) + '</div></td>' +
+      '<td class="nowrap"><div class="' + (over ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияСрок') + '>' + fmtDate(date) + '</div>' +
+        '<div class="text-s ' + due.cls + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияСрокПояснение') + '>' + esc(due.text) + '</div></td>' +
+      '<td>' + action + '</td>' +
+      '</tr>';
+  }
+
   // Вторая строка «Срока» (фаза 9, 6.4)
   function checklistDueNote(c) {
     if (c.done) return { text: 'выполнено ' + fmtDate(c.doneAt).slice(0, 5), cls: 'muted' };
@@ -1489,6 +1628,7 @@
 
   // Смена этапа стажировки; даты последующих этапов очищаются
   function setStage(t, code) {
+    if (code === 'closing') ensureClosureChecklist(t);   // фаза 10, 5.1: чек-лист закрытия — из шаблона, если его ещё нет
     var idx = stageIndex(code);
     STAGES.forEach(function (s, i) { if (i > idx) delete t.stageDates[s.code]; });
     if (!t.stageDates[code] || t.stage !== code) t.stageDates[code] = D.TODAY;
@@ -1502,6 +1642,14 @@
       t.closedAt = null;
       t.closeKind = null;
     }
+  }
+
+  // Автоматический переход в «Закрытие» (фаза 10, 5.1): этап active и до окончания ≤ CLOSE_AVAILABLE_DAYS дней.
+  // Продление, уводящее окончание дальше порога, возвращает closing → active; чек-лист закрытия сохраняется.
+  function syncClosingStage(t) {
+    if (t.stage === 'active' && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS) { setStage(t, 'closing'); return 'closing'; }
+    if (t.stage === 'closing' && daysToEnd(t) > D.CLOSE_AVAILABLE_DAYS) { setStage(t, 'active'); return 'active'; }
+    return null;
   }
 
   /* =====================================================================
@@ -1584,11 +1732,15 @@
         t.endDate = v.endDate;
         var program = programOf(t);
         if (program) addHistory(program, 'Срок стажировки продлён: ' + fmtDate(old) + ' → ' + fmtDate(v.endDate) + '. Причина: «' + v.reason.trim() + '»');
+        // Продление дальше порога возвращает этап «Стажировка»: вкладка закрытия скрывается, открывается АП
+        var moved = syncClosingStage(t);
+        if (moved === 'active' && state.traineeTab === 'closure') state.traineeTab = 'program';
+        if (moved === 'closing') state.traineeTab = 'closure';
         toast('Срок стажировки продлён до ' + fmtDate(v.endDate));
       }
     },
     close: {
-      title: 'Начать закрытие стажировки', form: 'ФормаЗакрытиеСтажировки', submit: 'Начать закрытие стажировки',
+      title: 'Завершить стажировку', form: 'ФормаЗавершениеСтажировки', submit: 'Завершить стажировку',
       body: function (t) {
         var st = statsOf(t) || { done: 0, total: 0, overdue: 0 };
         return '<div class="dlg-summary"' + a1c('Надпись', 'ДекорацияСводкаЗадач') + '>Выполнено задач: ' + st.done + ' из ' + st.total +
@@ -1605,9 +1757,10 @@
         t.closedAt = D.TODAY;
         setStage(t, 'closed');
         var program = programOf(t);
-        if (program) addHistory(program, 'Стажировка закрыта. Результат: ' + (v.result === 'passed' ? 'пройдена' : 'не пройдена') +
+        if (program) addHistory(program, 'Стажировка завершена. Результат: ' + (v.result === 'passed' ? 'пройдена' : 'не пройдена') +
           (required(v.comment) ? '. Комментарий: «' + v.comment.trim() + '»' : ''));
-        toast('Стажировка закрыта');
+        state.traineeTab = 'closure';
+        toast('Стажировка завершена');
       }
     },
     cancel: {
@@ -2193,6 +2346,36 @@
     }
   };
 
+  // Пункт чек-листа закрытия: наименование, ответственный (роль), срок от даты окончания, обязательность
+  DIALOGS.closureItem = {
+    title: 'Добавить пункт закрытия', form: 'ФормаПунктЧекЛистаЗакрытия', submit: 'Добавить пункт',
+    init: function (t) { return { name: '', role: 'head', date: t.endDate, optional: false }; },
+    body: function (t) {
+      var e = state.dialog.errors;
+      var v = state.dialog.values;
+      var hint = v.date ? '<div class="muted text-s">' + closureOffsetText(diffDays(t.endDate, v.date)) + ' (окончание ' + fmtDate(t.endDate) + ')</div>' : '';
+      return field('Пункт', inputText('name', 'ПолеНаименованиеПунктаЗакрытия'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПунктаЗакрытия' }) +
+        field('Ответственный', selectOptions('role', 'ПолеРольОтветственногоЗакрытия', ['head', 'hr', 'mentor', 'trainee', 'ksh'].map(function (r) {
+          return { value: r, text: D.ROLE_TITLES[r] }; })), { forId: 'f_role' }) +
+        field('Срок', inputDate('date', 'ПолеСрокПунктаЗакрытия') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПунктаЗакрытия' }) +
+        '<label class="check"><input type="checkbox" data-field="optional"' + (v.optional ? ' checked' : '') + a1c('Флажок', 'ПолеНеобязательный') + '> Необязательный пункт</label>';
+    },
+    validate: function (t, v) {
+      var e = {};
+      if (!required(v.name)) e.name = 'Укажите пункт';
+      if (!required(v.date)) e.date = 'Укажите срок';
+      return e;
+    },
+    apply: function (t, v) {
+      var who = v.role === 'head' ? t.headId : v.role === 'hr' ? D.HR_ID : v.role === 'ksh' ? D.KSH_ID : v.role === 'trainee' ? t.id : t.mentorId;
+      D.closureChecklist.push({
+        id: 'cc-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: who,
+        offsetDays: diffDays(t.endDate, v.date), optional: !!v.optional, done: false, doneBy: null, doneAt: null, linkedDocType: null
+      });
+      toast('Пункт добавлен');
+    }
+  };
+
   DIALOGS.checklistFill = {
     title: 'Заполнить по шаблону', form: 'ФормаЗаполнитьЧекЛист', submit: 'Заполнить по шаблону', danger: true,
     body: function (t) {
@@ -2234,6 +2417,7 @@
     var lock = editLock(t);
     if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
     if (checklistLock(t) && ['checklistItem', 'checklistFill', 'request0911'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
+    if (closureLock(t) && ['closureItem', 'close'].indexOf(type) >= 0) { toast(closureLock(t)); return; }
     if (type === 'task' && lock && !ctx.taskId && !ctx.templateId) { toast(lock); return; }
     state.openMenu = null;
     if (opts && opts.stack && state.dialog) state.dialogStack.push(state.dialog);
@@ -2297,7 +2481,7 @@
   function selectTrainee(id) {
     var t = trainee(id);
     state.selectedTraineeId = id;
-    state.traineeTab = t.stage === 'found' ? 'prepare' : 'program';
+    state.traineeTab = t.stage === 'found' ? 'prepare' : hasClosureTab(t) ? 'closure' : 'program';  // фаза 10, 5.1
     state.taskFilter = null;
     state.openMenu = null;
     state.taskSort = { key: null, dir: 1 };
@@ -2370,18 +2554,19 @@
         var a = noteActionOf(t, n);
         if (a === 'createProgram') actions.createProgram();
         else if (a === 'sendToApproval') openDialog('sendToApproval', t.id);
-        else if (a === 'startClosing') openDialog('close', t.id);
+        else if (a === 'finishInternship') openDialog('close', t.id);
         return;
       }
       // navigation: переключить вид на target — вкладку и, для задач, тумблер статусов
-      if (n.target.tab === 'closure' && !hasClosureTab(t)) { openDialog('close', t.id); return; }  // до вкладки закрытия (10.4) — прежний диалог
       state.traineeTab = TARGET_TAB[n.target.tab];
       if (n.target.tab === 'program') {
         state.selectedTasks = {};
         state.collapsedBlocks = {};
         state.taskFilter = n.target.filter ? TARGET_FILTER[n.target.filter] : null;
-      } else {
+      } else if (n.target.tab === 'prep') {
         state.checklistMode = 'all';  // просроченные пункты — вверху списка (сортировка по сроку), дата красным
+      } else {
+        state.closureMode = 'all';
       }
       renderCenter();
     },
@@ -2455,6 +2640,9 @@
 
     // Чек-лист подготовки
     clMode: function (btn) { state.checklistMode = btn.getAttribute('data-value'); renderCenter(); },
+    ccMode: function (btn) { state.closureMode = btn.getAttribute('data-value'); renderCenter(); },
+    ccOpenForus: function () { toast('Переход в Forus Team в прототипе не реализован'); },
+    ccOpenSit: function () { toast('Переход в СИТ в прототипе не реализован'); },
     clOpenRequest: function () { toast('Откроется документ'); },
     clOpenBitrix: function () { toast('Переход во внешнюю систему в прототипе не реализован'); },
     dialogSubmit: function () { submitDialog(); },
@@ -2507,7 +2695,11 @@
         var tp = recommendedTemplate(t) || byId(D.templates, 'tpl-base');
         createProgram(t, tp.id, 'Создана при смене этапа (демо)', templateTasksFor(t, tp));
       }
+      var hadClosure = hasClosureTab(t);
       setStage(t, code);
+      // Фаза 10, 5.1: появившаяся вкладка «Закрытие стажировки» открывается по умолчанию; скрытая — возвращает к АП
+      if (hasClosureTab(t) && !hadClosure) state.traineeTab = 'closure';
+      if (!hasClosureTab(t) && state.traineeTab === 'closure') state.traineeTab = 'program';
       state.demoMenuOpen = false;
       render();
     }
@@ -2584,6 +2776,13 @@
       state.dialog.values[list] = cur;
       delete state.dialog.errors[list];
       if (list === 'picked') renderDialog();
+      return;
+    }
+    // Флажок «выполнено» в чек-листе закрытия — ставится вручную (фаза 10, 5.3)
+    if (tgt.hasAttribute('data-cc-done')) {
+      var cc = byId(D.closureChecklist, tgt.getAttribute('data-cc-done'));
+      cc.done = tgt.checked; cc.doneBy = tgt.checked ? D.CURRENT_USER_ID : null; cc.doneAt = tgt.checked ? D.TODAY : null;
+      render();
       return;
     }
     // Флажок «выполнено» в чек-листе подготовки — отметка выполнения
@@ -2664,6 +2863,7 @@
    * ===================================================================== */
 
   function init() {
+    D.trainees.forEach(syncClosingStage);   // фаза 10, 5.1: при загрузке данных
     // НЕ_ПЕРЕНОСИТЬ: статичная оболочка клиента
     Array.prototype.forEach.call(document.querySelectorAll('[data-shell-icon]'), function (b) {
       b.insertAdjacentHTML('afterbegin', shellIcon(b.getAttribute('data-shell-icon')));
