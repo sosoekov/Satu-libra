@@ -290,13 +290,16 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
   padding: var(--sp-1) 0;
 }
 .tree-row {
-  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  display: flex; flex-direction: row; align-items: center; gap: 0;
   min-height: 28px; padding-right: var(--sp-2); cursor: pointer;
 }
+/* Фаза 9, 7.2: колонки дерева — наименование (остаток, обрезается только оно) | статус 20px | количество 32px */
+.tree-col-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.tree-col-status { flex: 0 0 20px; width: 20px; display: inline-flex; align-items: center; justify-content: center; }
+.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; }
 .tree-row:hover { background: var(--c-bg-panel); }
 .tree-row.selected { background: var(--c-bg-selected); }
 .tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
-.tree-count { flex: 0 0 auto; }
 .tree-marker { flex: 0 0 auto; }
 
 .empty {
@@ -491,7 +494,7 @@ body.markup-1c table[data-1c]::before {
 .c-stage-closing { color: var(--c-stage-closing); }
 
 /* Дерево: полные ФИО и значок уведомления */
-.tree-name { white-space: nowrap; min-width: 0; }
+.tree-name { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tree-marker { display: inline-flex; flex: 0 0 16px; }
 
 /* ================= Фаза 7: сводная таблица ================= */

@@ -594,22 +594,29 @@
       list.forEach(function (n) {
         var hasKids = n.children.length + n.trainees.length > 0;
         var open = isExpanded(n.dept);
+        // Три колонки без заголовков (фаза 9, 7.2): наименование (отступ уровня, стрелка) | статус 20px | количество 32px
         out.push('<div class="tree-row tree-dept" role="treeitem" tabindex="0" aria-expanded="' + open + '"' +
-          ' data-action="toggleDept" data-id="' + n.dept.id + '" style="padding-left:' + (8 + level * 14) + 'px"' +
-          (hasKids ? ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' : '') + '>' +
-          '<span class="tree-arrow">' + (hasKids ? icon(open ? 'chevronDown' : 'chevronRight') : '') + '</span>' +
-          '<span class="ellipsis bold" title="' + esc(n.dept.name) + '">' + esc(n.dept.name) + '</span>' +
-          '<span class="muted tree-count">(' + n.count + ')</span></div>');
+          ' data-action="toggleDept" data-id="' + n.dept.id + '"' + (hasKids ? ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' : '') + '>' +
+          '<span class="tree-col-name" style="padding-left:' + (8 + level * 14) + 'px">' +
+            '<span class="tree-arrow">' + (hasKids ? icon(open ? 'chevronDown' : 'chevronRight') : '') + '</span>' +
+            '<span class="tree-name bold" title="' + esc(n.dept.name) + '"' + a1c('Надпись', 'ДеревоПодразделенийНаименование') + '>' + esc(n.dept.name) + '</span>' +
+          '</span>' +
+          '<span class="tree-col-status"></span>' +
+          '<span class="tree-col-count muted"' + a1c('Надпись', 'ДеревоПодразделенийКоличество') + '>' + n.count + '</span></div>');
         if (open) {
           walk(n.children, level + 1);
           n.trainees.forEach(function (t) {
             var n = treeNotification(t);
             out.push('<div class="tree-row tree-trainee' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" role="treeitem" tabindex="0"' +
-              ' data-action="selectTrainee" data-id="' + t.id + '" style="padding-left:' + (8 + (level + 1) * 14) + 'px" title="' + esc(treeRowTitle(t)) + '">' +
-              '<span class="tree-arrow"></span>' +
-              '<span class="tree-name grow"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
-              (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
-                a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</div>');
+              ' data-action="selectTrainee" data-id="' + t.id + '" title="' + esc(treeRowTitle(t)) + '">' +
+              '<span class="tree-col-name" style="padding-left:' + (8 + (level + 1) * 14) + 'px">' +
+                '<span class="tree-arrow"></span>' +
+                '<span class="tree-name"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
+              '</span>' +
+              '<span class="tree-col-status">' +
+                (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
+                  a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</span>' +
+              '<span class="tree-col-count"></span></div>');
           });
         }
       });
