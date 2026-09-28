@@ -97,7 +97,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: var(--sp-5) var(--sp-5) 0;
 }
 .window-title { font-size: var(--fs-xl); margin: 0; font-weight: normal; }
-.window-tools { gap: var(--sp-2); }
+.window-tools { gap: var(--sp-2); flex: 0 0 auto; }  /* фаза 9, 8.1: кнопки окна прижаты вправо и не сжимаются */
+.window-head-row { flex-wrap: nowrap; min-width: 0; }
+.window-head-row .window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .form-tool {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: 50%;
@@ -258,7 +260,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Фаза 8.5: в строке заголовка формы, слева от ⟳ ⋮; меню этапов раскрывается вниз */
 .demo-dock { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); flex: 0 1 auto; min-width: 0; }
 .demo-dock > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
-.demo-btn { max-width: 100%; }
+.demo-btn { max-width: 240px; min-width: 0; }  /* фаза 9, 8.1 */
 .demo-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-btn { border-style: dashed; }
 
@@ -290,13 +292,16 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
   padding: var(--sp-1) 0;
 }
 .tree-row {
-  display: flex; flex-direction: row; align-items: center; gap: 6px;
+  display: flex; flex-direction: row; align-items: center; gap: 0;
   min-height: 28px; padding-right: var(--sp-2); cursor: pointer;
 }
+/* Фаза 9, 7.2: колонки дерева — наименование (остаток, обрезается только оно) | статус 20px | количество 32px */
+.tree-col-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.tree-col-status { flex: 0 0 20px; width: 20px; display: inline-flex; align-items: center; justify-content: center; }
+.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; }
 .tree-row:hover { background: var(--c-bg-panel); }
 .tree-row.selected { background: var(--c-bg-selected); }
 .tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
-.tree-count { flex: 0 0 auto; }
 .tree-marker { flex: 0 0 auto; }
 
 .empty {
@@ -435,14 +440,14 @@ th.num, td.num { text-align: right; }
 .modal-wide .field-label { flex-basis: 170px; }
 
 /* ================= Вкладка «Подготовка к выходу» ================= */
-.prepare-progress { max-width: 360px; }
 .checklist-table { table-layout: fixed; }
 .checklist-table .w-check { width: 36px; }
-.checklist-table .w-resp { width: 190px; }
+.checklist-table .w-resp { width: 260px; }
 .checklist-table .w-date { width: 150px; }
-.checklist-table .w-cl-status { width: 160px; }
 .checklist-table .w-action { width: 150px; }
 .checklist-table td { vertical-align: middle; }
+/* Фаза 9, 6.4: все строки одной высоты — две строки текста */
+.checklist-table tbody tr[data-id] > td { height: 48px; padding-top: 0; padding-bottom: 0; vertical-align: middle; }
 .checklist-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
 .checklist-table input[type="checkbox"]:disabled { cursor: default; }
 
@@ -491,7 +496,7 @@ body.markup-1c table[data-1c]::before {
 .c-stage-closing { color: var(--c-stage-closing); }
 
 /* Дерево: полные ФИО и значок уведомления */
-.tree-name { white-space: nowrap; min-width: 0; }
+.tree-name { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tree-marker { display: inline-flex; flex: 0 0 16px; }
 
 /* ================= Фаза 7: сводная таблица ================= */
