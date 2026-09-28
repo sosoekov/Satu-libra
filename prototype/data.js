@@ -43,9 +43,11 @@
     { id: 'u-vasiliev',  fullName: 'Васильев Андрей Петрович',       shortName: 'Васильев А. П.',  role: 'Наставник' },
     { id: 'u-novikov',   fullName: 'Новиков Павел Сергеевич',        shortName: 'Новиков П. С.',   role: 'Руководитель проектного офиса' },
     { id: 'u-fedorova',  fullName: 'Федорова Наталья Александровна', shortName: 'Федорова Н. А.',  role: 'Эксперт по методологии' },
-    { id: 'u-sokolova',  fullName: 'Соколова Екатерина Игоревна',    shortName: 'Соколова Е. И.',  role: 'HR-менеджер' }
+    { id: 'u-sokolova',  fullName: 'Соколова Екатерина Игоревна',    shortName: 'Соколова Е. И.',  role: 'HR-менеджер' },
+    { id: 'u-grigorieva', fullName: 'Григорьева Ирина Сергеевна',    shortName: 'Григорьева И. С.', role: 'КШ' }
   ];
   var HR_ID = 'u-sokolova';
+  var KSH_ID = 'u-grigorieva';   // сотрудник КШ — ответственный за пункт «Подготовить документы для оформления ДМС» (фаза 10, 5.2)
 
   /* ---------- Стажёры (Справочник.Сотрудники + РегистрСведений.СтатусыСтажеров) ----------
    * stageDates — даты начала этапов (для степпера), closedAt / closeKind ('passed'|'failed'|'cancelled') — для этапа closed.
@@ -344,7 +346,32 @@
     { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program' },
     { name: 'Подготовить ПО и доступ к ресурсам, порталам',     responsibleRole: 'head',   offsetDays: -1, linkedDocType: null }
   ];
-  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки' };
+  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажёр', ksh: 'КШ' };
+
+  /* ---------- ТЧ ЧекЛистЗакрытия (фаза 10, 5.2) ----------
+   * closureChecklist: id, traineeId, name, responsibleRole, responsibleId, offsetDays (от endDate: отрицательное — до окончания,
+   * положительное — после), optional, done, doneBy, doneAt, linkedDocType (null | 'forus' | 'sit').
+   * Роль «Стажёр» — сам стажёр: responsibleId = id стажёра. Создаётся при переходе в «Закрытие» (buildClosureChecklist).
+   */
+  var closureChecklistTemplate = [
+    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'head',    offsetDays: -7, optional: false, linkedDocType: 'forus' },
+    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'trainee', offsetDays: -7, optional: false, linkedDocType: 'forus' },
+    { name: 'Провести мероприятие по закрытию стажировки',                              responsibleRole: 'hr',      offsetDays: -3, optional: false, linkedDocType: null },
+    { name: 'Оставить заявку о закрытии стажировки в СИТ',                              responsibleRole: 'hr',      offsetDays: 0,  optional: false, linkedDocType: 'sit' },
+    { name: 'Оставить заявки на открытие доступа к дополнительным материалам',          responsibleRole: 'head',    offsetDays: 0,  optional: true,  linkedDocType: null },
+    { name: 'Подготовить список сотрудников, закрывших стажировку, и отправить его в КШ', responsibleRole: 'hr',     offsetDays: 3,  optional: false, linkedDocType: null },
+    { name: 'Подготовить документы для оформления ДМС',                                 responsibleRole: 'ksh',     offsetDays: 5,  optional: false, linkedDocType: null }
+  ];
+  var closureSeq = 1;
+  function buildClosureChecklist(tr) {
+    return closureChecklistTemplate.map(function (c) {
+      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? HR_ID :
+        c.responsibleRole === 'ksh' ? KSH_ID : c.responsibleRole === 'trainee' ? tr.id : tr.mentorId;
+      return { id: 'cc-' + (closureSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole, responsibleId: responsibleId,
+        offsetDays: c.offsetDays, optional: c.optional, done: false, doneBy: null, doneAt: null, linkedDocType: c.linkedDocType };
+    });
+  }
+  var closureChecklist = [];
 
   // Выполненные пункты: индекс пункта → [кто, когда, номер документа]
   var checklistDone = {
@@ -397,6 +424,14 @@
     if (/кодекс/.test(n)) links.push({ url: 'portal.cas.local/docs/kodeks', comment: 'Корпоративный кодекс' });
     return { type: type, required: required, links: links };
   }
+  trainees.filter(function (tr) { return tr.id === 't-popova'; }).forEach(function (tr) {
+    var items = buildClosureChecklist(tr);
+    items[0].done = true; items[0].doneBy = tr.headId; items[0].doneAt = '2026-07-22';
+    items[1].done = true; items[1].doneBy = tr.id;     items[1].doneAt = '2026-07-23';
+    items[2].done = true; items[2].doneBy = HR_ID;     items[2].doneAt = '2026-07-24';
+    Array.prototype.push.apply(closureChecklist, items);
+  });
+
   function withExtras(x) {
     var e = taskExtras(x.name, x.block);
     x.type = e.type; x.required = e.required; x.links = e.links;
@@ -419,6 +454,10 @@
     tasks: tasks,
     checklist: checklist,
     checklistTemplate: checklistTemplate,
+    KSH_ID: KSH_ID,
+    closureChecklist: closureChecklist,
+    closureChecklistTemplate: closureChecklistTemplate,
+    buildClosureChecklist: buildClosureChecklist,
     templates: templates,
     taskTypes: [
       { value: 'task', text: 'Задача' }, { value: 'course', text: 'Курс' },
