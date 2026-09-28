@@ -402,9 +402,6 @@
     selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
     collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
     checklistMode: 'all',        // 'all' | 'mine'
-    checklistSort: 1,            // сортировка по сроку: 1 — по возрастанию, -1 — по убыванию, 0 — порядок списка
-    checklistFilter: null,       // 'overdue' — из плашки «Показать»
-    checklistSel: null,          // выбранный пункт для ↑ ↓
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
     toasts: []
@@ -1363,52 +1360,25 @@
     if (n === 0) return 'в день выхода';
     return 'через ' + n + ' дн. после выхода';
   }
-  function checklistStatus(c) {
-    if (c.done) return { text: 'Выполнено', tone: 'success' };
-    if (checklistOverdue(c)) return { text: 'Просрочено', tone: 'danger' };
-    return { text: 'Не выполнено', tone: 'neutral' };
-  }
   function requestKind(c) { return c.name.indexOf('пропуск') >= 0 ? 'выпуск пропуска' : 'создание учётной записи'; }
 
+  // Список всегда отсортирован по сроку по возрастанию, при равенстве — по порядку в данных (фаза 9, 6.1)
   function visibleChecklist(t) {
-    var list = checklistOf(t).filter(function (c) {
-      return (state.checklistMode === 'all' || c.responsibleId === D.CURRENT_USER_ID) &&
-        (!state.checklistFilter || checklistOverdue(c));
-    });
-    if (state.checklistSort) {
-      list.sort(function (a, b) { return (a.offsetDays - b.offsetDays) * state.checklistSort; });
-    }
-    return list;
+    var all = checklistOf(t);
+    return all.filter(function (c) { return state.checklistMode === 'all' || c.responsibleId === D.CURRENT_USER_ID; })
+      .sort(function (a, b) {
+        var x = checklistDate(a), y = checklistDate(b);
+        return x < y ? -1 : x > y ? 1 : all.indexOf(a) - all.indexOf(b);
+      });
   }
 
+  // Вкладка «Подготовка к выходу» (фаза 9, раздел 6): командная панель и таблица из пяти колонок
   function renderPrepareTab(t) {
-    var all = checklistOf(t);
-    var done = all.filter(function (c) { return c.done; }).length;
-    var ds = daysToStart(t);
     var lock = checklistLock(t);
     var list = visibleChecklist(t);
-    var sel = state.checklistSel && byId(all, state.checklistSel) ? state.checklistSel : null;
-    var orderReason = lock || (state.checklistSort ? 'Отключите сортировку по сроку, чтобы менять порядок пунктов' : !sel ? 'Выберите пункт в таблице' : '');
-    var selIdx = sel ? all.indexOf(byId(all, sel)) : -1;
-
-    var summary = '<div class="panel row gap-5"' + a1c('ГруппаГоризонтальная', 'ГруппаСводкаПодготовки') + '>' +
-      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаДоВыхода') + '>' +
-        (ds > 0 ? '<span class="muted text-s">До выхода</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + pluralN(ds, W_DAYS) + '</span>'
-          : ds === 0 ? '<span class="muted text-s">Выход</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>сегодня</span>'
-          : '<span class="muted text-s">Стажёр вышел</span><span class="text-xl"' + a1c('Надпись', 'ДекорацияДоВыхода') + '>' + fmtDate(t.startDate) + '</span>') +
-      '</div>' +
-      '<div class="col gap-1 grow prepare-progress"' + a1c('ГруппаВертикальная', 'ГруппаГотовность') + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияГотово') + '>Готово: ' + done + ' из ' + all.length + '</span>' +
-        '<div class="indicator-wrap">' + indicator(all.length ? done / all.length * 100 : 0, 'ИндикаторГотовность', 'success') + '</div>' +
-      '</div>' +
-      '</div>';
 
     var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
       button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, disabled: !!lock, title: lock || '', name: 'КнопкаДобавитьПункт' }) +
-      button('', { cls: 'btn-icon', icon: 'up', action: 'clMove', data: { dir: -1 }, name: 'КнопкаПунктВыше',
-        disabled: !!orderReason || selIdx <= 0, title: orderReason || (selIdx <= 0 ? 'Пункт уже первый' : 'Переместить выше') }) +
-      button('', { cls: 'btn-icon', icon: 'down', action: 'clMove', data: { dir: 1 }, name: 'КнопкаПунктНиже',
-        disabled: !!orderReason || selIdx === all.length - 1, title: orderReason || (selIdx === all.length - 1 ? 'Пункт уже последний' : 'Переместить ниже') }) +
       button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, disabled: !!lock, title: lock || '', name: 'КнопкаЗаполнитьПоШаблону' }) +
       '<span class="grow"></span>' +
       toggle('ТумблерМоиПункты', 'clMode', [
@@ -1417,38 +1387,38 @@
       ], state.checklistMode) +
       '</div>';
 
-    var filterLine = state.checklistFilter ? '<div class="row filter-line"' + a1c('ГруппаГоризонтальная', 'ГруппаФильтрЧекЛиста') + '>' +
-      '<span class="grow"' + a1c('Надпись', 'ДекорацияФильтрЧекЛиста') + '>Показаны: Просрочено</span>' +
-      button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Сбросить фильтр', action: 'clFilter', name: 'КнопкаСброситьФильтрЧекЛиста' }) + '</div>' : '';
-
     var body;
     if (!list.length) {
-      var text = state.checklistFilter ? 'Просроченных пунктов нет' : 'У вас нет пунктов в чек-листе';
-      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
-        '<span' + a1c('Надпись', 'ДекорацияЧекЛистПуст') + '>' + esc(text) + '</span>' +
-        (state.checklistFilter ? link('Сбросить фильтр', { action: 'clFilter', name: 'ГиперссылкаСброситьФильтрЧекЛиста' })
-          : link('Показать все', { action: 'clMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПункты' })) +
+      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияЧекЛистПуст') + '>У вас нет пунктов в чек-листе</span>' +
+        link('Показать все', { action: 'clMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПункты' }) +
         '</div></td></tr>';
     } else {
-      body = list.map(function (c) { return checklistRow(t, c, lock, sel); }).join('');
+      body = list.map(function (c) { return checklistRow(t, c, lock); }).join('');
     }
 
-    var sortOn = state.checklistSort;
     var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-cl-status"><col class="w-action"></colgroup>' +
-      '<thead><tr><th title="Выполнено">✓</th><th>Пункт</th><th>Ответственный</th>' +
-      '<th aria-sort="' + (sortOn ? (sortOn > 0 ? 'ascending' : 'descending') : 'none') + '"><button type="button" class="th-sort' + (sortOn ? ' on' : '') + '" data-action="clSort"' +
-        ' title="Сортировать по сроку"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовкиСортировкаСрок') + '>Срок' + (sortOn ? (sortOn > 0 ? ' ▲' : ' ▼') : '') + '</button></th>' +
-      '<th>Статус</th><th>Действие</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Действие</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
 
-    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + summary + bar + filterLine + table + '</div>';
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + bar + table + '</div>';
   }
 
-  function checklistRow(t, c, lock, sel) {
-    var st = checklistStatus(c);
+  // Вторая строка «Срока» (фаза 9, 6.4)
+  function checklistDueNote(c) {
+    if (c.done) return { text: 'выполнено ' + fmtDate(c.doneAt).slice(0, 5), cls: 'muted' };
+    if (checklistOverdue(c)) return { text: 'просрочено на ' + diffDays(checklistDate(c), D.TODAY) + ' дн.', cls: 'danger-text' };
+    return { text: offsetText(c.offsetDays), cls: 'muted' };
+  }
+
+  function checklistRow(t, c, lock) {
     var date = checklistDate(c);
     var auto = c.linkedDocType === 'program';
-    var boxTitle = lock || (auto ? 'Отмечается автоматически при создании АП' : c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
+    var boxTitle = lock || (auto ? 'Отметится автоматически, когда АП будет создана' : c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
+    var due = checklistDueNote(c);
+    // Ответственный: роль; ниже — ФИО ответственного или «Выполнил: ФИО», если выполнил другой человек
+    var who = c.done && c.doneBy && c.doneBy !== c.responsibleId ? 'Выполнил: ' + userName(c.doneBy) : userName(c.responsibleId);
     var action = '';
     if (c.linkedDocType === 'request0911') {
       action = c.linkedDocNumber
@@ -1459,14 +1429,14 @@
     } else if (c.linkedDocType === 'program') {
       action = link('Перейти к АП', { action: 'traineeTab', data: { tab: 'program' }, name: 'ТаблицаЧекЛистПерейтиКАП' });
     }
-    return '<tr class="clickable' + (sel === c.id ? ' selected' : '') + '" data-action="clSelect" data-id="' + c.id + '">' +
+    return '<tr data-id="' + c.id + '">' +
       '<td><input type="checkbox" data-cl-done="' + c.id + '"' + (c.done ? ' checked' : '') + (lock || auto ? ' disabled' : '') +
         ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистВыполнено') + '></td>' +
-      '<td><div class="ellipsis" title="' + esc(c.name) + '">' + esc(c.name) + '</div></td>' +
-      '<td><div>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div><div class="muted text-s">' + esc(userName(c.responsibleId)) + '</div></td>' +
-      '<td class="nowrap"><div class="' + (st.tone === 'danger' ? 'danger-text' : '') + '">' + fmtDate(date) + '</div><div class="muted text-s">' + offsetText(c.offsetDays) + '</div></td>' +
-      '<td>' + badge(st.tone, st.text, 'ТаблицаЧекЛистСтатус') +
-        (c.done && c.doneBy ? '<div class="muted text-s">' + esc(userName(c.doneBy)) + ', ' + fmtDate(c.doneAt).slice(0, 5) + '</div>' : '') + '</td>' +
+      '<td><div class="ellipsis" title="' + esc(c.name) + '"' + a1c('Надпись', 'ТаблицаЧекЛистПункт') + '>' + esc(c.name) + '</div></td>' +
+      '<td><div class="ellipsis"' + a1c('Надпись', 'ТаблицаЧекЛистРоль') + '>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div>' +
+        '<div class="muted text-s ellipsis" title="' + esc(who) + '"' + a1c('Надпись', 'ТаблицаЧекЛистОтветственный') + '>' + esc(who) + '</div></td>' +
+      '<td class="nowrap"><div class="' + (checklistOverdue(c) ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаЧекЛистСрок') + '>' + fmtDate(date) + '</div>' +
+        '<div class="text-s ' + due.cls + '"' + a1c('Надпись', 'ТаблицаЧекЛистСрокПояснение') + '>' + esc(due.text) + '</div></td>' +
       '<td>' + action + '</td>' +
       '</tr>';
   }
@@ -2264,7 +2234,6 @@
         if (c.linkedDocType === 'program' && hasProgram) markChecklistDone(item, true);
         D.checklist.push(item);
       });
-      state.checklistSel = null;
       toast('Чек-лист заполнен по шаблону');
     }
   };
@@ -2358,9 +2327,6 @@
     state.selectedTasks = {};
     state.collapsedBlocks = {};
     state.checklistMode = 'all';
-    state.checklistSort = 1;
-    state.checklistFilter = null;
-    state.checklistSel = null;
     deptChain(t.departmentId).forEach(function (d) { delete state.collapsed[d.id]; });
     render();
   }
@@ -2437,8 +2403,7 @@
         state.collapsedBlocks = {};
         state.taskFilter = n.target.filter ? TARGET_FILTER[n.target.filter] : null;
       } else {
-        state.checklistMode = 'all';
-        state.checklistFilter = 'overdue';
+        state.checklistMode = 'all';  // просроченные пункты — вверху списка (сортировка по сроку), дата красным
       }
       renderCenter();
     },
@@ -2511,28 +2476,7 @@
     openForus: function () { toast('Переход в Forus Team в прототипе не реализован'); },
 
     // Чек-лист подготовки
-    clSelect: function (row, e) {
-      if (e.target.closest('input, button')) return;
-      state.checklistSel = row.getAttribute('data-id');
-      renderCenter();
-    },
-    clMove: function (btn) {
-      var t = trainee(state.selectedTraineeId);
-      var list = checklistOf(t);
-      var c = checklistItemById(state.checklistSel);
-      var other = list[list.indexOf(c) + Number(btn.getAttribute('data-dir'))];
-      if (!c || !other) return;
-      var i = D.checklist.indexOf(c), j = D.checklist.indexOf(other);
-      D.checklist[i] = other;
-      D.checklist[j] = c;
-      renderCenter();
-    },
     clMode: function (btn) { state.checklistMode = btn.getAttribute('data-value'); renderCenter(); },
-    clSort: function () {
-      state.checklistSort = state.checklistSort === 1 ? -1 : state.checklistSort === -1 ? 0 : 1;
-      renderCenter();
-    },
-    clFilter: function () { state.checklistFilter = null; renderCenter(); },
     clOpenRequest: function () { toast('Откроется документ'); },
     clOpenBitrix: function () { toast('Переход во внешнюю систему в прототипе не реализован'); },
     dialogSubmit: function () { submitDialog(); },
