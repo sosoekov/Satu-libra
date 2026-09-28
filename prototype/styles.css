@@ -620,3 +620,7 @@ body.markup-1c table[data-1c]::before {
 .analytics-head:hover { text-decoration: underline; }
 .analytics-arrow { display: inline-flex; width: 16px; justify-content: center; }
 .analytics-list { padding-left: 20px; }
+
+/* ================= Фаза 10.3: завершённая подготовка к выходу ================= */
+.trainee-card .tabs .tab.tab-done, .trainee-card .tabs .tab.tab-done.active { color: var(--c-text-secondary); }
+.lock-note .note-icon.muted { color: var(--c-text-secondary); }

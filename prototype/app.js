@@ -274,6 +274,7 @@
     flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 3 1.8 3h-8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
     print: '<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="9.5" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+    lock: '<rect x="3.5" y="7" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/>',
     plus: '<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
     up: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     down: '<path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -972,7 +973,7 @@
   function renderTraineePages(t) {
     var cl = checklistSummary(t);
     var tabs = [
-      { id: 'prepare', text: 'Подготовка к выходу ' + cl.text, name: 'СтраницаПодготовкаКВыходу', pic: cl.pic },
+      { id: 'prepare', text: 'Подготовка к выходу ' + cl.text, name: 'СтраницаПодготовкаКВыходу', pic: cl.pic, done: prepCompleted(t) },
       { id: 'program', text: 'Адаптационная программа', name: 'СтраницаАдаптационнаяПрограмма' }
     ];
     var body;
@@ -986,7 +987,8 @@
         // Цветной текст в заголовке страницы в 1С не штатный — статус передаётся картинкой страницы
         var pic = x.pic ? '<span class="tab-pic ' + x.pic.cls + '" title="' + esc(x.pic.title) + '"' +
           a1c('Картинка', 'КартинкаСтраницыПодготовка', 'check') + '>' + icon(x.pic.icon) + '</span>' : '';
-        return '<button type="button" class="tab' + (state.traineeTab === x.id ? ' active' : '') + '" data-tab="' + x.id + '" data-action="traineeTab"' +
+        // завершённая подготовка — название серым и на активной вкладке (фаза 10, 4.2)
+        return '<button type="button" class="tab' + (state.traineeTab === x.id ? ' active' : '') + (x.done ? ' tab-done' : '') + '" data-tab="' + x.id + '" data-action="traineeTab"' +
           (x.pic ? ' title="' + esc(x.pic.title) + '"' : '') + a1c('Страница', x.name) + '>' + pic + esc(x.text) + '</button>';
       }).join('') + '</div>' + body + '</div>';
   }
@@ -1314,7 +1316,19 @@
    * Вкладка «Подготовка к выходу» (раздел 7.6)
    * --------------------------------------------------------------------- */
 
-  function checklistLock(t) { return isClosed(t) ? 'Стажировка закрыта — чек-лист доступен только для просмотра' : null; }
+  // Подготовка завершена: все пункты выполнены и стажёр получил задачи — вкладка только для просмотра (фаза 10, раздел 4).
+  // Разблокировки нет (открытый вопрос 2). В 1С — ТолькоПросмотр у таблицы и видимость командной панели.
+  function prepCompleted(t) {
+    var all = checklistOf(t);
+    return all.length > 0 && all.every(function (c) { return c.done; }) && ['active', 'closing', 'closed'].indexOf(t.stage) >= 0;
+  }
+  function prepCompletedAt(t) {
+    return checklistOf(t).reduce(function (m, c) { return c.doneAt && c.doneAt > m ? c.doneAt : m; }, '');
+  }
+  function checklistLock(t) {
+    if (prepCompleted(t)) return 'Подготовка завершена ' + fmtDate(prepCompletedAt(t)) + '. Изменения недоступны.';
+    return isClosed(t) ? 'Стажировка закрыта — чек-лист доступен только для просмотра' : null;
+  }
   function offsetText(n) {
     if (n < 0) return 'за ' + (-n) + ' дн. до выхода';
     if (n === 0) return 'в день выхода';
@@ -1337,9 +1351,13 @@
     var lock = checklistLock(t);
     var list = visibleChecklist(t);
 
+    // Только просмотр: строка с замком, кнопки изменения скрыты; тумблер «Все | Мои» остаётся — он не меняет данных
+    var lockRow = lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретИзмененияПодготовки') + '>' +
+      '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаЗапретИзмененияПодготовки') + '>' + icon('lock') + '</span>' +
+      '<span class="muted"' + a1c('Надпись', 'ДекорацияЗапретИзмененияПодготовки') + '>' + esc(lock) + '</span></div>' : '';
     var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
-      button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, disabled: !!lock, title: lock || '', name: 'КнопкаДобавитьПункт' }) +
-      button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, disabled: !!lock, title: lock || '', name: 'КнопкаЗаполнитьПоШаблону' }) +
+      (lock ? '' : button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт' }) +
+        button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'КнопкаЗаполнитьПоШаблону' })) +
       '<span class="grow"></span>' +
       toggle('ТумблерМоиПункты', 'clMode', [
         { value: 'all', text: 'Все', name: 'Все' },
@@ -1362,7 +1380,7 @@
       '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
 
-    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + bar + table + '</div>';
+    return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + lockRow + bar + table + '</div>';
   }
 
   // Вторая строка «Срока» (фаза 9, 6.4)
@@ -1383,7 +1401,7 @@
     if (c.linkedDocType === 'request0911') {
       action = c.linkedDocNumber
         ? link('Заявка ' + c.linkedDocNumber, { action: 'clOpenRequest', name: 'ТаблицаЧекЛистДокумент' })
-        : link('Создать заявку', { action: 'openDialog', data: { dialog: 'request0911', item: c.id }, disabled: !!lock, title: lock || '', name: 'ТаблицаЧекЛистСоздатьЗаявку' });
+        : lock ? '' : link('Создать заявку', { action: 'openDialog', data: { dialog: 'request0911', item: c.id }, name: 'ТаблицаЧекЛистСоздатьЗаявку' });  // только просмотр — только ссылки на существующие документы
     } else if (c.linkedDocType === 'bitrix') {
       action = link('Открыть Bitrix', { action: 'clOpenBitrix', name: 'ТаблицаЧекЛистОткрытьBitrix' });
     } else if (c.linkedDocType === 'program') {
