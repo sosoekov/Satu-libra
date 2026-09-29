@@ -17,9 +17,17 @@
   --c-stage-closing-bg: #E4E7EC;
 
   --font: Arial, "Helvetica Neue", sans-serif;
-  --fs-s: 12px; --fs-m: 13px; --fs-l: 15px; --fs-xl: 18px;
+  --fs-s: 12px; --fs-m: 13px; --fs-l: 15px; --fs-xl: 20px;
+  --fw-bold: 600;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px;
-  --radius: 4px;
+  /* Фаза 11, 2.1: скругления */
+  --radius: 8px;          /* карточки, блоки, контейнеры таблиц, левая панель */
+  --radius-s: 6px;        /* кнопки, поля ввода, тумблеры */
+  --radius-pill: 10px;    /* бейджи */
+  /* Рамки блока аналитики */
+  --c-danger-border:  #F3C3BE;
+  --c-warning-border: #F2D9A0;
+  --c-info-border:    #BCD3FA;
 }
 
 /* ================= База ================= */
@@ -36,6 +44,7 @@ body {
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--c-primary); outline-offset: 1px; }
 .hidden { display: none !important; }
+b, strong { font-weight: var(--fw-bold); }
 
 /* Группы формы: только flex */
 .row { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); }
@@ -54,7 +63,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .text-l { font-size: var(--fs-l); }
 .text-xl { font-size: var(--fs-xl); }
 .muted { color: var(--c-text-secondary); }
-.bold { font-weight: bold; }
+.bold { font-weight: var(--fw-bold); }
 .danger-text { color: var(--c-danger); }
 .success-text { color: var(--c-success); }
 .h-block { font-size: var(--fs-l); font-weight: normal; margin: 0; }
@@ -73,7 +82,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
   height: 32px; padding: 0 var(--sp-3) 0 var(--sp-2);
   background: var(--c-bg); color: var(--c-text); font-size: var(--fs-s);
-  border-radius: calc(var(--radius) * 2); border-left: 3px solid var(--c-tab-active);
+  border-radius: 8px; border-left: 3px solid var(--c-tab-active);
 }
 .shell-home svg { width: 16px; height: 16px; }
 .shell-main { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; }
@@ -86,7 +95,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .shell-form {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
   background: var(--c-bg); color: var(--c-text);
-  border-radius: calc(var(--radius) * 3) calc(var(--radius) * 3) 0 0;
+  border-radius: 12px 12px 0 0;
   overflow: hidden;
 }
 
@@ -96,7 +105,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   flex: 0 0 auto;
   padding: var(--sp-5) var(--sp-5) 0;
 }
-.window-title { font-size: var(--fs-xl); margin: 0; font-weight: normal; }
+.window-title { font-size: var(--fs-xl); margin: 0; font-weight: var(--fw-bold); }
 .window-tools { gap: var(--sp-2); flex: 0 0 auto; }  /* фаза 9, 8.1: кнопки окна прижаты вправо и не сжимаются */
 .window-head-row { flex-wrap: nowrap; min-width: 0; }
 .window-head-row .window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -110,19 +119,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tabs { display: flex; flex-direction: row; gap: var(--sp-5); border-bottom: 1px solid var(--c-border); }
 .tab {
   background: none; border: none; padding: var(--sp-2) 0; cursor: pointer;
-  border-bottom: 3px solid transparent; margin-bottom: -1px; color: var(--c-text);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--c-text);
 }
 .tab:hover { color: var(--c-primary); }
 .tab.active { border-bottom-color: var(--c-tab-active); }
 .tabs-top { padding: 0 var(--sp-2); }
 .tabs-top .tab { font-size: var(--fs-l); }
+.tabs-top .tab.active { font-weight: var(--fw-bold); }
 
 .window-body { flex: 1 1 auto; display: flex; flex-direction: row; min-height: 0; padding: var(--sp-4) var(--sp-5) 0; }
 
 /* Зоны */
 .zone-left {
   flex: 0 0 360px; width: 360px;
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: var(--radius); margin-bottom: var(--sp-4);
   background: var(--c-bg-panel);
   display: flex; flex-direction: column; min-height: 0;
 }
@@ -142,8 +152,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ================= Кнопки ================= */
 .btn {
   display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
-  height: 28px; padding: 0 var(--sp-3);
-  border: 1px solid var(--c-border); border-radius: var(--radius);
+  height: 32px; padding: 0 var(--sp-3);
+  border: 1px solid var(--c-border); border-radius: var(--radius-s);
   background: var(--c-bg); color: var(--c-text);
   cursor: pointer; white-space: nowrap;
   transition: background-color 100ms, border-color 100ms;
@@ -152,7 +162,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn-primary { background: var(--c-primary); border-color: var(--c-primary); color: var(--c-bg); }
 .btn-primary:hover:not(:disabled) { background: var(--c-info); color: var(--c-bg); filter: brightness(0.92); }
 .btn:disabled { cursor: default; opacity: 0.5; }
-.btn-icon { width: 28px; padding: 0; justify-content: center; }
+.btn-icon { width: 32px; padding: 0; justify-content: center; }
 .btn-flat { border-color: transparent; background: transparent; }
 .btn-flat:hover:not(:disabled) { border-color: var(--c-border); }
 .btn-danger-text { color: var(--c-danger); }
@@ -167,7 +177,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ================= Бейджи ================= */
 .badge {
-  display: inline-block; padding: 1px 6px; border-radius: var(--radius);
+  display: inline-block; padding: 1px 8px; border-radius: var(--radius-pill);
   font-size: var(--fs-s); white-space: nowrap; line-height: 18px;
 }
 .badge-success { background: var(--c-success-bg); color: var(--c-success); }
@@ -185,7 +195,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dot-danger { background: var(--c-danger); }
 
 /* ================= Индикатор ================= */
-.indicator { flex: 1 1 auto; height: 6px; border-radius: var(--radius); background: var(--c-neutral-bg); overflow: hidden; min-width: 60px; display: flex; }
+.indicator { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--c-neutral-bg); overflow: hidden; min-width: 60px; display: flex; }
 .indicator > span { display: block; height: 100%; background: var(--c-primary); }
 .indicator.success > span { background: var(--c-success); }
 .indicator.danger > span { background: var(--c-danger); }
@@ -195,8 +205,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ================= Поля ================= */
 .input, .select, .textarea {
-  height: 28px; padding: 0 var(--sp-2);
-  border: 1px solid var(--c-border); border-radius: var(--radius);
+  height: 32px; padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border); border-radius: var(--radius-s);
   background: var(--c-bg); min-width: 0;
 }
 .textarea { height: auto; min-height: 56px; padding: var(--sp-1) var(--sp-2); resize: vertical; }
@@ -208,9 +218,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .check input:disabled { cursor: default; }
 
 /* Тумблер */
-.toggle { display: inline-flex; flex-direction: row; border: 1px solid var(--c-border); border-radius: var(--radius); overflow: hidden; }
+.toggle { display: inline-flex; flex-direction: row; border: 1px solid var(--c-border); border-radius: var(--radius-s); overflow: hidden; flex: 0 0 auto; align-self: flex-start; }
 .toggle button {
-  border: none; background: var(--c-bg); padding: 0 var(--sp-3); height: 26px; cursor: pointer;
+  border: none; background: var(--c-bg); padding: 0 var(--sp-3); height: 30px; cursor: pointer;
   border-right: 1px solid var(--c-border); white-space: nowrap;
 }
 .toggle button:last-child { border-right: none; }
@@ -220,14 +230,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toggle button.on { background: var(--c-bg-selected); color: var(--c-primary); }
 
 /* ================= Таблицы ================= */
-.table-box { overflow: auto; }  /* фаза 9, 4.2: таблицы без внешней рамки */
+.table-box { overflow: auto; border: 1px solid var(--c-border); border-radius: var(--radius); }  /* фаза 11, 2.3: таблица в скруглённой рамке, содержимое обрезается по скруглению */
 table.grid { width: 100%; border-collapse: collapse; }
 table.grid th {
   text-align: left; font-weight: normal; color: var(--c-text-secondary); font-size: var(--fs-s);
-  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg);
-  white-space: nowrap; position: sticky; top: 0;
+  padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); background: var(--c-bg-panel);
+  white-space: nowrap; position: sticky; top: 0; z-index: 1;
 }
 table.grid td { padding: 6px var(--sp-2); border-bottom: 1px solid var(--c-border); vertical-align: top; }
+table.grid tbody tr > td { height: 36px; }  /* фаза 11, 2.3: строка не ниже 36px */
 table.grid tr:last-child td { border-bottom: none; }
 table.grid tbody tr.clickable { cursor: pointer; }
 table.grid tbody tr.clickable:hover td { background: var(--c-bg-panel); }
@@ -241,7 +252,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .menu-host { display: inline-flex; flex-direction: column; }
 .menu {
   display: flex; flex-direction: column; min-width: 200px;
-  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius);
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-s);
   padding: var(--sp-1) 0;
 }
 .menu button { border: none; background: none; text-align: left; padding: 6px var(--sp-3); cursor: pointer; white-space: nowrap; }
@@ -273,7 +284,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .demo-btn:disabled { opacity: 1; color: var(--c-text-secondary); }
 
 /* ================= Левая панель ================= */
-.left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); min-height: 0; }
+.left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); min-height: 0; }
 .left-inner > * { flex-shrink: 0; }
 .left-inner > .tree { flex-shrink: 1; }
 .left-strip { align-items: center; padding: var(--sp-2) 0; }
@@ -285,12 +296,13 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .tone-danger  { color: var(--c-danger);  display: inline-flex; }
 
 
-/* Дерево и список */
+/* Дерево и список (фаза 11, 3.3): белый контейнер с рамкой, скругление 8px, растягивается на оставшуюся высоту */
 .tree {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  border-radius: var(--radius); background: var(--c-bg);
+  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
   padding: var(--sp-1) 0;
 }
+.tree-chevron { display: inline-flex; color: var(--c-text-secondary); }
 .tree-row {
   display: flex; flex-direction: row; align-items: center; gap: 0;
   min-height: 28px; padding-right: var(--sp-2); cursor: pointer;
@@ -298,7 +310,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Фаза 9, 7.2: колонки дерева — наименование (остаток, обрезается только оно) | статус 20px | количество 32px */
 .tree-col-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .tree-col-status { flex: 0 0 20px; width: 20px; display: inline-flex; align-items: center; justify-content: center; }
-.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; }
+.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; display: inline-flex; justify-content: flex-end; }
 .tree-row:hover { background: var(--c-bg-panel); }
 .tree-row.selected { background: var(--c-bg-selected); }
 .tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
@@ -352,7 +364,7 @@ th.num, td.num { text-align: right; }
    будущий — контур и серый текст; линии одного цвета */
 .step-done { color: var(--c-text); }
 .step-done .step-mark { border-color: var(--c-success); color: var(--c-success); }
-.step-current { color: var(--c-primary); font-weight: bold; }
+.step-current { color: var(--c-primary); font-weight: var(--fw-bold); }
 .step-current .step-mark { border-color: var(--c-primary); background: var(--c-primary); color: var(--c-bg); }
 .step-current .muted { font-weight: normal; }
 .step-line { flex: 1 1 16px; min-width: 8px; height: 1px; background: var(--c-border); margin-top: 11px; }
@@ -375,10 +387,10 @@ th.num, td.num { text-align: right; }
 .menu .danger-text { color: var(--c-danger); }
 
 /* Вкладки стажёра */
-/* Фаза 9, 4.4: 13px, обычное начертание; неактивная — серым, активная — --c-text и подчёркивание 2px */
-.trainee-card .tabs .tab { font-size: var(--fs-m); font-weight: normal; color: var(--c-text-secondary); border-bottom-width: 2px; }
-.trainee-card .tabs .tab.active { color: var(--c-text); }
-.trainee-card .tabs .tab:hover { color: var(--c-primary); }
+/* Фаза 11, 2.2: 14px; неактивная — обычное начертание, серым; активная — полужирная, --c-text и подчёркивание 2px */
+.trainee-card .tabs .tab { font-size: 14px; font-weight: normal; color: var(--c-text-secondary); border-bottom-width: 2px; }
+.trainee-card .tabs .tab.active { color: var(--c-text); font-weight: var(--fw-bold); }
+.trainee-card .tabs .tab:not(.active):hover { color: var(--c-primary); }
 
 /* ================= Диалоги ================= */
 .modal-backdrop {
@@ -393,7 +405,7 @@ th.num, td.num { text-align: right; }
 }
 .modal-wide { width: 720px; }
 .modal-head { padding: var(--sp-3) var(--sp-3) var(--sp-2) var(--sp-4); }
-.modal-title { font-size: var(--fs-l); font-weight: bold; }
+.modal-title { font-size: var(--fs-l); font-weight: var(--fw-bold); }
 .modal-body { padding: var(--sp-2) var(--sp-4) var(--sp-4); overflow: auto; }
 .modal-foot { padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--c-border); }
 .dlg-text { margin: 0; }
@@ -419,11 +431,12 @@ th.num, td.num { text-align: right; }
 .task-table .w-observers { width: 20%; }
 .task-table .w-result { width: 64px; }
 .task-table .w-menu { width: 40px; }
-.task-table td { vertical-align: middle; }
+table.grid.task-table td { vertical-align: middle; }
 .task-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
 .task-row.selected td { background: var(--c-bg-selected); }
-.group-row td { background: var(--c-bg-panel); cursor: pointer; }
-.group-row:hover td { background: var(--c-neutral-bg); }
+.group-row td { background: var(--c-bg); font-weight: var(--fw-bold); cursor: pointer; }  /* фаза 11, 2.3 */
+.group-row td .muted, .group-row td .indicator-wrap { font-weight: normal; }
+.group-row:hover td { background: var(--c-bg-panel); }
 .icon-cell { display: inline-flex; width: 16px; color: var(--c-text-secondary); }
 .btn-small { height: 24px; width: 24px; }
 .menu-float { position: fixed; z-index: 90; }
@@ -442,10 +455,11 @@ th.num, td.num { text-align: right; }
 /* ================= Вкладка «Подготовка к выходу» ================= */
 .checklist-table { table-layout: fixed; }
 .checklist-table .w-check { width: 36px; }
-.checklist-table .w-resp { width: 260px; }
+.checklist-table .w-resp { width: 240px; }
+.checklist-table .w-fact { width: 150px; }
 .checklist-table .w-date { width: 150px; }
 .checklist-table .w-action { width: 150px; }
-.checklist-table td { vertical-align: middle; }
+table.grid.checklist-table td { vertical-align: middle; }
 /* Фаза 9, 6.4: все строки одной высоты — две строки текста */
 .checklist-table tbody tr[data-id] > td { height: 48px; padding-top: 0; padding-bottom: 0; vertical-align: middle; }
 .checklist-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
@@ -475,14 +489,17 @@ body.markup-1c table[data-1c]::before {
 .filter-list { display: flex; flex-direction: column; }
 .filter-row {
   display: flex; flex-direction: row; align-items: center; gap: var(--sp-2);
-  height: 28px; padding: 0 var(--sp-1) 0 var(--sp-2); border-radius: var(--radius); cursor: pointer;
+  height: 30px; padding: 0 var(--sp-1) 0 var(--sp-2); border-radius: var(--radius-s); cursor: pointer;
 }
 .filter-row:hover { background: var(--c-neutral-bg); }
 .filter-row.on { background: var(--c-bg-selected); }
-.filter-row.on .filter-label { font-weight: bold; }
+.filter-row.on .filter-label { font-weight: var(--fw-bold); }
 .filter-icon { display: inline-flex; }
 .filter-num { min-width: 20px; text-align: right; }
-.filter-row:not(.on) .filter-num { margin-right: 32px; }
+/* Фаза 11, 3.2: колонки «✕» и «⋮» справа от числа — у всех строк одной ширины, числа в одну колонку */
+.filter-reset, .filter-menu { flex: 0 0 24px; width: 24px; display: inline-flex; }
+.filter-row { gap: var(--sp-2); }
+.filter-row .filter-num + .filter-reset { margin-left: calc(var(--sp-1) - var(--sp-2)); }
 .filter-sep { height: 1px; background: var(--c-border); margin: var(--sp-1) 0; }
 .menu-check { display: inline-block; width: 16px; }
 
@@ -514,7 +531,7 @@ body.markup-1c table[data-1c]::before {
 .indicator.warning > span { background: var(--c-warning); }
 .chip {
   display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1);
-  height: 24px; padding: 0 0 0 var(--sp-2); border-radius: var(--radius);
+  height: 24px; padding: 0 0 0 var(--sp-2); border-radius: var(--radius-pill);
   background: var(--c-bg-selected); color: var(--c-primary); font-size: var(--fs-s);
 }
 
@@ -537,7 +554,7 @@ body.markup-1c table[data-1c]::before {
 .tf-field.tf-wide { flex: 2 1 0; }
 .tf-spacer { flex: 1 1 0; }
 .tf-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
-.tf-check { height: 28px; }
+.tf-check { height: 32px; }
 .tf-textarea { width: 100%; min-height: 110px; }
 .tf-links { flex: 1 1 0; min-width: 0; }
 .tf-links-bar { background: var(--c-bg-panel); border-radius: var(--radius); padding: var(--sp-1); }
@@ -549,7 +566,7 @@ body.markup-1c table[data-1c]::before {
 /* FT_2: наблюдатели в карточке задачи */
 .tf-field.tf-half { flex: 0.5 1 0; }
 .obs-field { padding: 0 2px 0 var(--sp-2); cursor: pointer; }
-.obs-text { border: none; background: transparent; height: 26px; padding: 0; min-width: 0; cursor: pointer; font: inherit; color: var(--c-text); }
+.obs-text { border: none; background: transparent; height: 30px; padding: 0; min-width: 0; cursor: pointer; font: inherit; color: var(--c-text); }
 .obs-text:focus-visible { outline: none; }
 .obs-field:focus-within { outline: 2px solid var(--c-primary); outline-offset: 1px; }
 .obs-text::placeholder { color: var(--c-text-secondary); }
@@ -558,30 +575,16 @@ body.markup-1c table[data-1c]::before {
 /* ================= Фаза 9: карточка стажёра (3.2) ================= */
 .tcard { display: flex; flex-direction: row; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); flex-wrap: nowrap; }
 .tcard-who { flex: 0 0 auto; align-items: center; }
-.avatar.avatar-s { flex: 0 0 40px; width: 40px; height: 40px; font-size: var(--fs-l); }
-.tcard-name { font-size: 18px; line-height: 24px; white-space: nowrap; }
-.tcard-people { flex: 0 0 auto; min-width: 0; }
+.tcard-name { font-size: var(--fs-xl); line-height: 26px; white-space: nowrap; }
 .tcard-line { line-height: 20px; white-space: nowrap; }
-.tcard-people .tcard-line { display: flex; flex-direction: row; align-items: baseline; min-width: 0; }
-.tcard-people .tcard-line > .muted { flex: 0 0 auto; margin-right: 4px; }
-.tcard-people .tcard-line > .link, .tcard-people .tcard-line > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tcard-dates { flex: 0 1 auto; margin-left: auto; min-width: min-content; }
 /* Узкое окно: наставник и руководитель сжимаются (многоточие, полное ФИО — в подсказке), полосы переносятся третьей строкой */
 /* Фаза 10: при узком окне даты и действие карточки переносятся второй строкой карточки, ФИО не обрезаются */
-@media (max-width: 1500px) { .tcard { flex-wrap: wrap; row-gap: var(--sp-2); } }
-.tcard-bars { gap: 2px var(--sp-4); flex-wrap: wrap; justify-content: flex-end; }
-.tcard-bar { gap: var(--sp-2); height: 20px; flex-wrap: nowrap; white-space: nowrap; }
-.tcard-bars span { white-space: nowrap; }
-.tcard-bar .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
 .step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
 
 /* ================= Фаза 9: блок процесса (3.3) ================= */
 .process .stepper { padding: 0; }
 .process-first { gap: var(--sp-3); flex-wrap: nowrap; min-height: 32px; }
-.note-row { height: 32px; gap: var(--sp-2); flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; }
 .note-icon { display: inline-flex; flex: 0 0 16px; }
-.note-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--c-text); }
-.note-row .btn, .note-row .link { flex: 0 0 auto; white-space: nowrap; }
 .trainee-actions { margin-left: auto; flex: 0 0 auto; gap: var(--sp-2); border: none; padding: 0; flex-wrap: nowrap; }
 
 /* Фаза 8: картинка страницы «Подготовка к выходу» */
@@ -591,11 +594,11 @@ body.markup-1c table[data-1c]::before {
 /* Фаза 8.4: вкладка «Адаптационная программа» */
 .toggle button.tv-danger:not(.on) { color: var(--c-danger); }
 .toggle button.tv-danger.on { background: var(--c-bg-selected); color: var(--c-danger); }
-.task-table tr.task-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
-.task-table tr.group-row > td { height: 32px; padding-top: 0; padding-bottom: 0; }
+.task-table tr.task-row > td { height: 36px; padding-top: 0; padding-bottom: 0; }
+.task-table tr.group-row > td { height: 36px; padding-top: 0; padding-bottom: 0; }
 .group-indicator { display: inline-flex; width: 80px; }
 .group-indicator > .indicator { width: 80px; }
-.filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius); }
+.filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius-s); }
 .task-bar { border-bottom: none; padding-bottom: 0; }
 .task-table thead th { padding-top: 5px; padding-bottom: 5px; }
 @media (max-width: 1500px) { .task-table .w-person, .task-table .w-observers { width: 13%; } }
@@ -604,22 +607,64 @@ body.markup-1c table[data-1c]::before {
 /* ================= Фаза 10.1: карточка и размещение действий ================= */
 .back-row { min-height: 28px; }
 .tcard-term { gap: var(--sp-2); flex-wrap: nowrap; white-space: nowrap; }
-.tcard-term .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
-.tcard-dates { align-items: flex-start; }
-.tcard-action { flex: 0 0 auto; }
 
-/* ================= Фаза 10.2: блок «Аналитика по адаптационной программе» ================= */
-.analytics { gap: 0; }
-.analytics.open { gap: var(--sp-2); }
+/* ================= Фаза 11.4: блок «Аналитика по адаптационной программе» ================= */
+/* Рамка и заливка — по самому критичному замечанию (в 1С цвет фона и рамки группы задаётся программно) */
+.analytics { gap: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg); }
+.analytics.sev-danger  { background: var(--c-danger-bg);  border-color: var(--c-danger-border); }
+.analytics.sev-warning { background: var(--c-warning-bg); border-color: var(--c-warning-border); }
+.analytics.sev-info    { background: var(--c-info-bg);    border-color: var(--c-info-border); }
+.analytics.open { gap: var(--sp-1); }
+.analytics-top { gap: var(--sp-3); min-height: 32px; flex-wrap: nowrap; }
 .analytics-head {
-  display: inline-flex; flex-direction: row; align-items: center; gap: 4px; align-self: flex-start;
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--c-primary); font: inherit; font-size: var(--fs-m); font-weight: normal; line-height: 20px;
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0;
+  background: none; border: none; padding: 0; font: inherit; color: var(--c-text); text-align: left;
 }
-.analytics-head:hover { text-decoration: underline; }
-.analytics-arrow { display: inline-flex; width: 16px; justify-content: center; }
-.analytics-list { padding-left: 20px; }
+button.analytics-head { cursor: pointer; }
+.analytics-arrow { display: inline-flex; flex: 0 0 16px; width: 16px; justify-content: center; color: var(--c-text-secondary); }
+.analytics-icon { display: inline-flex; flex: 0 0 16px; }
+.analytics-title { font-size: var(--fs-l); font-weight: var(--fw-bold); color: var(--c-text); }
+button.analytics-head:hover .analytics-title { text-decoration: underline; }
+.analytics-actions { gap: var(--sp-2); flex: 0 0 auto; flex-wrap: nowrap; }
+/* Строки замечаний: 28px, иконка 16px, отступ слева — под текст заголовка (стрелка 16 + 6 + иконка 16 + 6) */
+.analytics-list { padding-left: 44px; }
+.analytics-row { min-height: 28px; gap: var(--sp-2); flex-wrap: nowrap; }
+.analytics-row-icon { display: inline-flex; flex: 0 0 16px; margin-left: -24px; }
+.analytics-row-text { color: var(--c-text); min-width: 0; }
 
 /* ================= Фаза 10.3: завершённая подготовка к выходу ================= */
 .trainee-card .tabs .tab.tab-done, .trainee-card .tabs .tab.tab-done.active { color: var(--c-text-secondary); }
 .lock-note .note-icon.muted { color: var(--c-text-secondary); }
+
+/* ================= Фаза 11.1: новый стиль ================= */
+/* Заголовок окна: «←» — заглушка навигации платформы */
+.window-back { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; color: var(--c-text); }
+.window-back svg { width: 20px; height: 20px; }
+/* Поле поиска с лупой слева: рамка у группы, поле без рамки */
+.search-field { display: flex; flex-direction: row; align-items: center; gap: 6px; height: 32px; padding: 0 0 0 var(--sp-2);
+  border: 1px solid var(--c-border); border-radius: var(--radius-s); background: var(--c-bg); }
+.search-field:focus-within { outline: 2px solid var(--c-primary); outline-offset: 1px; }
+.search-field > .icon { color: var(--c-text-secondary); }
+.search-field > .input { flex: 1 1 auto; border: none; height: 30px; padding-left: 0; background: transparent; }
+.search-field > .input:focus-visible { outline: none; }
+/* Иконки: фильтры левой панели — 18px */
+.filter-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
+
+/* ================= Фаза 11.3: карточка стажёра ================= */
+.panel.tcard { padding: var(--sp-4); gap: 0; align-items: stretch; flex-wrap: wrap; row-gap: var(--sp-3); }
+.tcard-part { padding: 0 var(--sp-4); border-left: 1px solid var(--c-border); min-width: 0; }
+.tcard-part:first-child { padding-left: 0; border-left: none; }
+.tcard-part:last-child { padding-right: 0; }
+.tcard .tcard-who { flex: 0 1 auto; align-items: center; }
+.tcard-who-text { min-width: 0; }
+.tcard .avatar { flex: 0 0 56px; width: 56px; height: 56px; font-size: var(--fs-xl); }
+.tcard-person { flex: 1 1 120px; min-width: 120px; max-width: 220px; justify-content: center; line-height: 20px; }
+.tcard-person .link, .tcard-person > span:last-child { white-space: normal; }
+.tcard .tcard-dates { flex: 0 0 auto; margin-left: auto; justify-content: center; }
+/* Узкое окно (≤ 1500px): даты — второй строкой карточки, разделитель сверху */
+@media (max-width: 1500px) {
+  .tcard .tcard-dates { flex: 1 0 100%; margin-left: 0; padding: var(--sp-3) 0 0; border-left: none; border-top: 1px solid var(--c-border); }
+}
+.tcard-ico { display: inline-flex; flex: 0 0 16px; color: var(--c-text-secondary); }
+.tcard-indent { padding-left: 24px; }
+.tcard-term { gap: var(--sp-2); }

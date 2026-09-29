@@ -28,6 +28,8 @@
           <!-- Заголовок формы: в 1С рисует платформа -->
           <div class="window-head col gap-3">
             <div class="row window-head-row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокФормы">
+              <!-- «←» — заглушка навигации платформы -->
+              <span class="window-back" data-shell-icon="back" title="Назад" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="КнопкаНазадПлатформы"></span>
               <h1 class="window-title grow" aria-hidden="true">Личный кабинет руководителя</h1>
               <!-- Демо-переключатель этапа выбранного стажёра: только для прототипа -->
               <div class="demo-dock" id="demoDock" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ДемоПереключательЭтапа"></div>
@@ -51,7 +53,7 @@
             <!-- Страница «Адаптация персонала»: три зоны -->
             <div class="page-body" id="adaptationPage"
                  data-1c="ГруппаГоризонтальная" data-1c-name="ГруппаАдаптацияОсновная">
-              <div class="zone-left" id="leftZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЛеваяПанель"></div>
+              <div class="zone-left" id="leftZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЛеваяПанель" data-1c-risk="check"></div>
               <div class="zone-center" id="centerZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЦентр"></div>
               <div class="zone-help hidden" id="helpZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаСправка"></div>
             </div>
