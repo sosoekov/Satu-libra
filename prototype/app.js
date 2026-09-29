@@ -65,7 +65,7 @@
     return null;
   }
   function user(id) { return byId(D.users, id); }
-  function userName(id) { var u = user(id); return u ? u.fullName : '—'; }
+  function userName(id) { var u = user(id); if (u) return u.fullName; var tr = trainee(id); return tr ? tr.fullName : '—'; }   // FT_9: стажёр тоже может быть пользователем
   function dept(id) { return byId(D.departments, id); }
   function trainee(id) { return byId(D.trainees, id); }
   function programOf(t) {
@@ -423,13 +423,45 @@
 
   function el(id) { return document.getElementById(id); }
 
+  /* ---------------------------------------------------------------------
+   * FT_9: демо-пользователи и видимость. НЕ_ПЕРЕНОСИТЬ — список вариантов; в 1С видимость задаётся ролями
+   * и правами на уровне записей (RLS) по подразделению, руководителю стажировки и стажёру.
+   * scope: 'all' — все стажёры; 'dept' — стажёры подразделения dept и подчинённых; 'head' — где пользователь руководитель
+   * стажировки; 'ksh' — пустая страница (свой кабинет позже); 'trainee' — только свои задачи АП.
+   * --------------------------------------------------------------------- */
+  var DEMO_USERS = [
+    { id: 'u-strygin',     label: 'Стрыгин К.М. (заместитель руководителя ЦАС)', role: 'Заместитель руководителя ЦАС', scope: 'all', name: 'ЗамРуководителяЦАС' },
+    { id: 'u-kladova',     label: 'Кладова Я.С. (руководитель отдела)',           role: 'Руководитель отдела',          scope: 'dept', dept: 'd-corp', name: 'РуководительОтдела' },
+    { id: 'u-sizova',      label: 'Сизова А.В. (руководитель стажировки)',        role: 'Руководитель стажировки',      scope: 'head', name: 'РуководительСтажировки' },
+    { id: 'u-sudomoykina', label: 'Судомойкина А.Н. (HR-менеджер)',               role: 'HR-менеджер',                  scope: 'all', name: 'HRМенеджер' },
+    { id: 'u-baeva',       label: 'Баева Д.В. (Сотрудник КШ)',                    role: 'Сотрудник КШ',                 scope: 'ksh', name: 'СотрудникКШ' },
+    { id: 't-ivanov',      label: 'Иванов П.С. (Стажер)',                         role: 'Стажёр',                       scope: 'trainee', name: 'Стажер' }
+  ];
+  function demoUser() { return byId(DEMO_USERS, D.CURRENT_USER_ID) || DEMO_USERS[0]; }
+  function isTraineeUser() { return demoUser().scope === 'trainee'; }
+  function isKshUser() { return demoUser().scope === 'ksh'; }
+  // Стажёры, доступные текущему пользователю
+  function myTrainees() {
+    var u = demoUser();
+    return D.trainees.filter(function (t) {
+      if (u.scope === 'all') return true;
+      if (u.scope === 'dept') return deptChain(t.departmentId).some(function (d) { return d.id === u.dept; });
+      if (u.scope === 'head') return t.headId === u.id;
+      if (u.scope === 'trainee') return t.id === u.id;
+      return false;
+    });
+  }
+
   function render() {
     renderTopTabs();
     var isAdaptation = state.topTab === 'adaptation';
     el('adaptationPage').classList.toggle('hidden', !isAdaptation);
     el('stubZone').classList.toggle('hidden', isAdaptation);
     if (isAdaptation) {
-      renderLeft();
+      // FT_9: у стажёра и сотрудника КШ левой панели нет
+      var noLeft = isTraineeUser() || isKshUser();
+      el('leftZone').classList.toggle('hidden', noLeft);
+      if (noLeft) el('leftZone').innerHTML = ''; else renderLeft();
       renderCenter();
       renderHelp();
     }
@@ -439,7 +471,7 @@
   }
 
   function renderTopTabs() {
-    var attention = D.trainees.filter(needsAttention).length;
+    var attention = isTraineeUser() || isKshUser() ? 0 : myTrainees().filter(needsAttention).length;
     var tabs = [
       { id: 'tasks',      text: 'Задачи и уведомления', name: 'СтраницаЗадачиИУведомления' },
       { id: 'recruiting', text: 'Подбор персонала',     name: 'СтраницаПодборПерсонала' },
@@ -476,7 +508,7 @@
     return null;
   }
   function filterMatches(f, t) { return f.match ? f.match(t) : f.stages.indexOf(t.stage) >= 0; }
-  function filterValue(f) { return D.trainees.filter(function (t) { return filterMatches(f, t); }).length; }
+  function filterValue(f) { return myTrainees().filter(function (t) { return filterMatches(f, t); }).length; }
 
   function searchQuery() { return state.search.trim().toLowerCase(); }
   // Подразделение и все его родители, начиная с самого подразделения
@@ -499,7 +531,7 @@
   // Стажёры с учётом фильтра по карточке и поиска — общий источник для дерева, списка и сводной таблицы
   function visibleTrainees() {
     var q = searchQuery();
-    return D.trainees.filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q); });
+    return myTrainees().filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q); });
   }
 
   // Дерево подразделений с учётом фильтров: [{dept, children, trainees, count}]
@@ -534,6 +566,7 @@
 
   function renderLeft() {
     var zone = el('leftZone');
+    if (isTraineeUser() || isKshUser()) { zone.innerHTML = ''; return; }   // FT_9: левой панели нет
     zone.classList.toggle('collapsed', state.leftCollapsed);
     if (state.leftCollapsed) {
       zone.innerHTML = '<div class="col left-strip">' +
@@ -644,6 +677,11 @@
    * --------------------------------------------------------------------- */
 
   function renderCenter() {
+    if (isKshUser()) {   // FT_9: у сотрудника КШ — пустая вкладка, свой кабинет будет реализован позже
+      el('centerZone').innerHTML = '<div class="empty ksh-empty"' + a1c('Надпись', 'ДекорацияКабинетКШ') + '>Здесь пока ничего нет</div>';
+      return;
+    }
+    if (isTraineeUser()) state.selectedTraineeId = D.CURRENT_USER_ID;   // FT_9: стажёр видит только себя
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
     el('centerZone').innerHTML = t ? renderTraineeCard(t) : renderSummary();
     if (!t && state.summaryFocus) {
@@ -760,7 +798,7 @@
         '</tr>';
     }).join('');
 
-    var total = D.trainees.length;
+    var total = myTrainees().length;
     var chips = '';
     if (state.counterFilter) {
       chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипФильтра') + '><span' + a1c('Надпись', 'ДекорацияЧипФильтра') + '>' +
@@ -808,7 +846,8 @@
   function renderTraineeCard(t) {
     // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажёры» с ⋮ ?, карточка, уведомления, вкладки
     return '<div class="col gap-4 trainee-card"' + a1c('ГруппаВертикальная', 'ГруппаКарточкаСтажера') + '>' +
-      '<div class="row back-row"' + a1c('ГруппаГоризонтальная', 'ГруппаНавигацияСтажера') + '>' + link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' }) +
+      '<div class="row back-row"' + a1c('ГруппаГоризонтальная', 'ГруппаНавигацияСтажера') + '>' +
+        (isTraineeUser() ? '' : link('← Все стажёры', { action: 'backToList', name: 'ГиперссылкаВсеСтажеры' })) +   // FT_9: стажёр списка стажёров не видит
         '<span class="grow"></span>' + renderTraineeMenu(t) + '</div>' +
       renderHeader(t) +
       renderAnalytics(t) +
@@ -820,7 +859,7 @@
     var id = role === 'mentor' ? t.mentorId : t.headId;
     var u = user(id);
     var name = role === 'mentor' ? 'ГиперссылкаНаставник' : 'ГиперссылкаРуководительСтажировки';
-    if (isClosed(t)) return '<span' + a1c('Надпись', name) + '>' + esc(u.fullName) + '</span>';
+    if (isClosed(t) || isTraineeUser()) return '<span' + a1c('Надпись', name) + '>' + esc(u.fullName) + '</span>';   // FT_9: у стажёра — без ссылок
     return link(u.fullName, {
       action: 'openDialog', data: { dialog: role === 'mentor' ? 'changeMentor' : 'changeHead' },
       title: role === 'mentor' ? 'Сменить наставника' : 'Сменить руководителя стажировки', name: name
@@ -866,7 +905,8 @@
         '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
         '<div class="col gap-0 tcard-who-text"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
           '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-          '<div class="tcard-line tcard-dept">' + link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения «' + (dep ? dep.name : '') + '»', name: 'ГиперссылкаПодразделение' }) + '</div>' +
+          '<div class="tcard-line tcard-dept">' + (isTraineeUser() ? '<span class="tcard-dept-text" title="' + esc(dep ? dep.name : '') + '"' + a1c('Надпись', 'ГиперссылкаПодразделение') + '>' + esc(dep ? dep.name : '') + '</span>'
+            : link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения «' + (dep ? dep.name : '') + '»', name: 'ГиперссылкаПодразделение' })) + '</div>' +
           '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(formatPosition(t)) + '</div>' +
         '</div>' +
       '</div>' +
@@ -902,6 +942,7 @@
       if (menuItems.length) menuItems.push('<div class="menu-sep"></div>');
       menuItems.push(menuItem('Отменить стажировку', 'openDialog', { dialog: 'cancel' }, 'КнопкаОтменитьСтажировку', 'danger-text'));
     }
+    if (isTraineeUser()) menuItems = [];   // FT_9: у стажёра меню ⋮ нет
     return '<div class="row command-bar trainee-actions"' + a1c('КоманднаяПанель', 'КоманднаяПанельСтажировки') + '>' +
       (menuItems.length ? submenu('traineeMore', 'ПодменюЕщеСтажировка', menuItems) : '') +
       button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
@@ -938,6 +979,8 @@
   function renderAnalytics(t) {
     var list = getNotifications(t);
     var acts = analyticsActions(t);
+    // FT_9: стажёр видит только просрочку по задачам, кнопок нет
+    if (isTraineeUser()) { list = list.filter(function (n) { return n.id === 'tasks_overdue'; }); acts = []; }
     if (!list.length && !acts.length) return '';
     var n = list.length;
     var sev = n ? list[0].severity : 'none';
@@ -1023,6 +1066,7 @@
       var cs = closureSummary(t);
       tabs.push({ id: 'closure', text: 'Закрытие стажировки' + (cs.text ? ' ' + cs.text : ''), name: 'СтраницаЗакрытие', pic: cs.pic });
     }
+    if (isTraineeUser()) { tabs = [tabs[1]]; state.traineeTab = 'program'; }   // FT_9: стажёр чек-листы подготовки и закрытия не видит
     if (state.traineeTab === 'closure' && !hasClosureTab(t)) state.traineeTab = 'program';
     // Фаза 11, 6.2: при открытии вкладки АП (переход на неё или выбор стажёра) обе группы блоков свёрнуты
     if (state.traineeTab !== 'program') state.programViewOf = null;
@@ -1073,7 +1117,7 @@
 
   // Причина, по которой задачи АП менять нельзя (раздел 7.5.4); null — можно
   function editLock(t) {
-    if (t.stage === 'approval') return 'АП на согласовании. Чтобы изменить задачи, отзовите её с согласования';
+    if (t.stage === 'approval') return 'АП на согласовании — изменения недоступны до окончания согласования';
     if (t.stage === 'closed') return 'Стажировка закрыта — АП доступна только для просмотра';
     return null;
   }
@@ -1141,9 +1185,10 @@
 
   function renderProgramTab(t) {
     var program = programOf(t);
+    if (!program && isTraineeUser()) return '<div class="empty"' + a1c('Надпись', 'ДекорацияАПЕщеНеСоздана') + '>Адаптационная программа ещё не создана</div>';
     if (!program) return renderProgramEmpty(t);
     var all = tasksOf(program);
-    var lock = editLock(t);
+    var lock = isTraineeUser() ? null : editLock(t);   // FT_9: у стажёра строки запрета нет — изменения ему недоступны в принципе
     syncTaskFilter(all);
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаАП') + '>' +
       // Запрет редактирования — строка без заливки (фаза 9, 4.x): иконка и серый текст
@@ -1158,13 +1203,14 @@
   // Фаза 11, 6.1: строка кнопок («Добавить ▾», «Печать АП», справа — действия с выбранными), под ней отдельной строкой — тумблер статусов
   function renderTaskCommandBar(t, all) {
     var lock = editLock(t);
+    var trainee_ = isTraineeUser();   // FT_9: у стажёра — только тумблер статусов
     var sel = selectedTaskIds(t).length;
     var allCorp = sel > 0 && selectedTaskIds(t).every(function (id) { return corpLocked(taskById(id)); });   // FT_8, п. 4
     var items = [{ value: 'all', text: 'Все ' + all.length, name: 'Все' }].concat(STATUS_VARIANTS.map(function (v) {
       var n = all.filter(function (x) { return taskMatchesFilter(x, v.f); }).length;
       return n ? { value: v.f, text: v.text + ' ' + n, name: v.name, cls: v.cls, risk: v.risk } : null;
     }).filter(Boolean));
-    return '<div class="row wrap command-bar command-bar-flat task-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
+    return (trainee_ ? '' : '<div class="row wrap command-bar command-bar-flat task-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
       (isClosed(t) ? '' : submenu('addTask', 'ПодменюДобавитьЗадачу', [
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
@@ -1182,7 +1228,7 @@
           ], { text: 'Действия с выбранными ▾' }) +
           link('Снять выделение', { action: 'clearTaskSelection', name: 'ГиперссылкаСнятьВыделение' }) +
         '</span>' : '') +
-      '</div>' +
+      '</div>') +
       '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерСтатусовЗадач') + '>' +
         toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
       '</div>';
@@ -1194,7 +1240,7 @@
   function renderTaskTable(t, all) {
     var program = programOf(t);
     var lock = editLock(t);
-    var selectable = !lock;
+    var selectable = !lock && !isTraineeUser();
     var list = visibleTasks(t);
     var cols = selectable ? 8 : 7;
     var body;
@@ -1265,7 +1311,7 @@
         (x.result ? '<span class="icon-cell" title="' + esc('Результат: ' + x.result) + '"' + a1c('Картинка', 'ТаблицаЗадачАПЕстьРезультат') + '>' + icon('comment') + '</span>' : '<span class="icon-cell"></span>') +
         button('', { cls: 'btn-icon btn-flat btn-small', icon: 'link', title: 'Открыть в Forus Team', action: 'openForus', name: 'ТаблицаЗадачАПОткрытьForusTeam' }) +
       '</span></td>' +
-      '<td>' + taskRowMenu(t, x) + '</td>' +
+      '<td>' + (isTraineeUser() ? '' : taskRowMenu(t, x)) + '</td>' +
       '</tr>';
   }
 
@@ -1597,19 +1643,18 @@
   // НЕ_ПЕРЕНОСИТЬ: демо-переключатели пользователя (FT_8, п. 4) и этапа выбранного стажёра
   function renderDemo() {
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
-    var me = user(D.CURRENT_USER_ID);
+    var me = demoUser();
     var html = '';
     if (state.markup) {
       html += '<span class="markup-flag"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ИндикаторРежимаРазметки') + '>Режим разметки 1С · Shift+D — выключить</span>';
     }
     html += '<div class="demo-host">' +
       (state.demoUserMenuOpen ? '<div class="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоМенюПользователей') + '>' +
-        [D.CAS_HEAD_ID].concat(D.HR_IDS).map(function (id) {
-          var u = user(id);
-          return '<button type="button" data-action="demoSetUser" data-user="' + id + '"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоПользователь' + (id === D.CAS_HEAD_ID ? 'Руководитель' : 'HR' + (D.HR_IDS.indexOf(id) + 1))) + '>' +
-            (D.CURRENT_USER_ID === id ? '● ' : '○ ') + esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></button>';
+        DEMO_USERS.map(function (u) {
+          return '<button type="button" data-action="demoSetUser" data-user="' + u.id + '"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоПользователь' + u.name) + '>' +
+            (D.CURRENT_USER_ID === u.id ? '● ' : '○ ') + esc(u.label) + '</button>';
         }).join('') + '</div>' : '') +
-      '<button type="button" class="btn demo-btn" data-action="demoUserToggle" title="' + esc('Текущий пользователь: ' + me.fullName + ' (' + me.role + ')') + '"' +
+      '<button type="button" class="btn demo-btn" data-action="demoUserToggle" title="' + esc('Текущий пользователь: ' + personById(me.id) + ' (' + me.role + ')') + '"' +
         a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаПользователь') + '><span>Демо: ' + esc(me.role) + ' ▾</span></button>' +
       '</div>';
     html += '<div class="demo-host">' +
@@ -1951,6 +1996,7 @@
       var note = fromTemplate
         ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблона') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаШаблона') + '>' +
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
+        : state.dialog.traineeMode ? ''
         : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>'
         : state.dialog.corpLock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаКорпБлока') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаКорпБлока') + '>' +
           esc('Задача корпоративного блока: изменить можно только наблюдателей. ' + CORP_LOCK_TEXT + '.') + '</span></div>' : '';
@@ -2058,7 +2104,7 @@
    * Добавлять согласующих можно (в конец маршрута, стрелками — выше/ниже, но не выше текущего шага); удалять нельзя.
    */
   var ROUTE_TITLES = { head: 'Согласование руководителем стажировки', dept: 'Согласование руководителем подразделения',
-    cas: 'Утверждение руководителем ЦАС', hr: 'Согласование HR-менеджером', extra: 'Дополнительное согласование' };
+    cas: 'Утверждение заместителем руководителя ЦАС', hr: 'Согласование HR-менеджером', extra: 'Дополнительное согласование' };
   var ROUTE_ICONS = {
     approved: { icon: 'check', cls: 'c-success', title: 'Выполнено: согласовано' },
     rejected: { icon: 'check', cls: 'c-danger', title: 'Выполнено: не согласовано' },
@@ -2564,6 +2610,8 @@
     else state.dialogStack = [];
     state.dialog = { type: type, traineeId: traineeId, ctx: ctx, values: {}, errors: {},
       readOnly: type === 'task' && (!!ctx.templateId || (!!lock && !!ctx.taskId)) };
+    // FT_9: стажёр открывает свои задачи только для просмотра; менять может лишь статус кнопками «Взять в работу» / «Выполнено»
+    if (type === 'task' && isTraineeUser()) { state.dialog.readOnly = true; state.dialog.traineeMode = true; }
     state.dialog.corpLock = type === 'task' && !state.dialog.readOnly && !!ctx.taskId && corpLocked(taskById(ctx.taskId));   // FT_8, п. 4
     state.dialog.values = def.init ? def.init(t, ctx) : {};
     render();
@@ -2590,6 +2638,13 @@
     render();
   }
 
+  // FT_9: кнопки стажёра в карточке своей задачи — меняют статус задачи
+  function traineeTaskButtons(d) {
+    var x = taskById(d.ctx.taskId);
+    if (!x || x.status === 'done') return '';
+    return (x.status === 'not_started' ? button('Взять в работу', { action: 'taskSetStatus', data: { status: 'in_progress' }, name: 'ФормаЗадачаАПКнопкаВзятьВРаботу' }) : '') +
+      button('Выполнено', { cls: 'btn-primary', action: 'taskSetStatus', data: { status: 'done' }, name: 'ФормаЗадачаАПКнопкаВыполнено' });
+  }
   function renderDialog() {
     var host = el('dialogHost');
     var top = state.dialog;
@@ -2610,9 +2665,9 @@
           button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Закрыть', action: 'dialogCancel', name: def.form + 'Закрыть' }) + '</div>' +
         '<div class="modal-body col gap-3">' + def.body(t) + '</div>' +
         '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' +
-          (def.extraFoot ? def.extraFoot(t) : '') +
+          (d.traineeMode ? traineeTaskButtons(d) : (def.extraFoot ? def.extraFoot(t) : '') +
           button(readOnly ? 'Закрыть' : def.submitFn ? def.submitFn() : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') }) +
-          (readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' })) +
+          (readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' }))) +
         '</div></div></div>';
     }).join('');
     state.dialog = top;
@@ -2687,6 +2742,14 @@
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
     openHelp: function () { toast('Инструкция откроется в базе знаний'); },
     toggleAnalytics: function () { state.analyticsOpen = !state.analyticsOpen; renderCenter(); },
+    // FT_9: стажёр меняет статус своей задачи
+    taskSetStatus: function (btn) {
+      var x = taskById(state.dialog.ctx.taskId);
+      x.status = btn.getAttribute('data-status');
+      state.dialog = null; state.dialogStack = [];
+      render();
+      toast('Статус задачи «' + x.name + '»: ' + (x.status === 'done' ? 'выполнена' : 'в работе'));
+    },
     openApprovalSheet: function () { openDialog('approvalSheet', state.selectedTraineeId); },
     openApproverPicker: function () { openDialog('approverPicker', state.dialog.traineeId, {}, { stack: true }); },
     // Лист согласования: выбор строки маршрута и перемещение добавленного согласующего
@@ -2854,8 +2917,12 @@
     demoSetUser: function (btn) {
       D.CURRENT_USER_ID = btn.getAttribute('data-user');
       state.demoUserMenuOpen = false;
+      // FT_9: видимость по пользователю — сбросить фильтр, поиск и выбор стажёра, которого новый пользователь не видит
+      state.counterFilter = null; state.search = ''; state.openMenu = null; state.selectedTasks = {};
+      if (state.selectedTraineeId && myTrainees().map(function (t) { return t.id; }).indexOf(state.selectedTraineeId) < 0) state.selectedTraineeId = null;
+      if (isTraineeUser()) { state.selectedTraineeId = D.CURRENT_USER_ID; state.traineeTab = 'program'; }
       render();
-      toast('Текущий пользователь: ' + userName(D.CURRENT_USER_ID));
+      toast('Текущий пользователь: ' + personById(D.CURRENT_USER_ID));
     },
     demoSetStage: function (btn) {
       var t = trainee(state.selectedTraineeId);

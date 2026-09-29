@@ -657,7 +657,7 @@ button.analytics-head:hover .analytics-title { text-decoration: underline; }
 .tcard-part:first-child { padding-left: 0; border-left: none; }
 .tcard-part:last-child { padding-right: 0; }
 .tcard .tcard-who { flex: 0 1 auto; align-items: center; }
-.tcard-who-text { min-width: 0; }
+.tcard-who-text { min-width: 0; flex: 1 1 auto; }  /* FT_9: подразделение занимает всю ширину части */
 .tcard .avatar { flex: 0 0 56px; width: 56px; height: 56px; font-size: var(--fs-xl); }
 .tcard-person { flex: 1 1 120px; min-width: 120px; max-width: 220px; justify-content: center; line-height: 20px; }
 .tcard-person .link, .tcard-person > span:last-child { white-space: normal; }
@@ -692,3 +692,6 @@ table.grid.route-table td { vertical-align: middle; }
 .tcard-dept .link { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcard .tcard-who { flex: 1 1 300px; min-width: min-content; }
 .tcard-person { max-width: 240px; }
+/* FT_9: подразделение в шапке у стажёра — текстом; пустая вкладка сотрудника КШ */
+.tcard-dept-text { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ksh-empty { flex: 1 1 auto; justify-content: center; }
