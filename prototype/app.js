@@ -786,7 +786,7 @@
       return '<tr class="summary-row' + (state.summaryCurrent === t.id ? ' selected' : '') + '" tabindex="' + (state.summaryCurrent === t.id || (!state.summaryCurrent && t === list[0]) ? '0' : '-1') + '"' +
         ' data-action="summaryRow" data-id="' + t.id + '" title="Двойной клик или Enter — открыть карточку стажёра">' +
         '<td>' + link(t.fullName, { cls: 'fio-link', action: 'selectTrainee', data: { id: t.id }, title: 'Открыть карточку стажёра', name: 'ТаблицаСтажеровФИО' }).replace("data-1c-name=\"ТаблицаСтажеровФИО\"", "data-1c-name=\"ТаблицаСтажеровФИО\" data-1c-risk=\"check\"") +
-          '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(t.position) + '</div></td>' +
+          '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(formatPosition(t)) + '</div></td>' +
         '<td><div title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаСтажеровПодразделение') + '>' + esc(d) + '</div></td>' +
         '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
         '<td>' + actionCell(t) + '</td>' +
@@ -866,53 +866,61 @@
     });
   }
 
-  // Карточка стажёра (фаза 10, 2.2): справа «Даты стажировки», под ней — даты и строка по этапу; рядом — действие этапа
+  // Должность и квалификационный уровень (фаза 11, 4.2): «Аналитик, А2»; недопустимый уровень — только должность и предупреждение в консоль
+  function formatPosition(t) {
+    if (!t.positionFamily || !t.qualificationLevel) return t.position;
+    var allowed = D.QUALIFICATION_LEVELS[t.positionFamily] || [];
+    if (allowed.indexOf(t.qualificationLevel) < 0) {
+      if (window.console) console.warn('Недопустимый квалификационный уровень «' + t.qualificationLevel + '» для семейства «' + t.positionFamily + '» у стажёра ' + t.fullName);
+      return t.position;
+    }
+    return t.position + ', ' + t.qualificationLevel;
+  }
+
+  // Карточка стажёра (фаза 11, 4.1): аватар и ФИО | наставник | руководитель | даты; части разделены вертикальными линиями, кнопок нет
   function renderHeader(t) {
-    // Первая строка — «Даты стажировки» и даты; вторая — по этапу; третья — отставание (фаза 10, 2.2)
+    // Строки дат: календарь — «Даты стажировки»; часы — строка по этапу; при отставании — третья строка цветом warning
     var line2 = '';
     var line3 = '';
     if (isClosed(t)) {
       var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
-      line2 += '<span' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
+      line2 = '<span' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
         (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</span>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
-      line2 += '<span' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
+      line2 = '<span class="bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
         (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)) + '</span>';
     } else {
-      // Полоса срока и «До закрытия: N дней» — дни до даты окончания
       var de = daysToEnd(t);
-      line2 += indicator(timePct(t), 'ИндикаторСрок') +
-        '<span' + a1c('Надпись', 'ДекорацияДоЗакрытия') + ' title="' + esc('день ' + dayNo(t) + ' из ' + totalDays(t)) + '">' +
-          (de >= 0 ? 'До закрытия: ' + pluralN(de, W_DAYS) : 'Срок окончания прошёл ' + fmtDate(t.endDate)) + '</span>';
-      if (lag(t)) line3 = '<div class="tcard-line c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Задачи отстают от графика</div>';
+      line2 = '<span' + a1c('Надпись', 'ДекорацияДоЗакрытия') + ' title="' + esc('день ' + dayNo(t) + ' из ' + totalDays(t)) + '">' +
+        (de >= 0 ? 'До закрытия: ' + pluralN(de, W_DAYS) : 'Срок окончания прошёл ' + fmtDate(t.endDate)) + '</span>';
+      if (lag(t)) line3 = '<div class="tcard-line tcard-indent c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Задачи отстают от графика</div>';
     }
-    // Действие этапа в карточке (фаза 10, 2.1): «Продлить срок» — active/closing, «Отозвать с согласования» — approval
-    var act = t.stage === 'approval' ? button('Отозвать с согласования', { action: 'recallApproval', name: 'КнопкаОтозватьССогласования' })
-      : (t.stage === 'active' || t.stage === 'closing') ? button('Продлить срок', { icon: 'calendar', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСрок' }) : '';
+    var dep = dept(t.departmentId);
 
     return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка') + '>' +
-      // 1. Аватар, ФИО и должность
-      '<div class="row gap-3 tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
-        '<div class="avatar avatar-s"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
-        '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
+      // 1. Аватар; ФИО, подразделение, должность с уровнем
+      '<div class="row gap-3 tcard-part tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
+        '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
+        '<div class="col gap-0 tcard-who-text"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
           '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-          '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(t.position) + '</div>' +
+          '<div class="tcard-line">' + link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения', name: 'ГиперссылкаПодразделение' }) + '</div>' +
+          '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(formatPosition(t)) + '</div>' +
         '</div>' +
       '</div>' +
-      // 2. Наставник и руководитель
-      '<div class="col gap-0 tcard-people"' + a1c('ГруппаВертикальная', 'ГруппаОтветственные') + '>' +
-        '<div class="tcard-line" title="' + esc('Наставник: ' + user(t.mentorId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник: </span>' + personLink(t, 'mentor') + '</div>' +
-        '<div class="tcard-line" title="' + esc('Руководитель: ' + user(t.headId).fullName) + '"><span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель: </span>' + personLink(t, 'head') + '</div>' +
-      '</div>' +
-      // 3. Даты стажировки и строка по этапу
-      '<div class="col gap-0 tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' +
-        '<div class="row tcard-line tcard-term"><span class="muted"' + a1c('Надпись', 'ДекорацияЗаголовокДаты') + '>Даты стажировки</span>' +
+      // 2–3. Наставник и руководитель: подпись серым сверху, ФИО полностью снизу
+      '<div class="col gap-0 tcard-part tcard-person"' + a1c('ГруппаВертикальная', 'ГруппаНаставник') + '>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияПодписьНаставник') + '>Наставник</span>' + personLink(t, 'mentor') + '</div>' +
+      '<div class="col gap-0 tcard-part tcard-person"' + a1c('ГруппаВертикальная', 'ГруппаРуководитель') + '>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияПодписьРуководитель') + '>Руководитель</span>' + personLink(t, 'head') + '</div>' +
+      // 4. Даты
+      '<div class="col gap-0 tcard-part tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' +
+        '<div class="row tcard-line tcard-term"><span class="tcard-ico"' + a1c('Картинка', 'КартинкаДатыСтажировки') + '>' + icon('calendar') + '</span>' +
+          '<span class="muted"' + a1c('Надпись', 'ДекорацияЗаголовокДаты') + '>Даты стажировки</span>' +
           '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</span></div>' +
-        '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаСрок') + '>' + line2 + '</div>' +
+        '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаСрок') + '><span class="tcard-ico"' + a1c('Картинка', 'КартинкаСрок') + '>' + icon('clock') + '</span>' + line2 + '</div>' +
         line3 +
       '</div>' +
-      (act ? '<div class="tcard-action"' + a1c('ГруппаГоризонтальная', 'ГруппаДействиеКарточки') + '>' + act + '</div>' : '') +
       '</div>';
   }
 
@@ -2541,13 +2549,9 @@
       state.traineeTab = 'program';
       renderCenter();
     },
-    recallApproval: function () {
-      var t = trainee(state.selectedTraineeId);
-      setStage(t, 'draft');
-      t.draftSince = D.TODAY;
-      addHistory(programOf(t), 'АП отозвана с согласования');
-      toast('АП отозвана с согласования');
-      render();
+    openDeptCard: function () {
+      var d = dept(trainee(state.selectedTraineeId).departmentId);
+      toast('Откроется карточка подразделения «' + d.name + '»');
     },
     printProgram: function () { toast('Файл ' + printFileName(trainee(state.selectedTraineeId)) + ' сформирован'); },
     openProgramDoc: function () { state.openMenu = null; renderCenter(); toast('Откроется форма документа'); },

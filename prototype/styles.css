@@ -574,21 +574,10 @@ body.markup-1c table[data-1c]::before {
 /* ================= Фаза 9: карточка стажёра (3.2) ================= */
 .tcard { display: flex; flex-direction: row; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); flex-wrap: nowrap; }
 .tcard-who { flex: 0 0 auto; align-items: center; }
-.avatar.avatar-s { flex: 0 0 40px; width: 40px; height: 40px; font-size: var(--fs-l); }
 .tcard-name { font-size: var(--fs-xl); line-height: 26px; white-space: nowrap; }
-.tcard-people { flex: 0 0 auto; min-width: 0; }
 .tcard-line { line-height: 20px; white-space: nowrap; }
-.tcard-people .tcard-line { display: flex; flex-direction: row; align-items: baseline; min-width: 0; }
-.tcard-people .tcard-line > .muted { flex: 0 0 auto; margin-right: 4px; }
-.tcard-people .tcard-line > .link, .tcard-people .tcard-line > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tcard-dates { flex: 0 1 auto; margin-left: auto; min-width: min-content; }
 /* Узкое окно: наставник и руководитель сжимаются (многоточие, полное ФИО — в подсказке), полосы переносятся третьей строкой */
 /* Фаза 10: при узком окне даты и действие карточки переносятся второй строкой карточки, ФИО не обрезаются */
-@media (max-width: 1500px) { .tcard { flex-wrap: wrap; row-gap: var(--sp-2); } }
-.tcard-bars { gap: 2px var(--sp-4); flex-wrap: wrap; justify-content: flex-end; }
-.tcard-bar { gap: var(--sp-2); height: 20px; flex-wrap: nowrap; white-space: nowrap; }
-.tcard-bars span { white-space: nowrap; }
-.tcard-bar .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
 .step-sub { font-size: var(--fs-s); line-height: 13px; font-weight: normal; }
 
 /* ================= Фаза 9: блок процесса (3.3) ================= */
@@ -620,9 +609,6 @@ body.markup-1c table[data-1c]::before {
 /* ================= Фаза 10.1: карточка и размещение действий ================= */
 .back-row { min-height: 28px; }
 .tcard-term { gap: var(--sp-2); flex-wrap: nowrap; white-space: nowrap; }
-.tcard-term .indicator { flex: 0 0 64px; width: 64px; min-width: 64px; }
-.tcard-dates { align-items: flex-start; }
-.tcard-action { flex: 0 0 auto; }
 
 /* ================= Фаза 10.2: блок «Аналитика по адаптационной программе» ================= */
 .analytics { gap: 0; }
@@ -653,3 +639,22 @@ body.markup-1c table[data-1c]::before {
 .search-field > .input:focus-visible { outline: none; }
 /* Иконки: фильтры левой панели — 18px */
 .filter-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
+
+/* ================= Фаза 11.3: карточка стажёра ================= */
+.panel.tcard { padding: var(--sp-4); gap: 0; align-items: stretch; flex-wrap: wrap; row-gap: var(--sp-3); }
+.tcard-part { padding: 0 var(--sp-4); border-left: 1px solid var(--c-border); min-width: 0; }
+.tcard-part:first-child { padding-left: 0; border-left: none; }
+.tcard-part:last-child { padding-right: 0; }
+.tcard .tcard-who { flex: 0 1 auto; align-items: center; }
+.tcard-who-text { min-width: 0; }
+.tcard .avatar { flex: 0 0 56px; width: 56px; height: 56px; font-size: var(--fs-xl); }
+.tcard-person { flex: 1 1 120px; min-width: 120px; max-width: 220px; justify-content: center; line-height: 20px; }
+.tcard-person .link, .tcard-person > span:last-child { white-space: normal; }
+.tcard .tcard-dates { flex: 0 0 auto; margin-left: auto; justify-content: center; }
+/* Узкое окно (≤ 1500px): даты — второй строкой карточки, разделитель сверху */
+@media (max-width: 1500px) {
+  .tcard .tcard-dates { flex: 1 0 100%; margin-left: 0; padding: var(--sp-3) 0 0; border-left: none; border-top: 1px solid var(--c-border); }
+}
+.tcard-ico { display: inline-flex; flex: 0 0 16px; color: var(--c-text-secondary); }
+.tcard-indent { padding-left: 24px; }
+.tcard-term { gap: var(--sp-2); }

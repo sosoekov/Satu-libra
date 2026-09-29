@@ -58,54 +58,69 @@
   /* ---------- Стажёры (Справочник.Сотрудники + РегистрСведений.СтатусыСтажеров) ----------
    * stageDates — даты начала этапов (для степпера), closedAt / closeKind ('passed'|'failed'|'cancelled') — для этапа closed.
    */
+  // Фаза 11, 4.2: positionFamily — 'analyst' | 'programmer' | 'erp_analyst' | null; qualificationLevel — строка или null
+  // Допустимые уровни: analyst — А1–А7 (кириллица), programmer — П1–П7, erp_analyst — AERP1–AERP5 (латиница)
+  var QUALIFICATION_LEVELS = {
+    analyst: ['А1', 'А2', 'А3', 'А4', 'А5', 'А6', 'А7'],
+    programmer: ['П1', 'П2', 'П3', 'П4', 'П5', 'П6', 'П7'],
+    erp_analyst: ['AERP1', 'AERP2', 'AERP3', 'AERP4', 'AERP5']
+  };
   var trainees = [
     {
-      id: 't-ivanov', fullName: 'Иванов Петр Сергеевич', position: 'Аналитик', departmentId: 'd-auto',
+      id: 't-ivanov', fullName: 'Иванов Петр Сергеевич', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А2',
+      departmentId: 'd-auto',
       mentorId: 'u-kozlov', headId: 'u-petrova', startDate: '2026-07-29', endDate: '2026-10-28',
       stage: 'found', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-10' }, closedAt: null, closeKind: null
     },
     {
-      id: 't-belova', fullName: 'Белова Анна Дмитриевна', position: 'Специалист по автоматизации', departmentId: 'd-auto',
+      id: 't-belova', fullName: 'Белова Анна Дмитриевна', position: 'Программист', positionFamily: 'programmer', qualificationLevel: 'П2',
+      departmentId: 'd-auto',
       mentorId: 'u-kozlov', headId: 'u-petrova', startDate: '2026-08-03', endDate: '2026-11-02',
       stage: 'found', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-17' }, closedAt: null, closeKind: null
     },
     {
-      id: 't-sidorov', fullName: 'Сидоров Алексей Игоревич', position: 'Инженер по внедрению', departmentId: 'd-impl',
+      id: 't-sidorov', fullName: 'Сидоров Алексей Игоревич', position: 'Аналитик ERP', positionFamily: 'erp_analyst', qualificationLevel: 'AERP3',
+      departmentId: 'd-impl',
       mentorId: 'u-vasiliev', headId: 'u-petrova', startDate: '2026-08-05', endDate: '2026-11-04',
       stage: 'draft', changedAfterApproval: false, rejectionComment: null, draftSince: '2026-07-23',
       stageDates: { found: '2026-07-08', draft: '2026-07-23' }, closedAt: null, closeKind: null
     },
     {
-      id: 't-kuznetsova', fullName: 'Кузнецова Мария Олеговна', position: 'Аналитик', departmentId: 'd-impl',
+      id: 't-kuznetsova', fullName: 'Кузнецова Мария Олеговна', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А4',
+      departmentId: 'd-impl',
       mentorId: 'u-morozova', headId: 'u-petrova', startDate: '2026-08-01', endDate: '2026-10-31',
       stage: 'approval', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-01', draft: '2026-07-15', approval: '2026-07-22' }, closedAt: null, closeKind: null
     },
     {
-      id: 't-smirnov', fullName: 'Смирнов Кирилл Викторович', position: 'Специалист по отчетности', departmentId: 'd-report',
+      id: 't-smirnov', fullName: 'Смирнов Кирилл Викторович', position: 'Специалист по отчетности', positionFamily: null, qualificationLevel: null,
+      departmentId: 'd-report',
       mentorId: 'u-morozova', headId: 'u-petrova', startDate: '2026-07-01', endDate: '2026-09-30',
       stage: 'active', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-06-10', draft: '2026-06-15', approval: '2026-06-18', active: '2026-07-01' },
       closedAt: null, closeKind: null
     },
     {
-      id: 't-popova', fullName: 'Попова Елизавета Андреевна', position: 'Аналитик', departmentId: 'd-gov',
+      id: 't-popova', fullName: 'Попова Елизавета Андреевна', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А5',
+      departmentId: 'd-gov',
       mentorId: 'u-vasiliev', headId: 'u-petrova', startDate: '2026-04-30', endDate: '2026-07-30',
       stage: 'closing', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-04-10', draft: '2026-04-15', approval: '2026-04-20', active: '2026-04-30', closing: '2026-07-16' },
       closedAt: null, closeKind: null
     },
     {
-      id: 't-orlova', fullName: 'Орлова Дарья Павловна', position: 'Руководитель проектов', departmentId: 'd-sub',
+      id: 't-orlova', fullName: 'Орлова Дарья Павловна', position: 'Руководитель проектов', positionFamily: null, qualificationLevel: null,
+      departmentId: 'd-sub',
       mentorId: 'u-novikov', headId: 'u-petrova', startDate: '2026-06-15', endDate: '2026-09-15',
       stage: 'active', changedAfterApproval: true, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-05-25', draft: '2026-06-01', approval: '2026-06-05', active: '2026-06-15' },
       closedAt: null, closeKind: null
     },
     {
-      id: 't-lebedev', fullName: 'Лебедев Сергей Николаевич', position: 'Руководитель проектов', departmentId: 'd-fed',
+      id: 't-lebedev', fullName: 'Лебедев Сергей Николаевич', position: 'Руководитель проектов', positionFamily: null, qualificationLevel: null,
+      departmentId: 'd-fed',
       mentorId: 'u-ivanov-ii', headId: 'u-petrova', startDate: '2026-05-20', endDate: '2026-08-20',
       stage: 'active', changedAfterApproval: false, rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-05-04', draft: '2026-05-12', approval: '2026-05-14', active: '2026-05-20' },
@@ -445,6 +460,7 @@
     REAPPROVAL_ON_CHANGE: REAPPROVAL_ON_CHANGE,
     LAG_THRESHOLD: LAG_THRESHOLD,
     CLOSE_AVAILABLE_DAYS: CLOSE_AVAILABLE_DAYS,
+    QUALIFICATION_LEVELS: QUALIFICATION_LEVELS,
     HR_ID: HR_ID,
     ROLE_TITLES: ROLE_TITLES,
     departments: departments,
