@@ -420,6 +420,7 @@
     taskSort: { key: null, dir: 1 },
     selectedTasks: {},           // выбранные флажками задачи: {taskId: true}. Только выбор, не отметка выполнения
     collapsedBlocks: {},         // свёрнутые группы «Корпоративный / Специальный блок»
+    programViewOf: null,         // стажёр, для которого открыта вкладка АП (фаза 11, 6.2: при открытии группы свёрнуты)
     checklistMode: 'all',        // 'all' | 'mine'
     closureMode: 'all',          // чек-лист закрытия: 'all' | 'mine'
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
@@ -1036,6 +1037,13 @@
       tabs.push({ id: 'closure', text: 'Закрытие стажировки' + (cs.text ? ' ' + cs.text : ''), name: 'СтраницаЗакрытие', pic: cs.pic });
     }
     if (state.traineeTab === 'closure' && !hasClosureTab(t)) state.traineeTab = 'program';
+    // Фаза 11, 6.2: при открытии вкладки АП (переход на неё или выбор стажёра) обе группы блоков свёрнуты
+    if (state.traineeTab !== 'program') state.programViewOf = null;
+    else if (state.programViewOf !== t.id && programOf(t)) {
+      state.programViewOf = t.id;
+      state.collapsedBlocks = {};
+      BLOCKS.forEach(function (b) { state.collapsedBlocks[b.id] = true; });
+    }
     var body;
     if (state.traineeTab === 'program') {
       body = renderProgramTab(t);
@@ -1161,7 +1169,7 @@
   }
 
 
-  // Командная панель таблицы (8.4, 5.2): тумблер статусов, «Добавить», действия с выбранными
+  // Фаза 11, 6.1: строка кнопок («Добавить ▾», «Печать АП», справа — действия с выбранными), под ней отдельной строкой — тумблер статусов
   function renderTaskCommandBar(t, all) {
     var lock = editLock(t);
     var sel = selectedTaskIds(t).length;
@@ -1170,11 +1178,12 @@
       return n ? { value: v.f, text: v.text + ' ' + n, name: v.name, cls: v.cls, risk: v.risk } : null;
     }).filter(Boolean));
     return '<div class="row wrap command-bar command-bar-flat task-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадач') + '>' +
-      toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
       (isClosed(t) ? '' : submenu('addTask', 'ПодменюДобавитьЗадачу', [
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' })) +  // закрытая — только просмотр (фаза 10, 5.4)
+      button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }) +
+      '<span class="grow"></span>' +
       (sel ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
@@ -1186,11 +1195,9 @@
           ], { text: 'Действия с выбранными ▾' }) +
           link('Снять выделение', { action: 'clearTaskSelection', name: 'ГиперссылкаСнятьВыделение' }) +
         '</span>' : '') +
-      // Справа: «Печать АП» (фаза 11, 5.3: «Отправить на согласование» — в блоке аналитики)
-      '<span class="grow"></span>' +
-      '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаДействияАП') + '>' +
-        button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }) +
-      '</span>' +
+      '</div>' +
+      '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерСтатусовЗадач') + '>' +
+        toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
       '</div>';
   }
   function canSendToApproval(t) { return t.stage === 'draft' || !!t.changedAfterApproval && (t.stage === 'active' || t.stage === 'closing'); }
@@ -2014,6 +2021,7 @@
       var x = dlgCtx().taskId ? taskById(dlgCtx().taskId) : null;
       if (!x) {
         D.tasks.push(newTask(program, spec));
+        delete state.collapsedBlocks[spec.block];   // новая задача видна: её группа раскрывается
         programChanged(t, 'Добавлена задача «' + spec.name + '»');
         toast('Задача добавлена');
         return;
@@ -2263,7 +2271,7 @@
       var tp = byId(D.templates, v.template);
       var program = programOf(t);
       var specs = templateTasksFor(t, tp).filter(function (x, i) { return v.picked.indexOf(String(i)) >= 0; });
-      specs.forEach(function (s) { D.tasks.push(newTask(program, withObservers(t, s))); });
+      specs.forEach(function (s) { D.tasks.push(newTask(program, withObservers(t, s))); delete state.collapsedBlocks[s.block]; });
       programChanged(t, 'Добавлено задач из шаблона «' + tp.name + '»: ' + specs.length);
       toast('Добавлено задач: ' + specs.length);
     }
@@ -2563,6 +2571,11 @@
       var v = btn.getAttribute('data-value');
       state.taskFilter = v && v !== 'all' ? v : null;
       state.selectedTasks = {};
+      // Фаза 11, 6.2: фильтр, отличный от «Все», раскрывает группы с подходящими задачами; возврат на «Все» ничего не сворачивает
+      if (state.taskFilter) {
+        var t = trainee(state.selectedTraineeId);
+        tasksOf(programOf(t)).forEach(function (x) { if (taskMatchesFilter(x, state.taskFilter)) delete state.collapsedBlocks[x.block]; });
+      }
       renderCenter();
     },
     clearTaskSelection: function () {
