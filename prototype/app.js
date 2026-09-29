@@ -1413,10 +1413,12 @@
     var lockRow = lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретИзмененияПодготовки') + '>' +
       '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаЗапретИзмененияПодготовки') + '>' + icon('lock') + '</span>' +
       '<span class="muted"' + a1c('Надпись', 'ДекорацияЗапретИзмененияПодготовки') + '>' + esc(lock) + '</span></div>' : '';
-    var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
-      (lock ? '' : button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт' }) +
-        button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'КнопкаЗаполнитьПоШаблону' })) +
-      '<span class="grow"></span>' +
+    // Фаза 11, 7.1: строка кнопок, под ней — тумблер «Все | Мои»
+    var bar = (lock ? '' : '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
+        button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт' }) +
+        button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'КнопкаЗаполнитьПоШаблону' }) +
+      '</div>') +
+      '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерМоиПункты') + '>' +
       toggle('ТумблерМоиПункты', 'clMode', [
         { value: 'all', text: 'Все', name: 'Все' },
         { value: 'mine', text: 'Мои', name: 'Мои' }
@@ -1425,7 +1427,7 @@
 
     var body;
     if (!list.length) {
-      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
+      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистПуст') + '>У вас нет пунктов в чек-листе</span>' +
         link('Показать все', { action: 'clMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПункты' }) +
         '</div></td></tr>';
@@ -1434,8 +1436,8 @@
     }
 
     var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Действие</th></tr></thead>' +
+      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-fact"><col class="w-action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
 
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + lockRow + bar + table + '</div>';
@@ -1484,46 +1486,58 @@
     var lockRow = lock ? '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаЗапретИзмененияЗакрытия') + '>' +
       '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаЗапретИзмененияЗакрытия') + '>' + icon('lock') + '</span>' +
       '<span class="muted"' + a1c('Надпись', 'ДекорацияЗапретИзмененияЗакрытия') + '>' + esc(lock) + '</span></div>' : '';
-    // [+ Добавить пункт] … [Все | Мои] … «Осталось обязательных пунктов: N» [Завершить стажировку] — основная
-    var bar = '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛистаЗакрытия') + '>' +
-      (lock ? '' : button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'closureItem' }, name: 'КнопкаДобавитьПунктЗакрытия' })) +
-      '<span class="grow"></span>' +
+    // Фаза 11, 7.1: [+ Добавить пункт] … «Осталось обязательных пунктов: N» [Завершить стажировку] — основная; под строкой — тумблер «Все | Мои»
+    var bar = (lock ? '' : '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛистаЗакрытия') + '>' +
+        button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'closureItem' }, name: 'КнопкаДобавитьПунктЗакрытия' }) +
+        '<span class="grow"></span>' +
+        '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаЗавершение') + '>' +
+          (left ? '<span class="muted"' + a1c('Надпись', 'ДекорацияОсталосьОбязательных') + '>Осталось обязательных пунктов: ' + left + '</span>' : '') +
+          button('Завершить стажировку', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'close' }, disabled: left > 0,
+            title: left ? 'Сначала выполните обязательные пункты закрытия' : '', name: 'КнопкаЗавершитьСтажировку' }) +
+        '</span>' +
+      '</div>') +
+      '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерМоиПунктыЗакрытия') + '>' +
       toggle('ТумблерМоиПунктыЗакрытия', 'ccMode', [
         { value: 'all', text: 'Все', name: 'Все' },
         { value: 'mine', text: 'Мои', name: 'Мои' }
       ], state.closureMode) +
-      (lock ? '' : '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаЗавершение') + '>' +
-        (left ? '<span class="muted"' + a1c('Надпись', 'ДекорацияОсталосьОбязательных') + '>Осталось обязательных пунктов: ' + left + '</span>' : '') +
-        button('Завершить стажировку', { cls: 'btn-primary', action: 'openDialog', data: { dialog: 'close' }, disabled: left > 0,
-          title: left ? 'Сначала выполните обязательные пункты закрытия' : '', name: 'КнопкаЗавершитьСтажировку' }) +
-        '</span>') +
       '</div>';
 
     var body;
     if (!closureOf(t).length) {
-      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияПуст') + '>' +
+      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияНеФормировался') + '>Чек-лист закрытия не формировался</span></div></td></tr>';
     } else if (!list.length) {
-      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияМоиПуст') + '>' +
+      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияМоиПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияМоиПуст') + '>У вас нет пунктов закрытия</span>' +
         link('Показать все', { action: 'ccMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПунктыЗакрытия' }) + '</div></td></tr>';
     } else {
       body = list.map(function (c) { return closureRow(t, c, lock); }).join('');
     }
     var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Действие</th></tr></thead>' +
+      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-fact"><col class="w-action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаЗакрытие') + '>' + lockRow + bar + table + '</div>';
   }
 
+  // Ответственный (фаза 11, 7.2): только ФИО; если выполнил другой человек — второй строкой серым «Выполнил: ФИО»
+  function whoCell(doneBy, responsibleId, done, prefix, byName) {
+    return '<td><div class="ellipsis" title="' + esc(byName(responsibleId)) + '"' + a1c('Надпись', prefix + 'Ответственный') + '>' + esc(byName(responsibleId)) + '</div>' +
+      (done && doneBy && doneBy !== responsibleId ? '<div class="muted text-s ellipsis" title="' + esc('Выполнил: ' + byName(doneBy)) + '"' + a1c('Надпись', prefix + 'Выполнил') + '>Выполнил: ' + esc(byName(doneBy)) + '</div>' : '') + '</td>';
+  }
+  // Срок (фаза 11, 7.2): дата; второй строкой — смещение, у невыполненного просроченного — «просрочено на N дн.» (дата и текст danger)
+  function dueCell(date, over, offset, prefix) {
+    return '<td class="nowrap"><div class="' + (over ? 'danger-text' : '') + '"' + a1c('Надпись', prefix + 'Срок') + '>' + fmtDate(date) + '</div>' +
+      '<div class="text-s ' + (over ? 'danger-text' : 'muted') + '"' + a1c('Надпись', prefix + 'СрокПояснение') + '>' +
+        esc(over ? 'просрочено на ' + diffDays(date, D.TODAY) + ' дн.' : offset) + '</div></td>';
+  }
+  // Дата выполнения (факт): ДД.ММ.ГГ для выполненных, пусто для невыполненных
+  function factCell(c, prefix) {
+    return '<td class="nowrap"><span' + a1c('Надпись', prefix + 'ДатаВыполнения') + '>' + (c.done && c.doneAt ? fmtDate(c.doneAt) : '') + '</span></td>';
+  }
+
   function closureRow(t, c, lock) {
-    var date = closureDate(c);
-    var over = closureOverdue(c);
-    var due = c.done ? { text: 'выполнено ' + fmtDate(c.doneAt).slice(0, 5), cls: 'muted' }
-      : over ? { text: 'просрочено на ' + diffDays(date, D.TODAY) + ' дн.', cls: 'danger-text' }
-      : { text: closureOffsetText(c.offsetDays), cls: 'muted' };
-    var who = c.done && c.doneBy && c.doneBy !== c.responsibleId ? 'Выполнил: ' + personById(c.doneBy) : personById(c.responsibleId);
     var boxTitle = lock || (c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
     var action = c.linkedDocType === 'forus' ? link('Открыть Forus Team', { action: 'ccOpenForus', name: 'ТаблицаЧекЛистЗакрытияОткрытьForusTeam' })
       : c.linkedDocType === 'sit' ? link('Открыть СИТ', { action: 'ccOpenSit', name: 'ТаблицаЧекЛистЗакрытияОткрытьСИТ' }) : '';
@@ -1532,28 +1546,17 @@
         ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистЗакрытияВыполнено') + '></td>' +
       '<td><div class="ellipsis" title="' + esc(c.name) + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияПункт') + '>' + esc(c.name) + '</div>' +
         (c.optional ? '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияНеобязательно') + '>необязательно</div>' : '') + '</td>' +
-      '<td><div class="ellipsis"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияРоль') + '>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div>' +
-        '<div class="muted text-s ellipsis" title="' + esc(who) + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияОтветственный') + '>' + esc(who) + '</div></td>' +
-      '<td class="nowrap"><div class="' + (over ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияСрок') + '>' + fmtDate(date) + '</div>' +
-        '<div class="text-s ' + due.cls + '"' + a1c('Надпись', 'ТаблицаЧекЛистЗакрытияСрокПояснение') + '>' + esc(due.text) + '</div></td>' +
+      whoCell(c.doneBy, c.responsibleId, c.done, 'ТаблицаЧекЛистЗакрытия', personById) +
+      dueCell(closureDate(c), closureOverdue(c), closureOffsetText(c.offsetDays), 'ТаблицаЧекЛистЗакрытия') +
+      factCell(c, 'ТаблицаЧекЛистЗакрытия') +
       '<td>' + action + '</td>' +
       '</tr>';
-  }
-
-  // Вторая строка «Срока» (фаза 9, 6.4)
-  function checklistDueNote(c) {
-    if (c.done) return { text: 'выполнено ' + fmtDate(c.doneAt).slice(0, 5), cls: 'muted' };
-    if (checklistOverdue(c)) return { text: 'просрочено на ' + diffDays(checklistDate(c), D.TODAY) + ' дн.', cls: 'danger-text' };
-    return { text: offsetText(c.offsetDays), cls: 'muted' };
   }
 
   function checklistRow(t, c, lock) {
     var date = checklistDate(c);
     var auto = c.linkedDocType === 'program';
     var boxTitle = lock || (auto ? 'Отметится автоматически, когда АП будет создана' : c.done ? 'Снять отметку о выполнении' : 'Отметить выполненным');
-    var due = checklistDueNote(c);
-    // Ответственный: роль; ниже — ФИО ответственного или «Выполнил: ФИО», если выполнил другой человек
-    var who = c.done && c.doneBy && c.doneBy !== c.responsibleId ? 'Выполнил: ' + userName(c.doneBy) : userName(c.responsibleId);
     var action = '';
     if (c.linkedDocType === 'request0911') {
       action = c.linkedDocNumber
@@ -1568,10 +1571,9 @@
       '<td><input type="checkbox" data-cl-done="' + c.id + '"' + (c.done ? ' checked' : '') + (lock || auto ? ' disabled' : '') +
         ' title="' + esc(boxTitle) + '" aria-label="' + esc(boxTitle + ': ' + c.name) + '"' + a1c('Флажок', 'ТаблицаЧекЛистВыполнено') + '></td>' +
       '<td><div class="ellipsis" title="' + esc(c.name) + '"' + a1c('Надпись', 'ТаблицаЧекЛистПункт') + '>' + esc(c.name) + '</div></td>' +
-      '<td><div class="ellipsis"' + a1c('Надпись', 'ТаблицаЧекЛистРоль') + '>' + esc(D.ROLE_TITLES[c.responsibleRole]) + '</div>' +
-        '<div class="muted text-s ellipsis" title="' + esc(who) + '"' + a1c('Надпись', 'ТаблицаЧекЛистОтветственный') + '>' + esc(who) + '</div></td>' +
-      '<td class="nowrap"><div class="' + (checklistOverdue(c) ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаЧекЛистСрок') + '>' + fmtDate(date) + '</div>' +
-        '<div class="text-s ' + due.cls + '"' + a1c('Надпись', 'ТаблицаЧекЛистСрокПояснение') + '>' + esc(due.text) + '</div></td>' +
+      whoCell(c.doneBy, c.responsibleId, c.done, 'ТаблицаЧекЛист', userName) +
+      dueCell(date, checklistOverdue(c), offsetText(c.offsetDays), 'ТаблицаЧекЛист') +
+      factCell(c, 'ТаблицаЧекЛист') +
       '<td>' + action + '</td>' +
       '</tr>';
   }

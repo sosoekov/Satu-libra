@@ -455,7 +455,8 @@ table.grid.task-table td { vertical-align: middle; }
 /* ================= Вкладка «Подготовка к выходу» ================= */
 .checklist-table { table-layout: fixed; }
 .checklist-table .w-check { width: 36px; }
-.checklist-table .w-resp { width: 260px; }
+.checklist-table .w-resp { width: 240px; }
+.checklist-table .w-fact { width: 150px; }
 .checklist-table .w-date { width: 150px; }
 .checklist-table .w-action { width: 150px; }
 table.grid.checklist-table td { vertical-align: middle; }
