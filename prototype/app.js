@@ -302,6 +302,7 @@
     openCard: '<path d="M9.5 2.5h4v4M13.5 2.5L8 8M6.5 3.5h-3v9h9v-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     info: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/>',
     alert: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".9" fill="currentColor"/>',
+    dot: '<circle cx="8" cy="8" r="5" fill="currentColor"/>',
     flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 3 1.8 3h-8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
     print: '<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="9.5" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
@@ -482,14 +483,28 @@
    * Левая панель (раздел 7.2)
    * --------------------------------------------------------------------- */
 
-  // Фильтры левой панели (фаза 7, раздел 2.2): взаимоисключающие, активен максимум один
+  // Просрочка где угодно (фаза 11, 3.2): задачи АП, пункты подготовки, пункты закрытия
+  function hasOverdue(t) {
+    if (t.stage === 'closed') return false;
+    var st = statsOf(t);
+    return !!(st && st.overdue) || checklistOf(t).some(checklistOverdue) || closureOf(t).some(closureOverdue);
+  }
+  // Скоро окончание: этап active и до окончания ≤ CLOSE_AVAILABLE_DAYS дней (фаза 11, 3.2)
+  function closeSoon(t) { return t.stage === 'active' && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS; }
+
+  // Фильтры левой панели (фаза 11, 3.2): плоский список, взаимоисключающие, активен максимум один.
+  // Разделитель — после «Просроченные» (sepAfter)
   var FILTERS = [
     { id: 'attention',    title: 'Требуют внимания',    icon: 'alert',    color: 'danger', name: 'ТребуютВнимания',
       match: function (t) { return needsAttention(t); } },
-    { id: 'awaitProgram', title: 'Ожидают АП',          icon: 'clock',    color: 'stage-found',    stages: ['found', 'draft'], name: 'ОжидаютАП' },
-    { id: 'approval',     title: 'На согласовании',     icon: 'docCheck', color: 'stage-approval', stages: ['approval'],       name: 'НаСогласовании' },
-    { id: 'active',       title: 'Проходят стажировку', icon: 'users',    color: 'stage-active',   stages: ['active'],         name: 'ПроходятСтажировку' },
-    { id: 'closing',      title: 'Ожидают закрытия',    icon: 'flag',     color: 'stage-closing',  stages: ['closing'],        name: 'ОжидаютЗакрытия' }
+    { id: 'overdue',      title: 'Просроченные',        icon: 'dot',      color: 'danger', name: 'Просроченные', sepAfter: true,
+      match: function (t) { return hasOverdue(t); } },
+    { id: 'awaitProgram', title: 'Ожидают АП',          icon: 'clock',    color: 'warning',        stages: ['found', 'draft'], name: 'ОжидаютАП' },
+    { id: 'approval',     title: 'На согласовании',     icon: 'docCheck', color: 'info',           stages: ['approval'],       name: 'НаСогласовании' },
+    { id: 'active',       title: 'Проходят стажировку', icon: 'users',    color: 'success',        name: 'ПроходятСтажировку',
+      match: function (t) { return t.stage === 'active' && !closeSoon(t); } },
+    { id: 'closing',      title: 'Ожидают закрытия',    icon: 'flag',     color: 'stage-closing',  name: 'ОжидаютЗакрытия',
+      match: function (t) { return t.stage === 'closing' || closeSoon(t); } }
   ];
   function filterById(id) {
     for (var i = 0; i < FILTERS.length; i++) if (FILTERS[i].id === id) return FILTERS[i];
@@ -568,17 +583,10 @@
     var selStart = keepFocus ? active.selectionStart : 0;
     var selEnd = keepFocus ? active.selectionEnd : 0;
 
+    // Фаза 11, 3.1: заголовка панели нет; меню ⋮ — в строке «Требуют внимания», справа от числа
     var html = '<div class="left-inner">' +
-      '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокЛевойПанели') + '>' +
-        '<div class="h-block grow"' + a1c('Надпись', 'ДекорацияЗаголовокОбзор') + '>Обзор по подразделениям</div>' +
-        submenu('leftPanel', 'ПодменюЛеваяПанель', [
-          '<button type="button" role="menuitemcheckbox" aria-checked="' + state.hideEmpty + '" data-action="toggleHideEmpty"' +
-            a1c('Кнопка', 'КомандаСкрытьПустыеПодразделения') + '><span class="menu-check">' + (state.hideEmpty ? '✓' : '') + '</span>' +
-            'Скрыть подразделения без стажёров</button>'
-        ], { title: 'Настройки панели' }) +
-      '</div>' +
       '<div class="filter-list"' + a1c('ГруппаВертикальная', 'ГруппаФильтры') + '>' +
-        FILTERS.map(function (f, i) { return filterRow(f) + (i === 0 ? '<div class="filter-sep"></div>' : ''); }).join('') +
+        FILTERS.map(function (f) { return filterRow(f) + (f.sepAfter ? '<div class="filter-sep"></div>' : ''); }).join('') +
       '</div>' +
       '<label class="search-field">' + icon('search') +
         '<input type="text" class="input" data-input="search" placeholder="Поиск по ФИО или подразделению" value="' + esc(state.search) + '"' +
@@ -607,8 +615,13 @@
       a1c('ГруппаГоризонтальная', 'ГруппаФильтр' + f.name, 'check') + '>' +
       '<span class="filter-icon c-' + f.color + '"' + a1c('Картинка', 'КартинкаФильтр' + f.name) + '>' + icon(f.icon) + '</span>' +
       '<span class="grow filter-label"' + a1c('Гиперссылка', 'ГиперссылкаФильтр' + f.name) + '>' + esc(f.title) + '</span>' +
-      '<span class="filter-num"' + a1c('Надпись', 'НадписьФильтр' + f.name + 'Число') + '>' + filterValue(f) + '</span>' +
-      (on ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить фильтр', action: 'clearCounterFilter', name: 'КнопкаСброситьФильтр' + f.name }) : '') +
+      '<span class="filter-num c-' + f.color + '"' + a1c('Надпись', 'НадписьФильтр' + f.name + 'Число') + '>' + filterValue(f) + '</span>' +
+      '<span class="filter-reset">' + (on ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить фильтр', action: 'clearCounterFilter', name: 'КнопкаСброситьФильтр' + f.name }) : '') + '</span>' +
+      '<span class="filter-menu">' + (f.id === 'attention' ? submenu('leftPanel', 'ПодменюЛеваяПанель', [
+          '<button type="button" role="menuitemcheckbox" aria-checked="' + state.hideEmpty + '" data-action="toggleHideEmpty"' +
+            a1c('Кнопка', 'КомандаСкрытьПустыеПодразделения') + '><span class="menu-check">' + (state.hideEmpty ? '✓' : '') + '</span>' +
+            'Скрыть подразделения без стажёров</button>'
+        ], { title: 'Настройки панели', small: true }) : '') + '</span>' +
       '</div>';
   }
 
@@ -653,7 +666,7 @@
               '<span class="tree-col-status">' +
                 (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
                   a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</span>' +
-              '<span class="tree-col-count"></span></div>');
+              '<span class="tree-col-count">' + (state.selectedTraineeId === t.id ? '<span class="tree-chevron">' + icon('chevronRight') + '</span>' : '') + '</span></div>');
           });
         }
       });

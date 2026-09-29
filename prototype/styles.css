@@ -284,7 +284,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .demo-btn:disabled { opacity: 1; color: var(--c-text-secondary); }
 
 /* ================= Левая панель ================= */
-.left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); min-height: 0; }
+.left-inner { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); min-height: 0; }
 .left-inner > * { flex-shrink: 0; }
 .left-inner > .tree { flex-shrink: 1; }
 .left-strip { align-items: center; padding: var(--sp-2) 0; }
@@ -296,12 +296,13 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 .tone-danger  { color: var(--c-danger);  display: inline-flex; }
 
 
-/* Дерево и список */
+/* Дерево и список (фаза 11, 3.3): белый контейнер с рамкой, скругление 8px, растягивается на оставшуюся высоту */
 .tree {
   flex: 1 1 auto; min-height: 0; overflow: auto;
-  border-radius: var(--radius); background: var(--c-bg);
+  border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg);
   padding: var(--sp-1) 0;
 }
+.tree-chevron { display: inline-flex; color: var(--c-text-secondary); }
 .tree-row {
   display: flex; flex-direction: row; align-items: center; gap: 0;
   min-height: 28px; padding-right: var(--sp-2); cursor: pointer;
@@ -309,7 +310,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* Фаза 9, 7.2: колонки дерева — наименование (остаток, обрезается только оно) | статус 20px | количество 32px */
 .tree-col-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .tree-col-status { flex: 0 0 20px; width: 20px; display: inline-flex; align-items: center; justify-content: center; }
-.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; }
+.tree-col-count { flex: 0 0 32px; width: 32px; text-align: right; display: inline-flex; justify-content: flex-end; }
 .tree-row:hover { background: var(--c-bg-panel); }
 .tree-row.selected { background: var(--c-bg-selected); }
 .tree-arrow { flex: 0 0 16px; width: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--c-text-secondary); }
@@ -494,7 +495,10 @@ body.markup-1c table[data-1c]::before {
 .filter-row.on .filter-label { font-weight: var(--fw-bold); }
 .filter-icon { display: inline-flex; }
 .filter-num { min-width: 20px; text-align: right; }
-.filter-row:not(.on) .filter-num { margin-right: 32px; }
+/* Фаза 11, 3.2: колонки «✕» и «⋮» справа от числа — у всех строк одной ширины, числа в одну колонку */
+.filter-reset, .filter-menu { flex: 0 0 24px; width: 24px; display: inline-flex; }
+.filter-row { gap: var(--sp-2); }
+.filter-row .filter-num + .filter-reset { margin-left: calc(var(--sp-1) - var(--sp-2)); }
 .filter-sep { height: 1px; background: var(--c-border); margin: var(--sp-1) 0; }
 .menu-check { display: inline-block; width: 16px; }
 
