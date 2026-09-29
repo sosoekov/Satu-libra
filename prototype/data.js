@@ -342,8 +342,9 @@
       { at: '2026-06-19T12:05', userId: 'u-andreeva',  action: 'АП согласована' }
     ]
   });
+  // FT_10: задача, отмеченная стажёром «Выполнено», ждёт проверки у проверяющего (Стрыгин)
   buildFromTemplate('pr-smirnov', 'tpl-base', '2026-07-01',
-    repeat('done', 10).concat(['in_progress', 'not_started']));
+    repeat('done', 10).concat(['review', 'not_started']), null, { 10: { reviewerId: 'u-strygin', result: 'Задание выполнено, результат приложен в карточке задачи' } });
 
   // --- Кузнецова М. О. — approval
   programs.push({
@@ -504,7 +505,53 @@
   templates.forEach(function (tp) { tp.tasks.forEach(withExtras); });
   tasks.forEach(withExtras);
 
+  /* ---------- FT_10: задачи и уведомления подбора персонала (тестовые — модуля подбора в прототипе нет) ----------
+   * recruitTasks: id, assigneeId, type ('approve' | 'execute' | 'acquaint'), subject, deadline, authorId, status ('open' | 'in_progress').
+   * recruitNotes: id, userId, severity, text, at. Авторы — из справочника пользователей.
+   */
+  var recruitTasks = [
+    { id: 'rt-1',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Заявка на подбор системного аналитика',                      deadline: '2026-07-23', authorId: 'u-glebov' },
+    { id: 'rt-2',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Ресурсный план на 2027 год',                                 deadline: '2026-07-24', authorId: 'u-gavrilkina' },
+    { id: 'rt-3',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Резюме кандидата на должность аналитика ERP',                deadline: '2026-07-26', authorId: 'u-maznichenko' },
+    { id: 'rt-4',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Заявка на подбор тестировщика',                              deadline: '2026-07-28', authorId: 'u-dryamin' },
+    { id: 'rt-5',  assigneeId: 'u-strygin',     type: 'execute',  subject: 'Провести собеседование с кандидатом на должность руководителя проектов', deadline: '2026-08-05', authorId: 'u-vorfolomeeva' },
+    { id: 'rt-6',  assigneeId: 'u-kladova',     type: 'approve',  subject: 'Заявка на подбор специалиста по документообороту',          deadline: '2026-07-27', authorId: 'u-podyniglazov' },
+    { id: 'rt-7',  assigneeId: 'u-kladova',     type: 'execute',  subject: 'Подготовить описание вакансии программиста',                 deadline: '2026-08-01', authorId: 'u-sizova' },
+    { id: 'rt-8',  assigneeId: 'u-kladova',     type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-22', authorId: 'u-sizova' },
+    { id: 'rt-9',  assigneeId: 'u-sizova',      type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-26', authorId: 'u-kladova' },
+    { id: 'rt-10', assigneeId: 'u-sudomoykina', type: 'execute',  subject: 'Назначить дату выхода кандидата на должность аналитика',     deadline: '2026-07-24', authorId: 'u-kladova' },
+    { id: 'rt-11', assigneeId: 'u-sudomoykina', type: 'approve',  subject: 'Заявка на подбор аналитика ERP',                             deadline: '2026-07-29', authorId: 'u-gavrilkina' }
+  ].map(function (x) { x.status = 'open'; return x; });
+  var recruitNotes = [
+    { id: 'rn-1', userId: 'u-strygin',     severity: 'warning', text: 'Заявка на подбор аналитика по отчетности — осталось 2 дня на согласование', at: '2026-07-25T09:10' },
+    { id: 'rn-2', userId: 'u-strygin',     severity: 'info',    text: 'Кандидат на должность программиста принял предложение о работе',       at: '2026-07-24T16:40' },
+    { id: 'rn-3', userId: 'u-kladova',     severity: 'warning', text: 'Заявка на подбор специалиста по документообороту — осталось 2 дня на согласование', at: '2026-07-25T08:30' },
+    { id: 'rn-4', userId: 'u-sizova',      severity: 'info',    text: 'Кандидат на должность программиста приглашён на собеседование 30.07.26', at: '2026-07-24T11:05' },
+    { id: 'rn-5', userId: 'u-sudomoykina', severity: 'danger',  text: 'Заявка на подбор аналитика ERP — срок закрытия вакансии прошёл',        at: '2026-07-23T10:00' }
+  ];
+
+  /* ---------- FT_10: важность задач — настройки пользователя ----------
+   * importance[userId] = { levels: [{ id, name }], marks: { ключЗадачи: idУровня } }. Цвет флажка — по месту уровня в списке.
+   * У пользователя без настроек — три уровня по умолчанию (создаются при первом обращении, app.js).
+   * Ключ задачи: id задачи подбора ('rt-1'), 'ap:' + id АП, 'cl:' / 'cc:' + id пункта чек-листа, 'rv:' / 'tr:' + id задачи АП.
+   */
+  var IMPORTANCE_DEFAULT = ['Важно', 'Средняя важность', 'Прочие'];
+  function defaultLevels() { return IMPORTANCE_DEFAULT.map(function (n, i) { return { id: 'lv-' + (i + 1), name: n }; }); }
+  var importance = {
+    'u-strygin':     { levels: defaultLevels(), marks: { 'ap:pr-kuznetsova': 'lv-1', 'rt-1': 'lv-1', 'rt-3': 'lv-2', 'rt-4': 'lv-3' } },
+    'u-kladova':     { levels: defaultLevels(), marks: { 'rt-6': 'lv-1', 'rt-8': 'lv-3' } },
+    'u-sizova':      { levels: defaultLevels(), marks: { 'cl:cl-8': 'lv-1', 'rt-9': 'lv-3' } },
+    'u-sudomoykina': { levels: defaultLevels(), marks: { 'rt-11': 'lv-1', 'rt-10': 'lv-2' } }
+  };
+  // Уведомления о событиях, адресованные пользователю (например, стажёру — результат проверки задачи). Пополняются в app.js
+  var userNotes = [];
+
   window.DATA = {
+    recruitTasks: recruitTasks,
+    recruitNotes: recruitNotes,
+    importance: importance,
+    IMPORTANCE_DEFAULT: IMPORTANCE_DEFAULT,
+    userNotes: userNotes,
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
     LAG_THRESHOLD: LAG_THRESHOLD,

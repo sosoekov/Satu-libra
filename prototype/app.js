@@ -84,7 +84,8 @@
    * Производные значения (раздел 5.3)
    * ===================================================================== */
 
-  function isOverdue(task) { return task.status !== 'done' && task.deadline < D.TODAY; }
+  // FT_10: задача «На проверке» (стажёр выполнил, ждёт проверяющего) не считается просроченной
+  function isOverdue(task) { return task.status !== 'done' && task.status !== 'review' && task.deadline < D.TODAY; }
   // Статус для показа: просрочка — признак, но в бейдже показывается вместо исходного статуса
   function viewStatus(task) { return isOverdue(task) ? 'overdue' : task.status; }
 
@@ -96,12 +97,13 @@
 
   // Сводка по задачам АП: выполнено / в работе / просрочено / не начато. Просроченная считается только в «просрочено».
   function taskStats(list) {
-    var s = { total: list.length, done: 0, progress: 0, overdue: 0, todo: 0, pct: 0 };
+    var s = { total: list.length, done: 0, progress: 0, review: 0, overdue: 0, todo: 0, pct: 0 };
     list.forEach(function (x) {
       var v = viewStatus(x);
       if (v === 'done') s.done++;
       else if (v === 'overdue') s.overdue++;
       else if (v === 'in_progress') s.progress++;
+      else if (v === 'review') s.review++;
       else s.todo++;
     });
     s.pct = s.total ? Math.round(s.done / s.total * 100) : 0;
@@ -279,6 +281,10 @@
     print: '<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="9.5" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
     lock: '<rect x="3.5" y="7" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/>',
     plus: '<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+    // FT_10: настройка важности, удаление уровня, флажок важности (заливка)
+    gear: '<circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9M7 7v4.5M9 7v4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+    flagFill: '<path d="M3.5 14V2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.5 3h8l-1.8 3 1.8 3h-8z" fill="currentColor"/>',
     up: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     down: '<path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>'
   };
@@ -414,6 +420,17 @@
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     demoUserMenuOpen: false,     // НЕ_ПЕРЕНОСИТЬ: меню демо-переключателя пользователя (FT_8)
     markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
+    // FT_10: вкладка «Задачи и уведомления»
+    tv: {
+      sub: 'tasks',              // 'tasks' | 'notes'
+      filter: 'all',             // 'all' | 'overdue' | 'attention' | 'today'
+      sourcesOff: {}, typesOff: {},   // снятые флажки отборов «По источнику», «По типу задачи»
+      level: null,               // отбор по уровню важности
+      search: '',
+      collapsed: {},             // свёрнутые группы «Просроченные / Требуют внимания / Остальные»
+      selected: {},              // выбранные флажками задачи: {ключ: true}
+      noteFilter: 'all', noteSourcesOff: {}, noteSearch: ''
+    },
     toasts: []
   };
 
@@ -455,8 +472,11 @@
   function render() {
     renderTopTabs();
     var isAdaptation = state.topTab === 'adaptation';
+    var isTasks = state.topTab === 'tasks';   // FT_10
     el('adaptationPage').classList.toggle('hidden', !isAdaptation);
-    el('stubZone').classList.toggle('hidden', isAdaptation);
+    el('tasksPage').classList.toggle('hidden', !isTasks);
+    el('stubZone').classList.toggle('hidden', isAdaptation || isTasks);
+    if (isTasks) renderTasksPage();
     if (isAdaptation) {
       // FT_9: у стажёра и сотрудника КШ левой панели нет
       var noLeft = isTraineeUser() || isKshUser();
@@ -468,6 +488,13 @@
     renderDialog();
     renderDemo();
     renderToasts();
+  }
+
+  // Перерисовка зон открытой страницы (после открытия / закрытия подменю)
+  function renderMain() {
+    if (state.topTab === 'tasks') { renderTasksPage(); return; }
+    renderLeft();
+    renderCenter();
   }
 
   function renderTopTabs() {
@@ -1037,7 +1064,7 @@
   function placeFloatingMenu() {
     var m = document.querySelector('.menu-float');
     if (!m) return;
-    var r = m.parentNode.querySelector('button').getBoundingClientRect();
+    var r = (m.parentNode.querySelector('[data-action="toggleMenu"]') || m.parentNode.querySelector('button')).getBoundingClientRect();
     var top = r.bottom + 4;
     if (top + m.offsetHeight > window.innerHeight - 8) top = r.top - m.offsetHeight - 4;
     m.style.top = top + 'px';
@@ -1102,15 +1129,16 @@
   var STATUS_META = {
     overdue:     { text: 'Просрочена', tone: 'danger',  order: 0 },
     in_progress: { text: 'В работе',   tone: 'info',    order: 1 },
-    not_started: { text: 'Не начата',  tone: 'neutral', order: 2 },
-    done:        { text: 'Выполнена',  tone: 'success', order: 3 }
+    review:      { text: 'На проверке', tone: 'warning', order: 2 },   // FT_10
+    not_started: { text: 'Не начата',  tone: 'neutral', order: 3 },
+    done:        { text: 'Выполнена',  tone: 'success', order: 4 }
   };
   var BLOCKS = [
     { id: 'corp', title: 'Корпоративный блок', short: 'Корпоративный', name: 'Корпоративный' },
     { id: 'spec', title: 'Специальный блок',   short: 'Специальный',   name: 'Специальный' }
   ];
   // Вариант тумблера статусов → статус задачи
-  var FILTER_STATUS = { done: 'done', progress: 'in_progress', overdue: 'overdue', todo: 'not_started' };
+  var FILTER_STATUS = { done: 'done', progress: 'in_progress', review: 'review', overdue: 'overdue', todo: 'not_started' };
 
   function blockMeta(id) { return id === 'spec' ? BLOCKS[1] : BLOCKS[0]; }
   function trunc(s, n) { s = s || ''; return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; }
@@ -1175,6 +1203,7 @@
   var STATUS_VARIANTS = [
     { f: 'overdue', text: 'Просрочено', name: 'Просрочено', cls: 'tv-danger', risk: 'check' },
     { f: 'progress', text: 'В работе', name: 'ВРаботе' },
+    { f: 'review', text: 'На проверке', name: 'НаПроверке' },   // FT_10
     { f: 'todo', text: 'Не начато', name: 'НеНачато' },
     { f: 'done', text: 'Выполнено', name: 'Выполнено' }
   ];
@@ -1617,6 +1646,572 @@
       '</tr>';
   }
 
+  /* =====================================================================
+   * FT_10: вкладка «Задачи и уведомления»
+   * Задачи текущего пользователя из двух источников: «Подбор персонала» (тестовые данные, модуля подбора в прототипе нет)
+   * и «Адаптация персонала» (связаны с данными: действие в списке меняет шаг согласования, пункт чек-листа или задачу АП).
+   * Выполненная задача из списка уходит; «Взять в работу» оставляет её с отметкой «В работе».
+   * ===================================================================== */
+
+  var TV_SOURCES = [
+    { id: 'recruit',    text: 'Подбор персонала',    short: 'Подбор',    name: 'ПодборПерсонала' },
+    { id: 'adaptation', text: 'Адаптация персонала', short: 'Адаптация', name: 'АдаптацияПерсонала' }
+  ];
+  var TV_TYPES = [
+    { id: 'approve',  text: 'Согласовать',  tone: 'danger',  name: 'Согласовать' },
+    { id: 'execute',  text: 'Выполнить',    tone: 'success', name: 'Выполнить' },
+    { id: 'acquaint', text: 'Ознакомиться', tone: 'info',    name: 'Ознакомиться' },
+    { id: 'review',   text: 'Проверить',    tone: 'warning', name: 'Проверить' }
+  ];
+  // Команды типа задачи: основная кнопка выполняет main, меню ▾ — items [команда, текст, имя 1С] (ответ заказчика по FT_10)
+  var TV_COMMANDS = {
+    approve:  { main: 'approve',  items: [['approve', 'Согласовано', 'Согласовано'], ['reject', 'Не согласовано', 'НеСогласовано']] },
+    execute:  { main: 'done',     items: [['work', 'Взять в работу', 'ВзятьВРаботу'], ['done', 'Выполнить', 'Выполнить']] },
+    acquaint: { main: 'acquaint', items: [] },
+    review:   { main: 'checked',  items: [['checked', 'Проверено', 'Проверено'], ['return', 'Вернуть на доработку', 'ВернутьНаДоработку']] }
+  };
+  var TV_DONE_TEXT = { approve: 'Согласовано', work: 'Задача взята в работу', done: 'Задача выполнена', acquaint: 'Ознакомление отмечено',
+    checked: 'Задача проверена', reject: 'Не согласовано', 'return': 'Задача возвращена на доработку' };
+  var TV_MAIN_TITLES = { approve: 'Согласовано', execute: 'Выполнено', acquaint: 'Ознакомлен(а)', review: 'Проверено' };
+  var TV_GROUPS = [
+    { id: 'overdue',   title: 'Просроченные',     name: 'Просроченные' },
+    { id: 'attention', title: 'Требуют внимания', name: 'ТребуютВнимания' },
+    { id: 'other',     title: 'Остальные',        name: 'Остальные' }
+  ];
+  var TV_FILTERS = [
+    { id: 'all',       title: 'Все задачи',       icon: 'docCheck', color: 'muted',     name: 'ВсеЗадачи' },
+    { id: 'overdue',   title: 'Просроченные',     icon: 'alert',    color: 'c-danger',  name: 'Просроченные' },
+    { id: 'attention', title: 'Требуют внимания', icon: 'warn',     color: 'c-warning', name: 'ТребуютВнимания' },
+    { id: 'today',     title: 'Сегодня',          icon: 'calendar', color: 'c-info',    name: 'Сегодня' }
+  ];
+  var NOTE_FILTERS = [
+    { id: 'all',     title: 'Все уведомления',  icon: 'docCheck', color: 'muted',     name: 'ВсеУведомления' },
+    { id: 'danger',  title: 'Критичные',        icon: 'alert',    color: 'c-danger',  name: 'Критичные' },
+    { id: 'warning', title: 'Требуют внимания', icon: 'warn',     color: 'c-warning', name: 'ТребуютВнимания' },
+    { id: 'info',    title: 'Информация',       icon: 'info',     color: 'c-info',    name: 'Информация' }
+  ];
+  var ATTENTION_DAYS = 3;     // «Требуют внимания»: срок сегодня или в ближайшие 3 дня
+  var EVENT_DAYS = 7;         // события адаптации показываются в уведомлениях 7 дней
+  var START_SOON_DAYS = 7;    // уведомление «стажёр выходит через N дней» — за 7 дней до выхода
+  var IMPORTANCE_MAX = 6;     // до 6 уровней важности
+  var IMP_COLORS = ['imp-red', 'imp-yellow', 'imp-blue', 'imp-green', 'imp-purple', 'imp-grey'];   // цвет флажка — по месту уровня
+
+  function lowerFirst(s) { return /^[А-ЯЁA-Z]{2}/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1); }
+  function upperFirst(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // Автор задачи «Согласовать» — кто отправил АП на согласование (последняя запись истории), иначе руководитель стажировки
+  function approvalSender(program, t) {
+    var h = program.history.filter(function (x) { return x.action.indexOf('АП отправлена на согласование') === 0; }).pop();
+    return h ? h.userId : t.headId;
+  }
+  // Автор пункта чек-листа — HR-менеджер стажёра; у пунктов самого HR-менеджера — руководитель стажировки
+  function checklistAuthor(t, c) { return c.responsibleId === t.hrId ? t.headId : t.hrId; }
+  // Подразделение автора: у стажёра — его подразделение, у сотрудника — подразделение, за которое он отвечает
+  function authorDept(id) {
+    var tr = trainee(id);
+    if (tr) return dept(tr.departmentId).name;
+    var d = D.departments.filter(function (x) { return x.responsibleId === id; })[0];
+    return d ? d.name : '';
+  }
+
+  // Задачи текущего пользователя. key — ключ задачи (он же ключ отметки важности), kind — вид объекта-источника
+  function myTasks() {
+    var me = D.CURRENT_USER_ID;
+    var list = [];
+    D.recruitTasks.forEach(function (r) {
+      if (r.assigneeId !== me || r.status === 'done') return;
+      list.push({ key: r.id, kind: 'rt', source: 'recruit', type: r.type, subject: r.subject, context: '', deadline: r.deadline,
+        authorId: r.authorId, inWork: r.status === 'in_progress', ref: r });
+    });
+    D.trainees.forEach(function (t) {
+      if (isClosed(t)) return;
+      var program = programOf(t);
+      // Текущий шаг маршрута согласования АП
+      var i = t.stage === 'approval' ? currentStepIndex(program) : -1;
+      if (i >= 0 && program.approval.steps[i].userId === me) {
+        list.push({ key: 'ap:' + program.id, kind: 'ap', source: 'adaptation', type: 'approve', traineeId: t.id, ref: program,
+          subject: 'АП стажёра ' + t.fullName, context: ROUTE_TITLES[program.approval.steps[i].role],
+          deadline: routeDeadlines(program.approval.startedAt, program.approval.steps)[i], authorId: approvalSender(program, t) });
+      }
+      // Пункты чек-листов подготовки и закрытия, где пользователь ответственный («Создать АП» отмечается автоматически)
+      checklistOf(t).forEach(function (c) {
+        if (c.done || c.responsibleId !== me || c.linkedDocType === 'program') return;
+        list.push({ key: 'cl:' + c.id, kind: 'cl', source: 'adaptation', type: 'execute', traineeId: t.id, ref: c, inWork: !!c.inWork,
+          subject: c.name, context: 'Подготовка к выходу · стажёр ' + t.fullName, deadline: checklistDate(c), authorId: checklistAuthor(t, c) });
+      });
+      closureOf(t).forEach(function (c) {
+        if (c.done || c.responsibleId !== me) return;
+        list.push({ key: 'cc:' + c.id, kind: 'cc', source: 'adaptation', type: 'execute', traineeId: t.id, ref: c, inWork: !!c.inWork,
+          subject: c.name, context: 'Закрытие стажировки · стажёр ' + t.fullName, deadline: closureDate(c), authorId: checklistAuthor(t, c) });
+      });
+      if (!program) return;
+      // Стажёр получает задачи своей АП после согласования (этапы «Стажировка» и «Закрытие»)
+      var own = t.id === me && (t.stage === 'active' || t.stage === 'closing');
+      tasksOf(program).forEach(function (x) {
+        if (x.status === 'review' && x.reviewerId === me) {
+          list.push({ key: 'rv:' + x.id, kind: 'rv', source: 'adaptation', type: 'review', traineeId: t.id, ref: x,
+            subject: x.name, context: 'Задача АП · стажёр ' + t.fullName, deadline: x.deadline, authorId: t.id });
+        }
+        if (own && (x.status === 'not_started' || x.status === 'in_progress')) {
+          list.push({ key: 'tr:' + x.id, kind: 'tr', source: 'adaptation', type: 'execute', traineeId: t.id, ref: x, inWork: x.status === 'in_progress',
+            subject: x.name, context: 'Адаптационная программа · ' + blockMeta(x.block).title, deadline: x.deadline, authorId: t.headId });
+        }
+      });
+    });
+    return list;
+  }
+  function tvTaskByKey(key) {
+    var list = myTasks();
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
+    return null;
+  }
+  function tvDays(x) { return diffDays(D.TODAY, x.deadline); }
+  function tvGroup(x) { var d = tvDays(x); return d < 0 ? 'overdue' : d <= ATTENTION_DAYS ? 'attention' : 'other'; }
+  function tvFilterMatch(x, f) {
+    if (f === 'overdue') return tvDays(x) < 0;
+    if (f === 'attention') return tvGroup(x) === 'attention';
+    if (f === 'today') return tvDays(x) === 0;
+    return true;
+  }
+  function tvCanRedirect(x) { return x.kind !== 'tr'; }   // задачи своей АП стажёр выполняет сам
+  function tvVisibleTasks(all) {
+    var q = state.tv.search.trim().toLowerCase();
+    var lv = state.tv.level;
+    var marks = importanceOf().marks;
+    return all.filter(function (x) {
+      return tvFilterMatch(x, state.tv.filter) && !state.tv.sourcesOff[x.source] && !state.tv.typesOff[x.type] &&
+        (!lv || marks[x.key] === lv) &&
+        (!q || (x.subject + ' ' + x.context + ' ' + personById(x.authorId) + ' ' + authorDept(x.authorId)).toLowerCase().indexOf(q) >= 0);
+    }).sort(function (a, b) { return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0; });
+  }
+  function tvSelected(all) { return all.filter(function (x) { return state.tv.selected[x.key]; }); }
+
+  /* ---------- Важность: личные настройки пользователя (D.importance) ---------- */
+  var impSeq = 100;
+  function importanceOf() {
+    var me = D.CURRENT_USER_ID;
+    if (!D.importance[me]) {
+      D.importance[me] = { levels: D.IMPORTANCE_DEFAULT.map(function (n, i) { return { id: 'lv-' + (i + 1), name: n }; }), marks: {} };
+    }
+    return D.importance[me];
+  }
+  function levelIndex(id) { return importanceOf().levels.map(function (l) { return l.id; }).indexOf(id); }
+  function impFlag(idx, title, name) {
+    return '<span class="imp-flag ' + IMP_COLORS[idx] + '"' + (title ? ' title="' + esc(title) + '"' : '') + a1c('Картинка', name, 'check') + '>' + icon('flagFill') + '</span>';
+  }
+
+  /* ---------- Уведомления ---------- */
+  var notesRead = {};        // прочитанные уведомления: {userId: {ключ: true}}
+  var userNoteSeq = 1;
+  function pushUserNote(userId, severity, text, traineeId, taskId) {
+    D.userNotes.push({ id: 'un-' + (userNoteSeq++), userId: userId, severity: severity, text: text, at: nowStamp(), traineeId: traineeId, taskId: taskId });
+  }
+  var EVENT_RE = /^(АП отправлена на согласование|АП согласована|АП возвращена на доработку|Начато закрытие стажировки|Стажировка завершена|Стажировка отменена)/;
+  // Уведомление по аналитике стажёра: замечания блока аналитики одной строкой. Если выход в ближайшие 7 дней — «выходит через N дней»
+  // и что не готово к выходу (пример заказчика: «выходит через 2 дня, не завершены подготовительные задачи, не создана АП, не согласована АП»)
+  function analyticsNote(t) {
+    var notes = getNotifications(t);
+    if (isTraineeUser()) {   // стажёр — только просрочку своих задач (как в блоке аналитики, FT_9)
+      notes = notes.filter(function (n) { return n.id === 'tasks_overdue'; });
+      return notes.length ? { severity: notes[0].severity, text: 'У вас ' + notes[0].text, ids: notes[0].id } : null;
+    }
+    var ds = daysToStart(t);
+    var soon = ['found', 'draft', 'approval'].indexOf(t.stage) >= 0 && ds >= 0 && ds <= START_SOON_DAYS;
+    var has = function (id) { return notes.some(function (n) { return n.id === id; }); };
+    var parts = notes.map(function (n) {
+      return { id: n.id, severity: n.severity, text: n.id === 'no_program' && soon ? 'не создана адаптационная программа' : lowerFirst(n.text) };
+    });
+    if (soon) {
+      var sev = ds <= ATTENTION_DAYS ? 'warning' : 'info';
+      var all = checklistOf(t);
+      var left = all.filter(function (c) { return !c.done; }).length;
+      if (left && !has('prep_overdue')) parts.push({ id: 'prep_left', severity: sev, text: 'не завершены пункты подготовки к выходу: ' + left + ' из ' + all.length });
+      if (t.stage === 'approval' || (t.stage === 'draft' && !has('rejected') && !has('draft_stale'))) parts.push({ id: 'not_approved', severity: sev, text: 'адаптационная программа не согласована' });
+    }
+    if (!parts.length) return null;
+    parts.sort(function (a, b) { return TONE_ORDER[a.severity] - TONE_ORDER[b.severity]; });
+    var head = 'Стажёр ' + t.fullName + (soon ? (ds === 0 ? ' выходит сегодня' : ' выходит через ' + pluralN(ds, W_DAYS)) : '');
+    return { severity: parts[0].severity, text: head + ': ' + parts.map(function (p) { return p.text; }).join('; '),
+      ids: parts.map(function (p) { return p.id; }).join(',') };
+  }
+  // Уведомления текущего пользователя: подбор (тестовые), аналитика по стажёрам, события адаптации за 7 дней, адресные события
+  function myNotes(withRead) {
+    var me = D.CURRENT_USER_ID;
+    var read = notesRead[me] || {};
+    var from = addDays(D.TODAY, -EVENT_DAYS);
+    var list = [];
+    D.recruitNotes.forEach(function (n) {
+      if (n.userId === me) list.push({ key: n.id, kind: 'rn', source: 'recruit', severity: n.severity, text: n.text, at: n.at });
+    });
+    D.userNotes.forEach(function (n) {
+      if (n.userId === me) list.push({ key: n.id, kind: 'un', source: 'adaptation', severity: n.severity, text: n.text, at: n.at, traineeId: n.traineeId, taskId: n.taskId });
+    });
+    if (!isKshUser()) myTrainees().forEach(function (t) {
+      var a = analyticsNote(t);
+      if (a) list.push({ key: 'an:' + t.id + ':' + a.ids, kind: 'an', source: 'adaptation', severity: a.severity, text: a.text, at: D.TODAY, traineeId: t.id });
+      var who = isTraineeUser() ? '' : 'Стажёр ' + t.fullName + ': ';
+      var program = programOf(t);
+      if (program) program.history.forEach(function (h, i) {
+        if (h.userId === me || h.at.slice(0, 10) < from || !EVENT_RE.test(h.action)) return;
+        var text = h.action.split('. Маршрут:')[0];
+        list.push({ key: 'ev:' + program.id + ':' + i, kind: 'ev', source: 'adaptation', severity: /доработку|отменена/.test(text) ? 'warning' : 'info',
+          text: who ? who + lowerFirst(text) : text, at: h.at, traineeId: t.id });
+      });
+      if ((t.stage === 'active' || t.stage === 'closing') && t.startDate <= D.TODAY && t.startDate >= from && !isTraineeUser()) {
+        list.push({ key: 'st:' + t.id, kind: 'st', source: 'adaptation', severity: 'info', text: who + 'выход на стажировку ' + fmtDate(t.startDate), at: t.startDate, traineeId: t.id });
+      }
+    });
+    return list.filter(function (n) { return withRead || !read[n.key]; }).sort(function (a, b) {
+      return a.at < b.at ? 1 : a.at > b.at ? -1 : TONE_ORDER[a.severity] - TONE_ORDER[b.severity];
+    });
+  }
+  function noteByKey(key) {
+    var list = myNotes(true);
+    for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
+    return null;
+  }
+  function tvVisibleNotes(all) {
+    var q = state.tv.noteSearch.trim().toLowerCase();
+    return all.filter(function (n) {
+      return (state.tv.noteFilter === 'all' || n.severity === state.tv.noteFilter) && !state.tv.noteSourcesOff[n.source] &&
+        (!q || n.text.toLowerCase().indexOf(q) >= 0);
+    });
+  }
+
+  /* ---------- Рендер страницы ---------- */
+  function renderTasksPage() {
+    // Поле поиска перерисовывается вместе со страницей — сохраняем фокус и курсор
+    var active = document.activeElement;
+    var key = active && active.getAttribute && active.getAttribute('data-input');
+    var selStart = key ? active.selectionStart : 0, selEnd = key ? active.selectionEnd : 0;
+    var all = myTasks();
+    var notes = myNotes();
+    // Выбор — только среди задач, которые ещё есть в списке
+    var keys = all.map(function (x) { return x.key; });
+    Object.keys(state.tv.selected).forEach(function (k) { if (keys.indexOf(k) < 0) delete state.tv.selected[k]; });
+    el('tasksLeft').innerHTML = state.tv.sub === 'notes' ? renderNotesLeft(notes) : renderTasksLeft(all);
+    el('tasksCenter').innerHTML = '<div class="col gap-2 tv-center">' +
+      '<div class="tabs tv-tabs"' + a1c('Страницы', 'СтраницыЗадачиУведомления') + '>' +
+        [{ id: 'tasks', text: 'Задачи', name: 'СтраницаМоиЗадачи' }, { id: 'notes', text: 'Уведомления' + (notes.length ? ' ' + notes.length : ''), name: 'СтраницаУведомления' }].map(function (x) {
+          return '<button type="button" class="tab' + (state.tv.sub === x.id ? ' active' : '') + '" data-tab="' + x.id + '" data-action="tvSub"' + a1c('Страница', x.name) + '>' + esc(x.text) + '</button>';
+        }).join('') +
+      '</div>' +
+      (state.tv.sub === 'notes' ? renderNotesList(notes) : renderTaskList(all)) + '</div>';
+    Array.prototype.forEach.call(el('tasksCenter').querySelectorAll('[data-indeterminate]'), function (x) { x.indeterminate = true; });
+    if (key === 'tvSearch' || key === 'noteSearch') {
+      var input = el('tasksCenter').querySelector('[data-input="' + key + '"]');
+      if (input) { input.focus(); input.setSelectionRange(selStart, selEnd); }
+    }
+    placeFloatingMenu();
+  }
+
+  // Строка отбора левой панели: иконка, подпись, число
+  function tvFilterRow(f, count, on, action, prefix) {
+    return '<div class="filter-row' + (on ? ' on' : '') + '" role="button" tabindex="0" aria-pressed="' + on + '" data-action="' + action + '" data-id="' + f.id + '"' +
+      ' title="' + esc('Показать: ' + f.title) + '"' + a1c('ГруппаГоризонтальная', prefix + f.name, 'check') + '>' +
+      '<span class="filter-icon ' + f.color + '"' + a1c('Картинка', prefix + f.name + 'Картинка') + '>' + icon(f.icon) + '</span>' +
+      '<span class="grow filter-label"' + a1c('Гиперссылка', prefix + f.name + 'Заголовок') + '>' + esc(f.title) + '</span>' +
+      '<span class="filter-num"' + a1c('Надпись', prefix + f.name + 'Число') + '>' + count + '</span></div>';
+  }
+  // Флажок отбора: «По источнику», «По типу задачи»
+  function tvCheckRow(attr, id, text, count, on, name, pic) {
+    return '<label class="tv-check-row" title="' + esc((on ? 'Скрыть: ' : 'Показать: ') + text) + '">' +
+      '<input type="checkbox" ' + attr + '="' + id + '"' + (on ? ' checked' : '') + a1c('Флажок', name) + '>' + (pic || '') +
+      '<span class="grow ellipsis">' + esc(text) + '</span>' +
+      '<span class="filter-num muted"' + a1c('Надпись', name + 'Число') + '>' + count + '</span></label>';
+  }
+  function tvSection(text, name, extra) {
+    return '<div class="row tv-sect"><span class="grow"' + a1c('Надпись', name) + '>' + esc(text) + '</span>' + (extra || '') + '</div>';
+  }
+  function countBy(list, fn) { return list.filter(fn).length; }
+
+  function renderTasksLeft(all) {
+    var imp = importanceOf();
+    return '<div class="left-inner tv-left"' + a1c('ГруппаВертикальная', 'ГруппаОтборыЗадач') + '>' +
+      '<div class="row tv-left-head"><span class="grow"' + a1c('Надпись', 'ДекорацияМоиЗадачи') + '>Мои задачи</span>' +
+        '<span class="tv-left-num"' + a1c('Надпись', 'ДекорацияМоиЗадачиЧисло') + '>' + all.length + '</span></div>' +
+      '<div class="filter-list">' + TV_FILTERS.map(function (f) {
+        return tvFilterRow(f, countBy(all, function (x) { return tvFilterMatch(x, f.id); }), state.tv.filter === f.id, 'tvFilter', 'ГруппаОтборЗадач');
+      }).join('') + '</div>' +
+      '<div class="filter-sep"></div>' +
+      tvSection('По источнику', 'ДекорацияПоИсточнику') +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОтборПоИсточнику') + '>' + TV_SOURCES.map(function (s) {
+        return tvCheckRow('data-tv-source', s.id, s.text, countBy(all, function (x) { return x.source === s.id; }), !state.tv.sourcesOff[s.id], 'ФлажокИсточник' + s.name);
+      }).join('') + '</div>' +
+      tvSection('По типу задачи', 'ДекорацияПоТипуЗадачи') +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОтборПоТипу') + '>' + TV_TYPES.map(function (tp) {
+        return tvCheckRow('data-tv-type', tp.id, tp.text, countBy(all, function (x) { return x.type === tp.id; }), !state.tv.typesOff[tp.id], 'ФлажокТип' + tp.name);
+      }).join('') + '</div>' +
+      tvSection('По важности', 'ДекорацияПоВажности',
+        button('', { cls: 'btn-icon btn-flat btn-small', icon: 'gear', action: 'openImportanceSettings', title: 'Настроить важность: названия и количество уровней', name: 'КнопкаНастройкаВажности' })) +
+      // Уровни задаёт пользователь (до 6) — в 1С таблица значений на форме
+      '<div class="filter-list"' + a1c('ТаблицаФормы', 'ТаблицаОтборПоВажности', 'check') + '>' + imp.levels.map(function (l, i) {
+        var on = state.tv.level === l.id;
+        var n = countBy(all, function (x) { return imp.marks[x.key] === l.id; });
+        return '<div class="filter-row' + (on ? ' on' : '') + '" role="button" tabindex="0" aria-pressed="' + on + '" data-action="tvLevel" data-id="' + l.id + '"' +
+          ' title="' + esc((on ? 'Сбросить отбор: ' : 'Показать: ') + l.name) + '">' +
+          impFlag(i, '', 'ТаблицаОтборПоВажностиФлажок') +
+          '<span class="grow filter-label ellipsis"' + a1c('Надпись', 'ТаблицаОтборПоВажностиНазвание') + '>' + esc(l.name) + '</span>' +
+          '<span class="filter-num"' + a1c('Надпись', 'ТаблицаОтборПоВажностиЧисло') + '>' + n + '</span></div>';
+      }).join('') + '</div>' +
+      '</div>';
+  }
+
+  function renderNotesLeft(notes) {
+    return '<div class="left-inner tv-left"' + a1c('ГруппаВертикальная', 'ГруппаОтборыУведомлений') + '>' +
+      '<div class="row tv-left-head"><span class="grow"' + a1c('Надпись', 'ДекорацияМоиУведомления') + '>Мои уведомления</span>' +
+        '<span class="tv-left-num"' + a1c('Надпись', 'ДекорацияМоиУведомленияЧисло') + '>' + notes.length + '</span></div>' +
+      '<div class="filter-list">' + NOTE_FILTERS.map(function (f) {
+        return tvFilterRow(f, countBy(notes, function (n) { return f.id === 'all' || n.severity === f.id; }), state.tv.noteFilter === f.id, 'noteFilter', 'ГруппаОтборУведомлений');
+      }).join('') + '</div>' +
+      '<div class="filter-sep"></div>' +
+      tvSection('По источнику', 'ДекорацияУведомленияПоИсточнику') +
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОтборУведомленийПоИсточнику') + '>' + TV_SOURCES.map(function (s) {
+        return tvCheckRow('data-note-source', s.id, s.text, countBy(notes, function (n) { return n.source === s.id; }), !state.tv.noteSourcesOff[s.id], 'ФлажокУведомленияИсточник' + s.name);
+      }).join('') + '</div>' +
+      '</div>';
+  }
+
+  function sourceBadge(id, name) {
+    var s = byId(TV_SOURCES, id);
+    return '<span class="badge badge-src-' + id + '" title="' + esc(s.text) + '"' + a1c('Надпись', name, 'check') + '>' + esc(s.short) + '</span>';
+  }
+  function tvFiltersActive() {
+    return state.tv.filter !== 'all' || !!state.tv.level || !!state.tv.search.trim() ||
+      Object.keys(state.tv.sourcesOff).length > 0 || Object.keys(state.tv.typesOff).length > 0;
+  }
+
+  function renderTaskList(all) {
+    var list = tvVisibleTasks(all);
+    var sel = tvSelected(all);
+    var imp = importanceOf();
+    var redirectable = sel.filter(tvCanRedirect);
+    var bar = '<div class="row wrap command-bar command-bar-flat tv-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельМоиЗадачи') + '>' +
+      button('Перенаправить задачу', { icon: 'arrowFill', action: 'tvRedirect', disabled: !redirectable.length, name: 'КнопкаПеренаправитьЗадачу',
+        title: !sel.length ? 'Отметьте задачи флажками' : !redirectable.length ? 'Задачи своей адаптационной программы стажёр выполняет сам' : 'Передать выбранные задачи другому сотруднику' }) +
+      submenu('tvImportance', 'ПодменюУстановитьВажность', imp.levels.map(function (l, i) {
+        return '<button type="button" data-action="tvSetLevel" data-id="' + l.id + '"' + a1c('Кнопка', 'КомандаУстановитьВажность' + (i + 1), 'check') + '>' +
+          '<span class="row gap-2">' + impFlag(i, '', 'КомандаУстановитьВажность' + (i + 1) + 'Флажок') + esc(l.name) + '</span></button>';
+      }).concat(['<div class="menu-sep"></div>', menuItem('Снять важность', 'tvSetLevel', { id: '' }, 'КомандаСнятьВажность')]),
+        { text: 'Установить важность ▾', icon: 'flag', disabled: !sel.length, title: sel.length ? '' : 'Отметьте задачи флажками' }) +
+      button('', { cls: 'btn-icon', icon: 'refresh', action: 'tvRefresh', title: 'Обновить список', name: 'КнопкаОбновитьЗадачи' }) +
+      (sel.length ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбраноМоихЗадач') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияВыбраноМоихЗадач') + '>Выбрано: ' + sel.length + '</span>' +
+        link('Снять выделение', { action: 'tvClearSelection', name: 'ГиперссылкаСнятьВыделениеМоихЗадач' }) + '</span>' : '') +
+      '<span class="grow"></span>' +
+      '<label class="search-field tv-search">' + icon('search') +
+        '<input type="text" class="input" data-input="tvSearch" placeholder="Поиск по задачам…" value="' + esc(state.tv.search) + '"' +
+        ' title="Поиск по задаче, стажёру, автору и подразделению"' + a1c('ПолеВвода', 'ПолеПоискаЗадач') + '></label>' +
+      '</div>';
+
+    var body;
+    if (!all.length) {
+      body = '<tr><td colspan="8"><div class="empty"' + a1c('Надпись', 'ДекорацияЗадачНет') + '>Задач нет</div></td></tr>';
+    } else if (!list.length) {
+      body = '<tr><td colspan="8"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадачПоОтбору') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияНетЗадачПоОтбору') + '>Нет задач по выбранным условиям</span>' +
+        link('Сбросить отбор', { action: 'tvResetFilters', name: 'ГиперссылкаСброситьОтборЗадач' }) + '</div></td></tr>';
+    } else {
+      body = TV_GROUPS.map(function (g) {
+        var rows = list.filter(function (x) { return tvGroup(x) === g.id; });
+        if (!rows.length) return '';
+        var open = !state.tv.collapsed[g.id];
+        return '<tr class="group-row" tabindex="0" data-action="tvToggleGroup" data-group="' + g.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
+          a1c('ТаблицаФормы', 'ТаблицаМоиЗадачиГруппа' + g.name, 'check') + '>' +
+          '<td colspan="8"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') +
+            '<b' + (g.id === 'overdue' ? ' class="danger-text"' : '') + '>' + g.title + ' (' + rows.length + ')</b></span></td></tr>' +
+          (open ? rows.map(tvTaskRow).join('') : '');
+      }).join('');
+    }
+    var keys = list.map(function (x) { return x.key; });
+    var selVisible = keys.filter(function (k) { return state.tv.selected[k]; }).length;
+    return bar + '<div class="table-box"><table class="grid tv-table"' + a1c('ТаблицаФормы', 'ТаблицаМоиЗадачи') + '>' +
+      '<colgroup><col class="w-check"><col><col class="w-src"><col class="w-type"><col class="w-due"><col class="w-author"><col class="w-adept"><col class="w-act"></colgroup>' +
+      '<thead><tr><th><input type="checkbox" data-tv-select-all="1" title="Выбрать все видимые задачи"' +
+        (keys.length && selVisible === keys.length ? ' checked' : '') + (keys.length ? '' : ' disabled') +
+        (selVisible && selVisible < keys.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаМоиЗадачиВыбратьВсе') + '></th>' +
+        '<th>Задача</th><th>Источник</th><th>Тип задачи</th><th>Срок</th><th>Автор</th><th>Подразделение автора</th><th>Действие</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  function tvDueCell(x) {
+    var d = tvDays(x);
+    var hint = d < 0 ? { cls: 'danger-text', text: 'Просрочено на ' + d * -1 + ' дн.' }
+      : d === 0 ? { cls: 'warning-text', text: 'Сегодня' }
+      : { cls: 'muted', text: plural(d, ['Остался', 'Осталось', 'Осталось']) + ' ' + pluralN(d, W_DAYS) };
+    return '<td class="nowrap"><div class="' + (d < 0 ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрок') + '>' + fmtDate(x.deadline) + '</div>' +
+      '<div class="text-s ' + hint.cls + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрокПояснение') + '>' + esc(hint.text) + '</div></td>';
+  }
+  // Действие: основная кнопка — главная команда типа задачи; ▾ — остальные команды. В 1С кнопок в строке таблицы нет — см. 1c-mapping.md
+  function tvActionCell(x) {
+    var cmd = TV_COMMANDS[x.type];
+    var tm = byId(TV_TYPES, x.type);
+    var main = button(tm.text, { cls: 'split-main', action: 'tvAct', data: { key: x.key, act: cmd.main }, name: 'ТаблицаМоиЗадачиДействие',
+      title: TV_MAIN_TITLES[x.type] });
+    var host = '<div class="menu-host tv-action"' + a1c('ГруппаГоризонтальная', 'ТаблицаМоиЗадачиГруппаДействие', 'high') + '>';
+    if (!cmd.items.length) return host + '<div class="split">' + main + '</div></div>';
+    var id = 'row:tk:' + x.key;
+    var items = cmd.items.map(function (it) {
+      return menuItemIf(it[1], 'tvAct', { key: x.key, act: it[0] }, 'ТаблицаМоиЗадачиДействие' + it[2], it[0] === 'work' && x.inWork ? 'Задача уже в работе' : '');
+    });
+    return host + '<div class="split">' + main +
+      button('', { cls: 'btn-icon split-arrow', icon: 'chevronDown', action: 'toggleMenu', data: { menu: id }, title: 'Другие действия', type: 'Подменю', name: 'ТаблицаМоиЗадачиДействиеМеню' }) +
+      '</div>' + (state.openMenu === id ? '<div class="menu menu-float"' + a1c('Подменю', 'ТаблицаМоиЗадачиДействиеМенюСписок') + '>' + items.join('') + '</div>' : '') + '</div>';
+  }
+  function tvTaskRow(x) {
+    var tm = byId(TV_TYPES, x.type);
+    var imp = importanceOf();
+    var li = levelIndex(imp.marks[x.key]);
+    var selected = !!state.tv.selected[x.key];
+    var full = tm.text + ': ' + x.subject;
+    var dept_ = authorDept(x.authorId);
+    return '<tr class="tv-row' + (selected ? ' selected' : '') + '" data-tv-key="' + esc(x.key) + '" title="Двойной клик — открыть ' + (x.source === 'recruit' ? 'документ' : 'в разделе «Адаптация персонала»') + '">' +
+      '<td><input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '></td>' +
+      '<td><div class="row gap-1 tv-subject">' +
+          (li >= 0 ? impFlag(li, 'Важность: ' + imp.levels[li].name, 'ТаблицаМоиЗадачиВажность') : '') +
+          '<span class="clamp2 grow" title="' + esc(full) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиЗадача', 'check') + '><b>' + esc(tm.text) + ':</b> ' + esc(x.subject) + '</span>' +
+          (x.inWork ? badge('info', 'В работе', 'ТаблицаМоиЗадачиВРаботе') : '') + '</div>' +
+        (x.context ? '<div class="muted text-s ellipsis" title="' + esc(x.context) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиКонтекст') + '>' + esc(x.context) + '</div>' : '') + '</td>' +
+      '<td>' + sourceBadge(x.source, 'ТаблицаМоиЗадачиИсточник') + '</td>' +
+      '<td>' + badge(tm.tone, tm.text, 'ТаблицаМоиЗадачиТипЗадачи') + '</td>' +
+      tvDueCell(x) +
+      '<td><div class="clamp2" title="' + esc(personById(x.authorId)) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиАвтор') + '>' + esc(personById(x.authorId)) + '</div></td>' +
+      '<td><div class="clamp2' + (dept_ ? '' : ' muted') + '" title="' + esc(dept_ || 'Подразделение не указано') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиПодразделениеАвтора') + '>' + esc(dept_ || '—') + '</div></td>' +
+      '<td>' + tvActionCell(x) + '</td></tr>';
+  }
+
+  function renderNotesList(all) {
+    var list = tvVisibleNotes(all);
+    var bar = '<div class="row wrap command-bar command-bar-flat tv-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельУведомления') + '>' +
+      button('', { cls: 'btn-icon', icon: 'refresh', action: 'tvRefresh', title: 'Обновить список', name: 'КнопкаОбновитьУведомления' }) +
+      '<span class="grow"></span>' +
+      '<label class="search-field tv-search">' + icon('search') +
+        '<input type="text" class="input" data-input="noteSearch" placeholder="Поиск по уведомлениям…" value="' + esc(state.tv.noteSearch) + '"' +
+        ' title="Поиск по тексту уведомления"' + a1c('ПолеВвода', 'ПолеПоискаУведомлений') + '></label>' +
+      '</div>';
+    var body;
+    if (!all.length) {
+      body = '<tr><td colspan="5"><div class="empty"' + a1c('Надпись', 'ДекорацияУведомленийНет') + '>Новых уведомлений нет</div></td></tr>';
+    } else if (!list.length) {
+      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетУведомленийПоОтбору') + '>' +
+        '<span' + a1c('Надпись', 'ДекорацияНетУведомленийПоОтбору') + '>Нет уведомлений по выбранным условиям</span>' +
+        link('Сбросить отбор', { action: 'noteResetFilters', name: 'ГиперссылкаСброситьОтборУведомлений' }) + '</div></td></tr>';
+    } else {
+      body = list.map(function (n) {
+        return '<tr class="tv-row" data-note-key="' + esc(n.key) + '" title="Двойной клик — перейти">' +
+          '<td class="tv-sev"><span class="note-dot c-' + n.severity + '" title="' + esc(TONE_TITLES[n.severity]) + '"' + a1c('Картинка', 'ТаблицаУведомленияВажность', 'check') + '>' + icon('dot') + '</span></td>' +
+          '<td><div class="tv-note-text"' + a1c('Надпись', 'ТаблицаУведомленияТекст') + '>' + esc(n.text) + '</div></td>' +
+          '<td>' + sourceBadge(n.source, 'ТаблицаУведомленияИсточник') + '</td>' +
+          '<td class="nowrap"' + a1c('Надпись', 'ТаблицаУведомленияДата') + '>' + (n.at.length > 10 ? fmtDateTime(n.at) : fmtDate(n.at)) + '</td>' +
+          '<td class="nowrap"><span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ТаблицаУведомленияГруппаДействие', 'high') + '>' +
+            button('Перейти', { action: 'noteGo', data: { key: n.key }, title: n.source === 'recruit' ? 'Открыть документ подбора' : 'Открыть стажёра в разделе «Адаптация персонала»', name: 'ТаблицаУведомленияПерейти' }) +
+            button('Прочитано', { action: 'noteRead', data: { key: n.key }, title: 'Отметить прочитанным — уведомление уйдёт из списка', name: 'ТаблицаУведомленияПрочитано' }) +
+          '</span></td></tr>';
+      }).join('');
+    }
+    return bar + '<div class="table-box"><table class="grid tv-table tv-notes"' + a1c('ТаблицаФормы', 'ТаблицаУведомления') + '>' +
+      '<colgroup><col class="w-sev"><col><col class="w-src"><col class="w-date"><col class="w-note-act"></colgroup>' +
+      '<thead><tr><th></th><th>Уведомление</th><th>Источник</th><th>Дата</th><th>Действие</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  /* ---------- Действия с задачами ---------- */
+
+  // Команда задачи. Задача адаптации меняет связанные данные: шаг согласования, пункт чек-листа, задачу АП
+  function tvPerform(x, act, comment) {
+    var me = D.CURRENT_USER_ID;
+    var r = x.ref;
+    var t = x.traineeId ? trainee(x.traineeId) : null;
+    var program = t ? programOf(t) : null;
+    var msg = TV_DONE_TEXT[act];
+    if (x.kind === 'rt') {
+      if (act === 'work') r.status = 'in_progress';
+      else { r.status = 'done'; r.result = act; r.comment = required(comment) ? comment.trim() : null; }
+    } else if (x.kind === 'ap') {
+      var res = routeResult(t, act === 'approve' ? 'approved' : 'rejected', comment);
+      if (res !== 'next') msg = null;   // «АП согласована» / «АП возвращена на доработку» — оповещение уже показано
+    } else if (x.kind === 'cl') {
+      if (act === 'work') r.inWork = true;
+      else { markChecklistDone(r, true); delete r.inWork; }
+    } else if (x.kind === 'cc') {
+      if (act === 'work') r.inWork = true;
+      else { r.done = true; r.doneBy = me; r.doneAt = D.TODAY; delete r.inWork; }
+    } else if (x.kind === 'tr') {
+      setTaskStatusByTrainee(r, act === 'work' ? 'in_progress' : 'done');
+      if (r.status === 'review') msg = 'Задача отправлена на проверку';
+    } else if (x.kind === 'rv') {
+      if (act === 'checked') {
+        r.status = 'done';
+        addHistory(program, 'Задача «' + r.name + '» проверена');
+        pushUserNote(t.id, 'info', 'Задача «' + r.name + '» проверена: ' + userName(me), t.id, r.id);
+      } else {
+        r.status = 'in_progress';
+        addHistory(program, 'Задача «' + r.name + '» возвращена на доработку. Комментарий: «' + comment.trim() + '»');
+        pushUserNote(t.id, 'warning', 'Задача «' + r.name + '» возвращена на доработку: «' + comment.trim() + '»', t.id, r.id);
+      }
+    }
+    if (act !== 'work') delete state.tv.selected[x.key];
+    state.openMenu = null;
+    render();
+    if (msg) toast(msg + ': ' + x.subject);
+  }
+
+  // Перенаправление: новый исполнитель записывается в объект-источник
+  function tvRedirectTask(x, uid, comment) {
+    var note = required(comment) ? '. Комментарий: «' + comment.trim() + '»' : '';
+    var change = userName(D.CURRENT_USER_ID) + ' → ' + userName(uid) + note;
+    var t = x.traineeId ? trainee(x.traineeId) : null;
+    var program = t ? programOf(t) : null;
+    if (x.kind === 'rt') x.ref.assigneeId = uid;
+    else if (x.kind === 'ap') {
+      x.ref.approval.steps[currentStepIndex(x.ref)].userId = uid;
+      addHistory(x.ref, 'Согласование перенаправлено: ' + change);
+    } else if (x.kind === 'cl' || x.kind === 'cc') {
+      x.ref.responsibleId = uid;
+      delete x.ref.inWork;
+      if (program) addHistory(program, 'Пункт «' + x.ref.name + '» перенаправлен: ' + change);
+    } else if (x.kind === 'rv') {
+      x.ref.reviewerId = uid;
+      addHistory(program, 'Проверка задачи «' + x.ref.name + '» перенаправлена: ' + change);
+    }
+    delete state.tv.selected[x.key];
+  }
+
+  // Двойной клик по строке: открыть объект-источник. Адаптация — стажёр на вкладке «Адаптация персонала»
+  var TV_OPEN_WHAT = { ap: 'лист согласования АП', cl: 'чек-лист подготовки', cc: 'чек-лист закрытия', rv: 'задача АП', tr: 'задача АП' };
+  function openTraineeFrom(traineeId, tab, then) {
+    var t = trainee(traineeId);
+    state.topTab = 'adaptation';
+    state.openMenu = null;
+    selectTrainee(t.id);
+    if (tab) { state.traineeTab = tab; render(); }
+    if (then) then(t);
+  }
+  function canOpenTrainee(t, kind) {
+    if (isKshUser() || myTrainees().indexOf(t) < 0) return false;
+    return !(isTraineeUser() && (kind === 'cc' || kind === 'cl'));   // стажёр чек-листов не видит (FT_9)
+  }
+  function openTaskSource(x) {
+    if (x.source === 'recruit') { toast('Откроется документ подбора персонала «' + x.subject + '»'); return; }
+    var t = trainee(x.traineeId);
+    if (!canOpenTrainee(t, x.kind)) {
+      var what = TV_OPEN_WHAT[x.kind];
+      toast('Откроется ' + what + ' стажёра ' + t.fullName);
+      return;
+    }
+    if (x.kind === 'ap') openTraineeFrom(t.id, null, function () { openDialog('approvalSheet', t.id); });
+    else if (x.kind === 'cl') openTraineeFrom(t.id, 'prepare');
+    else if (x.kind === 'cc') openTraineeFrom(t.id, 'closure');
+    else openTraineeFrom(t.id, 'program', function () { openDialog('task', t.id, { taskId: x.ref.id }); });
+  }
+  function openNoteSource(n) {
+    if (n.source === 'recruit') { toast('Откроется документ подбора персонала'); return; }
+    var t = trainee(n.traineeId);
+    if (!canOpenTrainee(t, n.kind)) { toast('Откроется карточка стажёра ' + t.fullName); return; }
+    if (n.taskId && taskById(n.taskId)) openTraineeFrom(t.id, 'program', function () { openDialog('task', t.id, { taskId: n.taskId }); });
+    else openTraineeFrom(t.id, isTraineeUser() ? 'program' : null);
+  }
+
   /* ---------------------------------------------------------------------
    * Справка (раздел 7.8)
    * --------------------------------------------------------------------- */
@@ -2040,7 +2635,7 @@
           tfField('Блок', selectOptions('block', 'ПолеБлок', blockOptions, blockOptions.length === 1 && !dlgRO() ? ' title="Задачи в корпоративный блок добавляются только из шаблона"' : ''), { forId: 'f_block', cls: 'tf-half' }) +
           (fromTemplate ? '<div class="tf-field tf-half"></div>' :
             tfField('Статус', selectOptions('status', 'ПолеСтатус', [
-              { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status', cls: 'tf-half' })) +
+              { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'review', text: 'На проверке' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status', cls: 'tf-half' })) +
           '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
             a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
         '</div>' +
@@ -2174,6 +2769,34 @@
       (v.startedAt || ro_ ? '' : field('Комментарий', textarea('comment', 'ПолеКомментарий'), { forId: 'f_comment' }));
   }
   function routeNames(steps) { return steps.map(function (x) { return userName(x.userId); }).join(', '); }
+  function currentStepIndex(program) {
+    return program && program.approval ? program.approval.steps.map(function (x) { return x.status; }).indexOf('current') : -1;
+  }
+  // Результат текущего шага согласования (FT_10: общий для демо-кнопок листа и задачи «Согласовать»).
+  // result: 'approved' | 'rejected' | 'skipped'. Возвращает 'rejected' (АП на доработке), 'finished' (АП согласована) или 'next'
+  function routeResult(t, result, comment) {
+    var program = programOf(t);
+    var steps = program.approval.steps;
+    var i = currentStepIndex(program);
+    var who = userName(steps[i].userId);
+    steps[i].status = result; steps[i].doneAt = D.TODAY;
+    var note = required(comment) ? '. Комментарий: «' + comment.trim() + '»' : '';
+    if (result === 'rejected') {
+      t.rejectionComment = required(comment) ? comment.trim() : 'Доработайте состав задач';
+      program.approval.finishedAt = nowStamp();
+      setStage(t, 'draft');
+      addHistory(program, 'АП возвращена на доработку: ' + who + note);
+      toast('АП возвращена на доработку');
+      return 'rejected';
+    }
+    addHistory(program, (result === 'approved' ? 'Шаг согласован: ' : 'Шаг пропущен: ') + who + note);
+    if (i + 1 < steps.length) { steps[i + 1].status = 'current'; return 'next'; }
+    program.approval.finishedAt = nowStamp();
+    setStage(t, 'active');
+    addHistory(program, 'АП согласована');
+    toast('АП согласована');
+    return 'finished';
+  }
 
   // Отправка на согласование: маршрут по умолчанию, обработка не начата
   DIALOGS.sendToApproval = {
@@ -2585,6 +3208,90 @@
     }
   };
 
+  /* ---------- FT_10: формы вкладки «Задачи и уведомления» ---------- */
+
+  // Комментарий к отрицательному решению: «Не согласовано», «Вернуть на доработку»
+  DIALOGS.tvComment = {
+    form: 'ФормаКомментарийРешения', danger: true,
+    titleFn: function () { return dlgCtx().act === 'reject' ? 'Не согласовано' : 'Вернуть на доработку'; },
+    submitFn: function () { return dlgCtx().act === 'reject' ? 'Не согласовать' : 'Вернуть на доработку'; },
+    init: function () { return { comment: '' }; },
+    body: function () {
+      var x = tvTaskByKey(dlgCtx().key);
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияЗадачаРешения') + '>' + esc(x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : '') + '</p>' +
+        field('Комментарий', textarea('comment', 'ПолеКомментарийРешения'), { required: true, error: state.dialog.errors.comment, forId: 'f_comment', name: 'КомментарийРешения' });
+    },
+    validate: function (t, v) { return required(v.comment) ? {} : { comment: 'Укажите комментарий' }; },
+    apply: function (t, v) {
+      var x = tvTaskByKey(dlgCtx().key);
+      if (x) tvPerform(x, dlgCtx().act, v.comment);
+    }
+  };
+
+  // Перенаправление выбранных задач другому сотруднику
+  DIALOGS.tvRedirect = {
+    title: 'Перенаправить задачу', form: 'ФормаПеренаправитьЗадачу', submit: 'Перенаправить',
+    init: function () { return { userId: '', comment: '' }; },
+    body: function () {
+      var list = dlgCtx().keys.map(tvTaskByKey).filter(Boolean);
+      var skip = list.length - list.filter(tvCanRedirect).length;
+      var me = D.CURRENT_USER_ID;
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияПеренаправляемыеЗадачи') + '>' +
+          esc(list.length === 1 ? byId(TV_TYPES, list[0].type).text + ': ' + list[0].subject : 'Выбрано задач: ' + list.length) + '</p>' +
+        (skip ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаПропускЗадачСтажера') + '><span class="tone-info">' + icon('info') + '</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияПропускЗадачСтажера') + '>' + esc('Задачи своей адаптационной программы (' + skip + ') не перенаправляются — их стажёр выполняет сам.') + '</span></div>' : '') +
+        field('Новый исполнитель', selectOptions('userId', 'ПолеНовыйИсполнитель', userOptions('Выберите сотрудника').filter(function (o) { return o.value !== me; })),
+          { required: true, error: state.dialog.errors.userId, forId: 'f_userId', name: 'НовыйИсполнитель' }) +
+        field('Комментарий', textarea('comment', 'ПолеКомментарийПеренаправления'), { forId: 'f_comment' });
+    },
+    validate: function (t, v) { return required(v.userId) ? {} : { userId: 'Выберите сотрудника' }; },
+    apply: function (t, v) {
+      var list = dlgCtx().keys.map(tvTaskByKey).filter(Boolean).filter(tvCanRedirect);
+      list.forEach(function (x) { tvRedirectTask(x, v.userId, v.comment); });
+      toast((list.length === 1 ? 'Задача перенаправлена: ' : 'Перенаправлено задач: ' + list.length + ' — ') + userName(v.userId));
+    }
+  };
+
+  // Настройка важности: переименовать, добавить (до 6), удалить уровень. Цвет флажка — по месту в списке
+  DIALOGS.importanceSettings = {
+    title: 'Настройка важности', form: 'ФормаНастройкаВажности', submit: 'Сохранить', wide: true,
+    init: function () { return { levels: importanceOf().levels.map(function (l) { return { id: l.id, name: l.name }; }) }; },
+    body: function () {
+      var lv = state.dialog.values.levels;
+      var errs = state.dialog.errors.levels || {};
+      var full = lv.length >= IMPORTANCE_MAX;
+      return '<p class="dlg-text muted"' + a1c('Надпись', 'ДекорацияПояснениеВажности') + '>Уровни важности — ваши личные настройки. Цвет флажка зависит от места уровня в списке. ' +
+          'При удалении уровня отметки этой важности у задач снимаются.</p>' +
+        '<div class="row command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельУровниВажности') + '>' +
+          button('Добавить уровень', { icon: 'plus', action: 'impAdd', disabled: full, title: full ? 'Не больше ' + IMPORTANCE_MAX + ' уровней важности' : 'Добавить уровень важности', name: 'КнопкаДобавитьУровеньВажности' }) +
+        '</div>' +
+        '<div class="table-box"><table class="grid imp-table"' + a1c('ТаблицаФормы', 'ТаблицаУровниВажности') + '>' +
+          '<colgroup><col class="w-flag"><col><col class="w-del"></colgroup>' +
+          '<thead><tr><th>Флажок</th><th>Название</th><th></th></tr></thead><tbody>' +
+          lv.map(function (l, i) {
+            return '<tr><td>' + impFlag(i, '', 'ТаблицаУровниВажностиФлажок') + '</td>' +
+              '<td><input type="text" class="input imp-name" data-imp-idx="' + i + '" value="' + esc(l.name) + '" placeholder="Название важности" aria-label="Название важности"' +
+                (errs[i] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ТаблицаУровниВажностиНазвание') + '>' +
+                (errs[i] ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаНазваниеВажности') + '>Укажите название</div>' : '') + '</td>' +
+              '<td>' + button('', { cls: 'btn-icon btn-flat', icon: 'trash', action: 'impDelete', data: { idx: i }, disabled: lv.length <= 1,
+                title: lv.length <= 1 ? 'Должен остаться хотя бы один уровень' : 'Удалить уровень', name: 'ТаблицаУровниВажностиУдалить' }) + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+    },
+    validate: function (t, v) {
+      var bad = {};
+      v.levels.forEach(function (l, i) { if (!required(l.name)) bad[i] = true; });
+      return Object.keys(bad).length ? { levels: bad } : {};
+    },
+    apply: function (t, v) {
+      var imp = importanceOf();
+      var ids = v.levels.map(function (l) { return l.id; });
+      imp.levels = v.levels.map(function (l) { return { id: l.id, name: l.name.trim() }; });
+      Object.keys(imp.marks).forEach(function (k) { if (ids.indexOf(imp.marks[k]) < 0) delete imp.marks[k]; });
+      if (state.tv.level && ids.indexOf(state.tv.level) < 0) state.tv.level = null;
+      toast('Настройки важности сохранены');
+    }
+  };
+
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
   var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
 
@@ -2600,10 +3307,10 @@
     var def = DIALOGS[type];
     var t = trainee(traineeId);
     ctx = ctx || {};
-    var lock = editLock(t);
+    var lock = t ? editLock(t) : null;   // FT_10: формы вкладки «Задачи и уведомления» открываются без стажёра
     if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
-    if (checklistLock(t) && ['checklistItem', 'checklistFill', 'request0911'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
-    if (closureLock(t) && ['closureItem', 'close'].indexOf(type) >= 0) { toast(closureLock(t)); return; }
+    if (t && checklistLock(t) && ['checklistItem', 'checklistFill', 'request0911'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
+    if (t && closureLock(t) && ['closureItem', 'close'].indexOf(type) >= 0) { toast(closureLock(t)); return; }
     if (type === 'task' && lock && !ctx.taskId && !ctx.templateId) { toast(lock); return; }
     state.openMenu = null;
     if (opts && opts.stack && state.dialog) state.dialogStack.push(state.dialog);
@@ -2638,10 +3345,14 @@
     render();
   }
 
+  // FT_10: «Выполнено» стажёра у задачи с проверяющим — «На проверке» (у проверяющего появляется задача «Проверить»), без проверяющего — «Выполнена»
+  function setTaskStatusByTrainee(x, status) {
+    x.status = status === 'done' && x.reviewerId ? 'review' : status;
+  }
   // FT_9: кнопки стажёра в карточке своей задачи — меняют статус задачи
   function traineeTaskButtons(d) {
     var x = taskById(d.ctx.taskId);
-    if (!x || x.status === 'done') return '';
+    if (!x || x.status === 'done' || x.status === 'review') return '';   // FT_10: на проверке — ждёт проверяющего
     return (x.status === 'not_started' ? button('Взять в работу', { action: 'taskSetStatus', data: { status: 'in_progress' }, name: 'ФормаЗадачаАПКнопкаВзятьВРаботу' }) : '') +
       button('Выполнено', { cls: 'btn-primary', action: 'taskSetStatus', data: { status: 'done' }, name: 'ФормаЗадачаАПКнопкаВыполнено' });
   }
@@ -2736,8 +3447,7 @@
       var id = btn.getAttribute('data-menu');
       state.openMenu = state.openMenu === id ? null : id;
       menuOpenedAt = Date.now();
-      renderLeft();
-      renderCenter();
+      renderMain();
     },
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
     openHelp: function () { toast('Инструкция откроется в базе знаний'); },
@@ -2745,10 +3455,10 @@
     // FT_9: стажёр меняет статус своей задачи
     taskSetStatus: function (btn) {
       var x = taskById(state.dialog.ctx.taskId);
-      x.status = btn.getAttribute('data-status');
+      setTaskStatusByTrainee(x, btn.getAttribute('data-status'));
       state.dialog = null; state.dialogStack = [];
       render();
-      toast('Статус задачи «' + x.name + '»: ' + (x.status === 'done' ? 'выполнена' : 'в работе'));
+      toast('Статус задачи «' + x.name + '»: ' + STATUS_META[x.status].text.toLowerCase());
     },
     openApprovalSheet: function () { openDialog('approvalSheet', state.selectedTraineeId); },
     openApproverPicker: function () { openDialog('approverPicker', state.dialog.traineeId, {}, { stack: true }); },
@@ -2769,32 +3479,12 @@
       var t = trainee(state.selectedTraineeId);
       var program = programOf(t);
       var v = state.dialog.values;
-      var i = v.steps.map(function (x) { return x.status; }).indexOf('current');
-      if (i < 0) return;
-      var r = btn.getAttribute('data-result');
-      v.steps[i].status = r; v.steps[i].doneAt = D.TODAY;
+      if (v.steps.map(function (x) { return x.status; }).indexOf('current') < 0) return;
+      // Маршрут формы (с добавленными согласующими) записывается в АП, затем — результат текущего шага
       program.approval.steps = cloneSteps(v.steps).map(function (x) { delete x.added; return x; });
-      var who = userName(v.steps[i].userId);
-      if (r === 'rejected') {
-        t.rejectionComment = 'Доработайте состав задач';
-        program.approval.finishedAt = nowStamp();
-        setStage(t, 'draft');
-        addHistory(program, 'АП возвращена на доработку: ' + who);
-        state.dialog = null; state.dialogStack = [];
-        render(); toast('АП возвращена на доработку');
-        return;
-      }
-      var next = i + 1 < v.steps.length ? i + 1 : -1;
-      if (next >= 0) { v.steps[next].status = 'current'; program.approval.steps[next].status = 'current'; }
-      addHistory(program, (r === 'approved' ? 'Шаг согласован: ' : 'Шаг пропущен: ') + who);
-      if (next < 0) {
-        program.approval.finishedAt = nowStamp();
-        setStage(t, 'active');
-        addHistory(program, 'АП согласована');
-        state.dialog = null; state.dialogStack = [];
-        render(); toast('АП согласована');
-        return;
-      }
+      var res = routeResult(t, btn.getAttribute('data-result'));
+      if (res !== 'next') { state.dialog = null; state.dialogStack = []; render(); return; }
+      v.steps.forEach(function (x, i) { x.status = program.approval.steps[i].status; x.doneAt = program.approval.steps[i].doneAt; });
       render();
     },
     createProgram: function () {
@@ -2919,6 +3609,7 @@
       state.demoUserMenuOpen = false;
       // FT_9: видимость по пользователю — сбросить фильтр, поиск и выбор стажёра, которого новый пользователь не видит
       state.counterFilter = null; state.search = ''; state.openMenu = null; state.selectedTasks = {};
+      state.tv.selected = {}; state.tv.level = null;   // FT_10: важность и выбор — свои у каждого пользователя
       if (state.selectedTraineeId && myTrainees().map(function (t) { return t.id; }).indexOf(state.selectedTraineeId) < 0) state.selectedTraineeId = null;
       if (isTraineeUser()) { state.selectedTraineeId = D.CURRENT_USER_ID; state.traineeTab = 'program'; }
       render();
@@ -2945,11 +3636,79 @@
     }
   };
 
+  // FT_10: действия вкладки «Задачи и уведомления»
+  var tvActions = {
+    tvSub: function (btn) { state.tv.sub = btn.getAttribute('data-tab'); state.openMenu = null; renderTasksPage(); },
+    tvFilter: function (row) { state.tv.filter = row.getAttribute('data-id'); renderTasksPage(); },
+    noteFilter: function (row) { state.tv.noteFilter = row.getAttribute('data-id'); renderTasksPage(); },
+    tvLevel: function (row) {
+      var id = row.getAttribute('data-id');
+      state.tv.level = state.tv.level === id ? null : id;
+      renderTasksPage();
+    },
+    tvToggleGroup: function (row) {
+      var g = row.getAttribute('data-group');
+      state.tv.collapsed[g] = !state.tv.collapsed[g];
+      renderTasksPage();
+    },
+    tvAct: function (btn) {
+      var x = tvTaskByKey(btn.getAttribute('data-key'));
+      var act = btn.getAttribute('data-act');
+      if (!x) return;
+      state.openMenu = null;
+      if (act === 'reject' || act === 'return') { openDialog('tvComment', null, { key: x.key, act: act }); return; }
+      tvPerform(x, act);
+    },
+    tvRedirect: function () {
+      openDialog('tvRedirect', null, { keys: tvSelected(myTasks()).map(function (x) { return x.key; }) });
+    },
+    tvSetLevel: function (btn) {
+      var id = btn.getAttribute('data-id');
+      var imp = importanceOf();
+      var sel = tvSelected(myTasks());
+      sel.forEach(function (x) { if (id) imp.marks[x.key] = id; else delete imp.marks[x.key]; });
+      state.openMenu = null;
+      renderTasksPage();
+      toast(id ? 'Важность «' + imp.levels[levelIndex(id)].name + '» установлена: ' + pluralN(sel.length, ['задача', 'задачи', 'задач'])
+        : 'Важность снята: ' + pluralN(sel.length, ['задача', 'задачи', 'задач']));
+    },
+    tvRefresh: function () { render(); toast('Список обновлён'); },
+    tvClearSelection: function () { state.tv.selected = {}; renderTasksPage(); },
+    tvResetFilters: function () {
+      state.tv.filter = 'all'; state.tv.level = null; state.tv.search = ''; state.tv.sourcesOff = {}; state.tv.typesOff = {};
+      renderTasksPage();
+    },
+    noteResetFilters: function () { state.tv.noteFilter = 'all'; state.tv.noteSearch = ''; state.tv.noteSourcesOff = {}; renderTasksPage(); },
+    noteGo: function (btn) { var n = noteByKey(btn.getAttribute('data-key')); if (n) openNoteSource(n); },
+    noteRead: function (btn) {
+      var me = D.CURRENT_USER_ID;
+      notesRead[me] = notesRead[me] || {};
+      notesRead[me][btn.getAttribute('data-key')] = true;
+      renderTasksPage();
+    },
+    openImportanceSettings: function () { openDialog('importanceSettings', null); },
+    impAdd: function () {
+      var lv = state.dialog.values.levels;
+      if (lv.length >= IMPORTANCE_MAX) return;
+      lv.push({ id: 'lv-' + (++impSeq), name: '' });
+      renderDialog();
+      var inputs = topModal().querySelectorAll('[data-imp-idx]');
+      inputs[inputs.length - 1].focus();
+    },
+    impDelete: function (btn) {
+      var lv = state.dialog.values.levels;
+      if (lv.length <= 1) return;
+      lv.splice(Number(btn.getAttribute('data-idx')), 1);
+      delete state.dialog.errors.levels;
+      renderDialog();
+    }
+  };
+  for (var tvKey in tvActions) actions[tvKey] = tvActions[tvKey];
+
   document.addEventListener('click', function (e) {
     if (state.openMenu && !e.target.closest('.menu-host')) {
       state.openMenu = null;
-      renderLeft();
-      renderCenter();
+      renderMain();
     }
     var target = e.target.closest('[data-action]');
     if (!target || target.disabled) {
@@ -2979,6 +3738,14 @@
       state.dialog.values.links[Number(e.target.getAttribute('data-idx'))][lf] = e.target.value;
       return;
     }
+    // FT_10: название уровня важности, поиск по задачам и уведомлениям
+    var impIdx = e.target.getAttribute('data-imp-idx');
+    if (impIdx != null && state.dialog) {
+      state.dialog.values.levels[Number(impIdx)].name = e.target.value;
+      return;
+    }
+    if (e.target.getAttribute('data-input') === 'tvSearch') { state.tv.search = e.target.value; renderTasksPage(); return; }
+    if (e.target.getAttribute('data-input') === 'noteSearch') { state.tv.noteSearch = e.target.value; renderTasksPage(); return; }
     if (e.target.getAttribute('data-input') === 'search') {
       state.search = e.target.value;
       renderLeft();
@@ -3018,6 +3785,24 @@
       if (list === 'picked') renderDialog();
       return;
     }
+    // FT_10: отборы и выбор задач на вкладке «Задачи и уведомления»
+    var tvAttr = ['data-tv-source', 'data-tv-type', 'data-note-source'].filter(function (a) { return tgt.hasAttribute(a); })[0];
+    if (tvAttr) {
+      var off = tvAttr === 'data-tv-source' ? state.tv.sourcesOff : tvAttr === 'data-tv-type' ? state.tv.typesOff : state.tv.noteSourcesOff;
+      if (tgt.checked) delete off[tgt.getAttribute(tvAttr)]; else off[tgt.getAttribute(tvAttr)] = true;
+      renderTasksPage();
+      return;
+    }
+    if (tgt.hasAttribute('data-tv-select')) {
+      if (tgt.checked) state.tv.selected[tgt.getAttribute('data-tv-select')] = true; else delete state.tv.selected[tgt.getAttribute('data-tv-select')];
+      renderTasksPage();
+      return;
+    }
+    if (tgt.hasAttribute('data-tv-select-all')) {
+      tvVisibleTasks(myTasks()).forEach(function (x) { if (tgt.checked) state.tv.selected[x.key] = true; else delete state.tv.selected[x.key]; });
+      renderTasksPage();
+      return;
+    }
     // Флажок «выполнено» в чек-листе закрытия — ставится вручную (фаза 10, 5.3)
     if (tgt.hasAttribute('data-cc-done')) {
       var cc = byId(D.closureChecklist, tgt.getAttribute('data-cc-done'));
@@ -3053,6 +3838,11 @@
       openDialog('task', state.dialog.traineeId, { templateId: state.dialog.values.template, index: Number(trow.getAttribute('data-tpl-task')) }, { stack: true });
       return;
     }
+    // FT_10: строка задачи или уведомления — открыть объект-источник
+    var tvrow = e.target.closest('tr[data-tv-key]');
+    if (tvrow && !e.target.closest('input, button')) { var tx = tvTaskByKey(tvrow.getAttribute('data-tv-key')); if (tx) openTaskSource(tx); return; }
+    var nrow = e.target.closest('tr[data-note-key]');
+    if (nrow && !e.target.closest('input, button')) { var nx = noteByKey(nrow.getAttribute('data-note-key')); if (nx) openNoteSource(nx); return; }
     var srow = e.target.closest('tr.summary-row');
     if (srow && !e.target.closest('button')) { selectTrainee(srow.getAttribute('data-id')); return; }
     var row = e.target.closest('tr[data-task-id]');
@@ -3062,7 +3852,7 @@
   // Контекстное меню строки закрывается при прокрутке
   var menuOpenedAt = 0;
   document.addEventListener('scroll', function () {
-    if (state.openMenu && state.openMenu.indexOf('row:') === 0 && Date.now() - menuOpenedAt > 300) { state.openMenu = null; renderCenter(); }
+    if (state.openMenu && state.openMenu.indexOf('row:') === 0 && Date.now() - menuOpenedAt > 300) { state.openMenu = null; renderMain(); }
   }, true);
 
   // Строки дерева и таблиц открываются с клавиатуры
@@ -3093,7 +3883,7 @@
     }
     if (e.key === 'Escape') {
       if (state.dialog) closeDialog();
-      else if (state.openMenu) { state.openMenu = null; renderLeft(); renderCenter(); }
+      else if (state.openMenu) { state.openMenu = null; renderMain(); }
       else if (state.demoMenuOpen || state.demoUserMenuOpen) { state.demoMenuOpen = false; state.demoUserMenuOpen = false; renderDemo(); }
     }
   });
