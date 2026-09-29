@@ -8,9 +8,10 @@
 <body>
   <!-- ОБОЛОЧКА КЛИЕНТА 1С 8.5 (раздел 2.4 ТЗ): статичная имитация, некликабельна, в 1С не переносится -->
   <div class="shell" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ОболочкаКлиента">
-    <div class="shell-top" aria-hidden="true">
-      <span class="shell-logo" data-shell-icon="logo"></span>
-      <span class="shell-home"><span data-shell-icon="home"></span>Начало</span>
+    <div class="shell-top">
+      <span class="shell-logo" data-shell-icon="logo" aria-hidden="true"></span>
+      <!-- FT_11: вкладки окон клиента — «Начало» и открытые формы (карточка стажёра по ссылке «Предмет»). Рисует платформа -->
+      <div class="shell-tabs" id="shellTabs" role="tablist" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ВкладкиОконКлиента"></div>
     </div>
 
     <div class="shell-main">
@@ -64,6 +65,24 @@
               <div class="zone-center" id="centerZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаЦентр"></div>
               <div class="zone-help hidden" id="helpZone" data-1c="ГруппаВертикальная" data-1c-name="ГруппаСправка"></div>
             </div>
+          </div>
+        </div>
+
+        <!-- FT_11: форма «Адаптационная программа (ФИО)» — карточка стажёра в отдельном окне клиента (вкладка рядом с «Начало») -->
+        <div class="window hidden" id="docWindow" data-1c="ОтдельнаяФорма" data-1c-name="ФормаКарточкаСтажера">
+          <div class="window-head col gap-3">
+            <div class="row window-head-row" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ЗаголовокФормыКарточкиСтажера">
+              <h1 class="window-title grow" id="docTitle"></h1>
+              <div class="row window-tools">
+                <span class="form-tool" data-shell-icon="refresh" aria-hidden="true"></span>
+                <span class="form-tool" data-shell-icon="more" aria-hidden="true"></span>
+                <button type="button" class="form-tool form-tool-btn" data-action="shellCloseActive" title="Закрыть" data-shell-icon="close"
+                        data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="КнопкаЗакрытьОкноПлатформы"></button>
+              </div>
+            </div>
+          </div>
+          <div class="window-body">
+            <div class="zone-center doc-center" id="docCenter" data-1c="ГруппаВертикальная" data-1c-name="ГруппаКарточкаСтажераОкно"></div>
           </div>
         </div>
       </div>

@@ -766,3 +766,30 @@ table.grid.imp-table td { vertical-align: middle; }
   .tv-action .split .split-main { padding: 0 var(--sp-2); }
   .tv-search { width: 220px; }
 }
+
+/* ================= FT_11: вкладки окон клиента, карточка задачи ================= */
+.shell-tabs { display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); min-width: 0; }
+.shell-tab {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0;
+  height: 32px; padding: 0 var(--sp-3) 0 var(--sp-2);
+  border: none; border-left: 3px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--c-text-secondary); font-size: var(--fs-s); cursor: pointer;
+}
+.shell-tab:hover { background: rgba(255, 255, 255, 0.6); color: var(--c-text); }
+.shell-tab.active { background: var(--c-bg); color: var(--c-text); border-left-color: var(--c-tab-active); }
+.shell-home svg { width: 16px; height: 16px; }
+.shell-doc { padding: 0 var(--sp-1) 0 0; max-width: 300px; }
+.shell-tab-title { border: none; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0 0 0 var(--sp-2);
+  min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 100%; }
+.shell-tab-close { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 20px;
+  border: none; border-radius: 50%; background: none; color: var(--c-text-secondary); cursor: pointer; padding: 0; }
+.shell-tab-close:hover { background: var(--c-neutral-bg); color: var(--c-text); }
+.shell-tab-close svg { width: 12px; height: 12px; }
+.form-tool-btn { border: none; cursor: pointer; padding: 0; }
+.form-tool-btn:hover { background: var(--c-border); }
+.doc-center { padding-left: 0; padding-right: 0; }
+/* Карточка задачи: значения только для просмотра */
+.tv-card-value { min-height: 32px; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: 6px 0; }
+.tv-card-text { white-space: pre-wrap; line-height: 1.45; }
+.tv-card-done { border-top: 1px solid var(--c-border); padding-top: var(--sp-3); }
+.modal-foot .menu-pop { top: auto; bottom: calc(100% + var(--sp-1)); }

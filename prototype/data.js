@@ -344,7 +344,7 @@
   });
   // FT_10: задача, отмеченная стажёром «Выполнено», ждёт проверки у проверяющего (Стрыгин)
   buildFromTemplate('pr-smirnov', 'tpl-base', '2026-07-01',
-    repeat('done', 10).concat(['review', 'not_started']), null, { 10: { reviewerId: 'u-strygin', result: 'Задание выполнено, результат приложен в карточке задачи' } });
+    repeat('done', 10).concat(['review', 'not_started']), null, { 10: { reviewerId: 'u-strygin', result: 'Задание выполнено, результат приложен в карточке задачи', doneBy: 't-smirnov', doneAt: '2026-07-24T15:40', reviewRequestedAt: '2026-07-24T15:40' } });
 
   // --- Кузнецова М. О. — approval
   programs.push({
@@ -506,22 +506,54 @@
   tasks.forEach(withExtras);
 
   /* ---------- FT_10: задачи и уведомления подбора персонала (тестовые — модуля подбора в прототипе нет) ----------
-   * recruitTasks: id, assigneeId, type ('approve' | 'execute' | 'acquaint'), subject, deadline, authorId, status ('open' | 'in_progress').
+   * recruitTasks: id, assigneeId, type ('approve' | 'execute' | 'acquaint'), subject, deadline, authorId, status ('open' | 'in_progress' | 'done'),
+   * FT_11: createdAt, doc (документ-предмет), description; у выполненной — result, doneBy, doneAt, comment.
    * recruitNotes: id, userId, severity, text, at. Авторы — из справочника пользователей.
    */
   var recruitTasks = [
-    { id: 'rt-1',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Заявка на подбор системного аналитика',                      deadline: '2026-07-23', authorId: 'u-glebov' },
-    { id: 'rt-2',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Ресурсный план на 2027 год',                                 deadline: '2026-07-24', authorId: 'u-gavrilkina' },
-    { id: 'rt-3',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Резюме кандидата на должность аналитика ERP',                deadline: '2026-07-26', authorId: 'u-maznichenko' },
-    { id: 'rt-4',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Заявка на подбор тестировщика',                              deadline: '2026-07-28', authorId: 'u-dryamin' },
-    { id: 'rt-5',  assigneeId: 'u-strygin',     type: 'execute',  subject: 'Провести собеседование с кандидатом на должность руководителя проектов', deadline: '2026-08-05', authorId: 'u-vorfolomeeva' },
-    { id: 'rt-6',  assigneeId: 'u-kladova',     type: 'approve',  subject: 'Заявка на подбор специалиста по документообороту',          deadline: '2026-07-27', authorId: 'u-podyniglazov' },
-    { id: 'rt-7',  assigneeId: 'u-kladova',     type: 'execute',  subject: 'Подготовить описание вакансии программиста',                 deadline: '2026-08-01', authorId: 'u-sizova' },
-    { id: 'rt-8',  assigneeId: 'u-kladova',     type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-22', authorId: 'u-sizova' },
-    { id: 'rt-9',  assigneeId: 'u-sizova',      type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-26', authorId: 'u-kladova' },
-    { id: 'rt-10', assigneeId: 'u-sudomoykina', type: 'execute',  subject: 'Назначить дату выхода кандидата на должность аналитика',     deadline: '2026-07-24', authorId: 'u-kladova' },
-    { id: 'rt-11', assigneeId: 'u-sudomoykina', type: 'approve',  subject: 'Заявка на подбор аналитика ERP',                             deadline: '2026-07-29', authorId: 'u-gavrilkina' }
-  ].map(function (x) { x.status = 'open'; return x; });
+    { id: 'rt-1',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Заявка на подбор системного аналитика',                      deadline: '2026-07-23', authorId: 'u-glebov',
+      createdAt: '2026-07-20T10:15', doc: 'Заявка на подбор персонала № ЗП-000041 от 20.07.26',
+      description: 'Согласуйте заявку на подбор системного аналитика в Отдел отчетности, НСИ и бизнес-процессов: 1 ставка, выход — сентябрь 2026 г.' },
+    { id: 'rt-2',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Ресурсный план на 2027 год',                                 deadline: '2026-07-24', authorId: 'u-gavrilkina',
+      createdAt: '2026-07-21T09:40', doc: 'Ресурсный план подразделений ЦАС на 2027 год',
+      description: 'Ознакомьтесь с ресурсным планом Отдела корпоративных проектов на 2027 год: потребность в персонале по кварталам.' },
+    { id: 'rt-3',  assigneeId: 'u-strygin',     type: 'approve',  subject: 'Резюме кандидата на должность аналитика ERP',                deadline: '2026-07-26', authorId: 'u-maznichenko',
+      createdAt: '2026-07-23T14:05', doc: 'Резюме кандидата по заявке № ЗП-000038 от 10.07.26',
+      description: 'Согласуйте кандидата на должность аналитика ERP для приглашения на финальное собеседование.' },
+    { id: 'rt-4',  assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Заявка на подбор тестировщика',                              deadline: '2026-07-28', authorId: 'u-dryamin',
+      createdAt: '2026-07-24T11:30', doc: 'Заявка на подбор персонала № ЗП-000043 от 24.07.26',
+      description: 'Ознакомьтесь с заявкой на подбор тестировщика в Отдел по работе с субподрядчиками.' },
+    { id: 'rt-5',  assigneeId: 'u-strygin',     type: 'execute',  subject: 'Провести собеседование с кандидатом на должность руководителя проектов', deadline: '2026-08-05', authorId: 'u-vorfolomeeva',
+      createdAt: '2026-07-22T16:20', doc: 'Заявка на подбор персонала № ЗП-000039 от 14.07.26',
+      description: 'Проведите финальное собеседование с кандидатом на должность руководителя проектов в Отдел по работе с государственным сектором и внесите результат в заявку.' },
+    { id: 'rt-6',  assigneeId: 'u-kladova',     type: 'approve',  subject: 'Заявка на подбор специалиста по документообороту',          deadline: '2026-07-27', authorId: 'u-podyniglazov',
+      createdAt: '2026-07-22T10:00', doc: 'Заявка на подбор персонала № ЗП-000042 от 22.07.26',
+      description: 'Согласуйте заявку на подбор специалиста по документообороту в Направление по автоматизации Документооборота.' },
+    { id: 'rt-7',  assigneeId: 'u-kladova',     type: 'execute',  subject: 'Подготовить описание вакансии программиста',                 deadline: '2026-08-01', authorId: 'u-sizova',
+      createdAt: '2026-07-23T12:45', doc: 'Заявка на подбор персонала № ЗП-000040 от 17.07.26',
+      description: 'Подготовьте описание вакансии программиста: обязанности, требования, условия работы.' },
+    { id: 'rt-8',  assigneeId: 'u-kladova',     type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-22', authorId: 'u-sizova',
+      createdAt: '2026-07-20T15:10', doc: 'Резюме кандидата по заявке № ЗП-000040 от 17.07.26',
+      description: 'Ознакомьтесь с резюме кандидата на должность программиста перед собеседованием.' },
+    { id: 'rt-9',  assigneeId: 'u-sizova',      type: 'acquaint', subject: 'Резюме кандидата на должность программиста',                 deadline: '2026-07-26', authorId: 'u-kladova',
+      createdAt: '2026-07-23T09:25', doc: 'Резюме кандидата по заявке № ЗП-000040 от 17.07.26',
+      description: 'Ознакомьтесь с резюме кандидата на должность программиста — собеседование 30.07.26.' },
+    { id: 'rt-10', assigneeId: 'u-sudomoykina', type: 'execute',  subject: 'Назначить дату выхода кандидата на должность аналитика',     deadline: '2026-07-24', authorId: 'u-kladova',
+      createdAt: '2026-07-21T13:00', doc: 'Заявка на подбор персонала № ЗП-000036 от 01.07.26',
+      description: 'Согласуйте с кандидатом дату выхода и внесите её в заявку.' },
+    { id: 'rt-11', assigneeId: 'u-sudomoykina', type: 'approve',  subject: 'Заявка на подбор аналитика ERP',                             deadline: '2026-07-29', authorId: 'u-gavrilkina',
+      createdAt: '2026-07-24T10:50', doc: 'Заявка на подбор персонала № ЗП-000044 от 24.07.26',
+      description: 'Согласуйте заявку на подбор аналитика ERP в Направление оперативного учета.' },
+    // FT_11: выполненные задачи — для фильтра «Выполненные»
+    { id: 'rt-12', assigneeId: 'u-strygin',     type: 'approve',  subject: 'Заявка на подбор бизнес-аналитика',                           deadline: '2026-07-21', authorId: 'u-glebov',
+      createdAt: '2026-07-17T11:20', doc: 'Заявка на подбор персонала № ЗП-000037 от 07.07.26',
+      description: 'Согласуйте заявку на подбор бизнес-аналитика в Отдел отчетности, НСИ и бизнес-процессов.',
+      status: 'done', result: 'approve', doneBy: 'u-strygin', doneAt: '2026-07-20T17:05', comment: null },
+    { id: 'rt-13', assigneeId: 'u-strygin',     type: 'acquaint', subject: 'Отчёт о закрытии вакансий за II квартал',                   deadline: '2026-07-18', authorId: 'u-gavrilkina',
+      createdAt: '2026-07-14T09:00', doc: 'Отчёт о закрытии вакансий ЦАС за II квартал 2026 г.',
+      description: 'Ознакомьтесь с отчётом о закрытии вакансий подразделений ЦАС за II квартал.',
+      status: 'done', result: 'acquaint', doneBy: 'u-strygin', doneAt: '2026-07-16T10:32', comment: null }
+  ].map(function (x) { x.status = x.status || 'open'; return x; });
   var recruitNotes = [
     { id: 'rn-1', userId: 'u-strygin',     severity: 'warning', text: 'Заявка на подбор аналитика по отчетности — осталось 2 дня на согласование', at: '2026-07-25T09:10' },
     { id: 'rn-2', userId: 'u-strygin',     severity: 'info',    text: 'Кандидат на должность программиста принял предложение о работе',       at: '2026-07-24T16:40' },
@@ -529,6 +561,7 @@
     { id: 'rn-4', userId: 'u-sizova',      severity: 'info',    text: 'Кандидат на должность программиста приглашён на собеседование 30.07.26', at: '2026-07-24T11:05' },
     { id: 'rn-5', userId: 'u-sudomoykina', severity: 'danger',  text: 'Заявка на подбор аналитика ERP — срок закрытия вакансии прошёл',        at: '2026-07-23T10:00' }
   ];
+
 
   /* ---------- FT_10: важность задач — настройки пользователя ----------
    * importance[userId] = { levels: [{ id, name }], marks: { ключЗадачи: idУровня } }. Цвет флажка — по месту уровня в списке.
