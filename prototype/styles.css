@@ -270,7 +270,8 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 /* ================= Демо-переключатель (НЕ_ПЕРЕНОСИТЬ) ================= */
 /* Фаза 8.5: в строке заголовка формы, слева от ⟳ ⋮; меню этапов раскрывается вниз */
 .demo-dock { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--sp-2); flex: 0 1 auto; min-width: 0; }
-.demo-dock > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
+.demo-host { position: relative; display: flex; min-width: 0; }
+.demo-host > .menu { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 60; }
 .demo-btn { max-width: 240px; min-width: 0; }  /* фаза 9, 8.1 */
 .demo-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-btn { border-style: dashed; }
@@ -626,8 +627,8 @@ button.analytics-head { cursor: pointer; }
 .analytics-title { font-size: var(--fs-l); font-weight: var(--fw-bold); color: var(--c-text); }
 button.analytics-head:hover .analytics-title { text-decoration: underline; }
 .analytics-actions { gap: var(--sp-2); flex: 0 0 auto; flex-wrap: nowrap; }
-/* Строки замечаний: 28px, иконка 16px, отступ слева — под текст заголовка (стрелка 16 + 6 + иконка 16 + 6) */
-.analytics-list { padding-left: 44px; }
+/* Строки замечаний: 28px, цветной кружок 16px (FT_8: только кружки), отступ слева — под текст заголовка */
+.analytics-list { padding-left: 22px; }  /* FT_8: иконки в заголовке нет — текст строк под текстом заголовка (стрелка 16 + 6), кружок — под стрелкой */
 .analytics-row { min-height: 28px; gap: var(--sp-2); flex-wrap: nowrap; }
 .analytics-row-icon { display: inline-flex; flex: 0 0 16px; margin-left: -24px; }
 .analytics-row-text { color: var(--c-text); min-width: 0; }
@@ -668,3 +669,26 @@ button.analytics-head:hover .analytics-title { text-decoration: underline; }
 .tcard-ico { display: inline-flex; flex: 0 0 16px; color: var(--c-text-secondary); }
 .tcard-indent { padding-left: 24px; }
 .tcard-term { gap: var(--sp-2); }
+
+/* ================= FT_8: лист согласования АП (вид — как список действий бизнес-процесса 1С) ================= */
+.route-state { gap: var(--sp-2); min-height: 28px; }
+.route-play { display: inline-flex; }
+.route-table { table-layout: fixed; }
+.route-table .w-check { width: 40px; }
+.route-table .w-status { width: 40px; }
+.route-table .w-emp { width: 42%; }
+.route-table .w-due { width: 96px; }
+table.grid.route-table td { vertical-align: middle; }
+.route-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
+.route-row { cursor: pointer; }
+.route-row:hover td { background: var(--c-bg-panel); }
+.route-row.selected td { background: var(--c-bg-selected); }
+.route-status { text-align: center; }
+.route-ico { display: inline-flex; vertical-align: middle; }
+.route-ico svg { width: 18px; height: 18px; }
+.route-action { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* FT_8: длинные названия подразделений — одной строкой с многоточием, полное название в подсказке */
+.tcard-dept { min-width: 0; overflow: hidden; contain: inline-size; }  /* ширина по родителю: длинное название не распирает карточку */
+.tcard-dept .link { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcard .tcard-who { flex: 1 1 300px; min-width: min-content; }
+.tcard-person { max-width: 240px; }

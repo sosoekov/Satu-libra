@@ -14,8 +14,7 @@
 
   /* ---------- Константы ---------- */
   var TODAY = '2026-07-25';           // «сегодня» для всех расчётов
-  var CURRENT_USER_ID = 'u-petrova';  // текущий пользователь — руководитель
-  var REAPPROVAL_ON_CHANGE = true;    // изменение согласованной АП требует повторного согласования
+  var CURRENT_USER_ID = 'u-strygin';  // текущий пользователь — руководитель ЦАС (FT_8); демо-переключатель меняет его на HR-менеджера
   var LAG_THRESHOLD = 10;             // отставание задач от времени, п.п.
   var CLOSE_AVAILABLE_DAYS = 14;      // за сколько дней до окончания доступно «Начать закрытие»
 
@@ -23,40 +22,53 @@
   /* ---------- Справочник.Подразделения ----------
    * responsibleId — ответственный за подразделение (FT_6); если не задан, берётся у вышестоящего подразделения.
    */
+  // FT_8: структура ЦАС и ответственные — по данным заказчика
   var departments = [
-    { id: 'd-cas',    name: 'ЦАС',                                    parentId: null,    responsibleId: 'u-novikov' },
-    { id: 'd-corp',   name: 'Отдел корпоративного сопровождения',     parentId: 'd-cas', responsibleId: 'u-belyaev' },
-    { id: 'd-auto',   name: 'Направление по автоматизации',           parentId: 'd-corp' },
-    { id: 'd-impl',   name: 'Группа внедрений',                       parentId: 'd-corp' },
-    { id: 'd-report', name: 'Отдел отчетности и процессов',           parentId: 'd-cas', responsibleId: 'u-belyaev' },
-    { id: 'd-gov',    name: 'Отдел с государственным сектором',       parentId: 'd-cas', responsibleId: 'u-kirillova' },
-    { id: 'd-sub',    name: 'Отдел с субподрядчиками',                parentId: 'd-cas', responsibleId: 'u-kirillova' },
-    { id: 'd-fed',    name: 'Отдел с федеральными проектами',         parentId: 'd-cas', responsibleId: 'u-zaitsev' },
-    { id: 'd-expert', name: 'Отдел экспертизы и внутренних проектов', parentId: 'd-cas' },
-    { id: 'd-pmo',    name: 'Проектный офис',                         parentId: 'd-cas' },
-    { id: 'd-admin',  name: 'ЦАС. Администрация',                     parentId: 'd-cas' }
+    { id: 'd-cas',    name: 'ЦАС',                                               parentId: null,     responsibleId: 'u-strygin' },
+    { id: 'd-corp',   name: 'Отдел корпоративного сопровождения',                parentId: 'd-cas',  responsibleId: 'u-litvinova' },
+    { id: 'd-doc',    name: 'Направление по автоматизации Документооборота',     parentId: 'd-corp', responsibleId: 'u-podyniglazov' },
+    { id: 'd-uss',    name: 'Направление по внедрению, сопровождению и развитию учетных систем управления', parentId: 'd-corp', responsibleId: 'u-sizova' },
+    { id: 'd-cproj',  name: 'Отдел корпоративных проектов',                      parentId: 'd-cas',  responsibleId: 'u-gavrilkina' },
+    { id: 'd-oper',   name: 'Направление оперативного учета',                    parentId: 'd-cproj', responsibleId: 'u-maznichenko' },
+    { id: 'd-prod',   name: 'Направление производственного учета, учета себестоимости и затрат', parentId: 'd-cproj', responsibleId: 'u-tsumankov' },
+    { id: 'd-report', name: 'Отдел отчетности, НСИ и бизнес-процессов',          parentId: 'd-cas',  responsibleId: 'u-glebov' },
+    { id: 'd-gov',    name: 'Отдел по работе с государственным сектором',        parentId: 'd-cas',  responsibleId: 'u-vorfolomeeva' },
+    { id: 'd-gadm',   name: 'Направление администрирования проектов',            parentId: 'd-gov',  responsibleId: 'u-kustavinova' },
+    { id: 'd-gacc',   name: 'Направление бухгалтерского учета Гос. учреждений',  parentId: 'd-gov',  responsibleId: 'u-mazurova' },
+    { id: 'd-gpay',   name: 'Направление зарплаты и кадров Гос. учреждений',     parentId: 'd-gov',  responsibleId: 'u-gorbunova' },
+    { id: 'd-sub',    name: 'Отдел по работе с субподрядчиками',                 parentId: 'd-cas',  responsibleId: 'u-dryamin' },
+    { id: 'd-fed',    name: 'Отдел по работе с федеральными проектами',          parentId: 'd-cas' }
   ];
 
   /* ---------- Справочник.Пользователи / ФизическиеЛица ---------- */
   var users = [
-    { id: 'u-petrova',   fullName: 'Петрова Анна Евгеньевна',        shortName: 'Петрова А. Е.',   role: 'Руководитель стажировки' },
-    { id: 'u-ivanov-ii', fullName: 'Иванов Иван Иванович',           shortName: 'Иванов И. И.',    role: 'Наставник' },
-    { id: 'u-kozlov',    fullName: 'Козлов Дмитрий Андреевич',       shortName: 'Козлов Д. А.',    role: 'Наставник' },
-    { id: 'u-morozova',  fullName: 'Морозова Ольга Викторовна',      shortName: 'Морозова О. В.',  role: 'Наставник' },
-    { id: 'u-vasiliev',  fullName: 'Васильев Андрей Петрович',       shortName: 'Васильев А. П.',  role: 'Наставник' },
-    { id: 'u-novikov',   fullName: 'Новиков Павел Сергеевич',        shortName: 'Новиков П. С.',   role: 'Руководитель проектного офиса' },
-    { id: 'u-fedorova',  fullName: 'Федорова Наталья Александровна', shortName: 'Федорова Н. А.',  role: 'Эксперт по методологии' },
-    { id: 'u-sokolova',  fullName: 'Соколова Екатерина Игоревна',    shortName: 'Соколова Е. И.',  role: 'HR-менеджер' },
-    { id: 'u-grigorieva', fullName: 'Григорьева Ирина Сергеевна',    shortName: 'Григорьева И. С.', role: 'КШ' },
-    { id: 'u-belyaev',   fullName: 'Беляев Олег Николаевич',         shortName: 'Беляев О. Н.',    role: 'Руководитель отдела' },
-    { id: 'u-kirillova', fullName: 'Кириллова Марина Юрьевна',       shortName: 'Кириллова М. Ю.', role: 'Руководитель отдела' },
-    { id: 'u-zaitsev',   fullName: 'Зайцев Игорь Владимирович',      shortName: 'Зайцев И. В.',    role: 'Руководитель отдела' }
+    { id: 'u-strygin',      fullName: 'Стрыгин Константин Михайлович',   role: 'Руководитель ЦАС' },
+    { id: 'u-litvinova',    fullName: 'Литвинова Надежда Николаевна',    role: 'Руководитель отдела' },
+    { id: 'u-podyniglazov', fullName: 'Подыниглазов Артем Алексеевич',   role: 'Руководитель направления' },
+    { id: 'u-sizova',       fullName: 'Сизова Анна Владиславовна',       role: 'Руководитель направления' },
+    { id: 'u-gavrilkina',   fullName: 'Гаврилкина Татьяна Александровна', role: 'Руководитель отдела' },
+    { id: 'u-maznichenko',  fullName: 'Мазниченко Екатерина Александровна', role: 'Руководитель направления' },
+    { id: 'u-tsumankov',    fullName: 'Цуманков Николай Александрович',  role: 'Руководитель направления' },
+    { id: 'u-glebov',       fullName: 'Глебов Дмитрий Сергеевич',        role: 'Руководитель отдела' },
+    { id: 'u-vorfolomeeva', fullName: 'Ворфоломеева Наталья Юрьевна',    role: 'Руководитель отдела' },
+    { id: 'u-kustavinova',  fullName: 'Куставинова Ксения Дмитриевна',   role: 'Руководитель направления' },
+    { id: 'u-mazurova',     fullName: 'Мазурова Ольга Васильевна',       role: 'Руководитель направления' },
+    { id: 'u-gorbunova',    fullName: 'Горбунова Анна Юрьевна',          role: 'Руководитель направления' },
+    { id: 'u-dryamin',      fullName: 'Дрямин Фёдор Викторович',         role: 'Руководитель отдела' },
+    { id: 'u-sudomoykina',  fullName: 'Судомойкина Анна Николаевна',     role: 'HR-менеджер' },
+    { id: 'u-kondurova',    fullName: 'Кондурова Алла Ивановна',         role: 'HR-менеджер' },
+    { id: 'u-andreeva',     fullName: 'Андреева Елизавета Ивановна',     role: 'HR-менеджер' },
+    { id: 'u-samsonova',    fullName: 'Самсонова Дарья Николаевна',      role: 'HR-менеджер' },
+    { id: 'u-baeva',        fullName: 'Баева Диана Владиславовна',       role: 'КШ' }
   ];
-  var HR_ID = 'u-sokolova';
-  var KSH_ID = 'u-grigorieva';   // сотрудник КШ — ответственный за пункт «Подготовить документы для оформления ДМС» (фаза 10, 5.2)
+  var HR_IDS = ['u-sudomoykina', 'u-kondurova', 'u-andreeva', 'u-samsonova'];   // HR-менеджеры (FT_8: у стажёра — свой, hrId)
+  var CAS_HEAD_ID = 'u-strygin';  // руководитель ЦАС — шаг «Утверждение» маршрута согласования АП (FT_8)
+  var KSH_ID = 'u-baeva';         // сотрудник КШ — ответственный за пункт «Подготовить документы для оформления ДМС» (фаза 10, 5.2)
 
   /* ---------- Стажёры (Справочник.Сотрудники + РегистрСведений.СтатусыСтажеров) ----------
    * stageDates — даты начала этапов (для степпера), closedAt / closeKind ('passed'|'failed'|'cancelled') — для этапа closed.
+   * FT_8: headId — руководитель стажировки (руководитель направления стажёра), mentorId — наставник (руководитель соседнего
+   * направления того же отдела), hrId — HR-менеджер стажёра.
    */
   // Фаза 11, 4.2: positionFamily — 'analyst' | 'programmer' | 'erp_analyst' | null; qualificationLevel — строка или null
   // Допустимые уровни: analyst — А1–А7 (кириллица), programmer — П1–П7, erp_analyst — AERP1–AERP5 (латиница)
@@ -68,61 +80,61 @@
   var trainees = [
     {
       id: 't-ivanov', fullName: 'Иванов Петр Сергеевич', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А2',
-      departmentId: 'd-auto',
-      mentorId: 'u-kozlov', headId: 'u-petrova', startDate: '2026-07-29', endDate: '2026-10-28',
-      stage: 'found', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-doc',
+      mentorId: 'u-sizova', headId: 'u-podyniglazov', hrId: 'u-sudomoykina', startDate: '2026-07-29', endDate: '2026-10-28',
+      stage: 'found', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-10' }, closedAt: null, closeKind: null
     },
     {
       id: 't-belova', fullName: 'Белова Анна Дмитриевна', position: 'Программист', positionFamily: 'programmer', qualificationLevel: 'П2',
-      departmentId: 'd-auto',
-      mentorId: 'u-kozlov', headId: 'u-petrova', startDate: '2026-08-03', endDate: '2026-11-02',
-      stage: 'found', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-uss',
+      mentorId: 'u-podyniglazov', headId: 'u-sizova', hrId: 'u-sudomoykina', startDate: '2026-08-03', endDate: '2026-11-02',
+      stage: 'found', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-17' }, closedAt: null, closeKind: null
     },
     {
       id: 't-sidorov', fullName: 'Сидоров Алексей Игоревич', position: 'Аналитик ERP', positionFamily: 'erp_analyst', qualificationLevel: 'AERP3',
-      departmentId: 'd-impl',
-      mentorId: 'u-vasiliev', headId: 'u-petrova', startDate: '2026-08-05', endDate: '2026-11-04',
-      stage: 'draft', changedAfterApproval: false, rejectionComment: null, draftSince: '2026-07-23',
+      departmentId: 'd-oper',
+      mentorId: 'u-tsumankov', headId: 'u-maznichenko', hrId: 'u-kondurova', startDate: '2026-08-05', endDate: '2026-11-04',
+      stage: 'draft', rejectionComment: null, draftSince: '2026-07-23',
       stageDates: { found: '2026-07-08', draft: '2026-07-23' }, closedAt: null, closeKind: null
     },
     {
       id: 't-kuznetsova', fullName: 'Кузнецова Мария Олеговна', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А4',
-      departmentId: 'd-impl',
-      mentorId: 'u-morozova', headId: 'u-petrova', startDate: '2026-08-01', endDate: '2026-10-31',
-      stage: 'approval', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-prod',
+      mentorId: 'u-maznichenko', headId: 'u-tsumankov', hrId: 'u-kondurova', startDate: '2026-08-01', endDate: '2026-10-31',
+      stage: 'approval', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-07-01', draft: '2026-07-15', approval: '2026-07-22' }, closedAt: null, closeKind: null
     },
     {
       id: 't-smirnov', fullName: 'Смирнов Кирилл Викторович', position: 'Специалист по отчетности', positionFamily: null, qualificationLevel: null,
-      departmentId: 'd-report',
-      mentorId: 'u-morozova', headId: 'u-petrova', startDate: '2026-07-01', endDate: '2026-09-30',
-      stage: 'active', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-oper',
+      mentorId: 'u-tsumankov', headId: 'u-maznichenko', hrId: 'u-andreeva', startDate: '2026-07-01', endDate: '2026-09-30',
+      stage: 'active', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-06-10', draft: '2026-06-15', approval: '2026-06-18', active: '2026-07-01' },
       closedAt: null, closeKind: null
     },
     {
       id: 't-popova', fullName: 'Попова Елизавета Андреевна', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А5',
-      departmentId: 'd-gov',
-      mentorId: 'u-vasiliev', headId: 'u-petrova', startDate: '2026-04-30', endDate: '2026-07-30',
-      stage: 'closing', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-gacc',
+      mentorId: 'u-gorbunova', headId: 'u-mazurova', hrId: 'u-andreeva', startDate: '2026-04-30', endDate: '2026-07-30',
+      stage: 'closing', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-04-10', draft: '2026-04-15', approval: '2026-04-20', active: '2026-04-30', closing: '2026-07-16' },
       closedAt: null, closeKind: null
     },
     {
       id: 't-orlova', fullName: 'Орлова Дарья Павловна', position: 'Руководитель проектов', positionFamily: null, qualificationLevel: null,
-      departmentId: 'd-sub',
-      mentorId: 'u-novikov', headId: 'u-petrova', startDate: '2026-06-15', endDate: '2026-09-15',
-      stage: 'active', changedAfterApproval: true, rejectionComment: null, draftSince: null,
+      departmentId: 'd-gpay',
+      mentorId: 'u-kustavinova', headId: 'u-gorbunova', hrId: 'u-samsonova', startDate: '2026-06-15', endDate: '2026-09-15',
+      stage: 'active', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-05-25', draft: '2026-06-01', approval: '2026-06-05', active: '2026-06-15' },
       closedAt: null, closeKind: null
     },
     {
       id: 't-lebedev', fullName: 'Лебедев Сергей Николаевич', position: 'Руководитель проектов', positionFamily: null, qualificationLevel: null,
-      departmentId: 'd-fed',
-      mentorId: 'u-ivanov-ii', headId: 'u-petrova', startDate: '2026-05-20', endDate: '2026-08-20',
-      stage: 'active', changedAfterApproval: false, rejectionComment: null, draftSince: null,
+      departmentId: 'd-gadm',
+      mentorId: 'u-mazurova', headId: 'u-kustavinova', hrId: 'u-samsonova', startDate: '2026-05-20', endDate: '2026-08-20',
+      stage: 'active', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-05-04', draft: '2026-05-12', approval: '2026-05-14', active: '2026-05-20' },
       closedAt: null, closeKind: null
     }
@@ -140,9 +152,9 @@
       description: 'Проверить доступ к почте, порталу, 1С:Документооборот и сетевым папкам отдела' },
     { name: 'Изучить корпоративный кодекс и правила внутреннего распорядка', offsetDays: 3,
       description: 'Ознакомиться с кодексом этики, режимом работы и правилами пропускного режима' },
-    { name: 'Пройти инструктаж по охране труда и пожарной безопасности', offsetDays: 1, reviewerId: 'u-sokolova',
+    { name: 'Пройти инструктаж по охране труда и пожарной безопасности', offsetDays: 1, reviewerId: 'u-sudomoykina',
       description: 'Вводный инструктаж проводит HR-менеджер, результат фиксируется в журнале инструктажей' },
-    { name: 'Пройти курс по информационной безопасности', offsetDays: 7, reviewerId: 'u-sokolova',
+    { name: 'Пройти курс по информационной безопасности', offsetDays: 7, reviewerId: 'u-sudomoykina',
       description: 'Обязательный курс: работа с конфиденциальной информацией, фишинг, парольная политика' },
     { name: 'Познакомиться с командой отдела', offsetDays: 3,
       description: 'Встреча с коллегами, знакомство с ролями и текущими задачами команды' },
@@ -154,7 +166,7 @@
       description: 'Создание и согласование документов, работа с задачами и уведомлениями' },
     { name: 'Составить отчёт по результатам недели', offsetDays: 30,
       description: 'Краткий отчёт наставнику: что сделано, что мешает, какие вопросы остались' },
-    { name: 'Пройти промежуточную аттестацию по корпоративным стандартам', offsetDays: 45, reviewerId: 'u-sokolova',
+    { name: 'Пройти промежуточную аттестацию по корпоративным стандартам', offsetDays: 45, reviewerId: 'u-sudomoykina',
       description: 'Тестирование по регламентам, корпоративному кодексу и информационной безопасности' }
   ];
   function corp(indexes) {
@@ -241,10 +253,10 @@
   programs.push({
     id: 'pr-lebedev', traineeId: 't-lebedev', templateId: 'tpl-pm',
     history: [
-      { at: '2026-05-12T10:05', userId: 'u-ivanov-ii', action: 'АП создана по шаблону «Руководитель проектов»' },
-      { at: '2026-05-13T16:40', userId: 'u-ivanov-ii', action: 'Добавлена задача «Принять участие в планёрках проектной команды»' },
-      { at: '2026-05-14T09:30', userId: 'u-petrova',   action: 'АП отправлена на согласование' },
-      { at: '2026-05-15T11:12', userId: 'u-novikov',   action: 'АП согласована' }
+      { at: '2026-05-12T10:05', userId: 'u-mazurova', action: 'АП создана по шаблону «Руководитель проектов»' },
+      { at: '2026-05-13T16:40', userId: 'u-mazurova', action: 'Добавлена задача «Принять участие в планёрках проектной команды»' },
+      { at: '2026-05-14T09:30', userId: 'u-kustavinova', action: 'АП отправлена на согласование' },
+      { at: '2026-05-15T11:12', userId: 'u-samsonova', action: 'АП согласована' }
     ]
   });
   [
@@ -253,10 +265,10 @@
     ['corp', 'Пройти вводный курс по продукту', 'done', '2026-05-27', null, [], 'Курс пройден, итоговый тест — 92%', CORP[1].description],
     ['corp', 'Настроить рабочее место и доступы', 'in_progress', '2026-07-31', null, [], null, 'Получить доступ к тестовому контуру заказчика и репозиторию проектной документации'],
     ['corp', 'Изучить корпоративный кодекс и правила внутреннего распорядка', 'done', '2026-05-23', null, [], null, CORP[3].description],
-    ['corp', 'Пройти инструктаж по охране труда и пожарной безопасности', 'done', '2026-05-21', 'u-sokolova', ['u-sokolova'], 'Инструктаж пройден, запись в журнале № 214', CORP[4].description],
-    ['corp', 'Пройти курс по информационной безопасности', 'done', '2026-05-29', 'u-sokolova', [], 'Сертификат о прохождении курса загружен', CORP[5].description],
+    ['corp', 'Пройти инструктаж по охране труда и пожарной безопасности', 'done', '2026-05-21', 'u-samsonova', ['u-samsonova'], 'Инструктаж пройден, запись в журнале № 214', CORP[4].description],
+    ['corp', 'Пройти курс по информационной безопасности', 'done', '2026-05-29', 'u-samsonova', [], 'Сертификат о прохождении курса загружен', CORP[5].description],
     ['corp', 'Познакомиться с командой отдела', 'done', '2026-05-25', null, [], null, CORP[6].description],
-    ['corp', 'Встреча с руководителем стажировки: цели на испытательный срок', 'done', '2026-05-26', 'u-petrova', [], 'Цели согласованы, протокол встречи в карточке задачи', CORP[7].description],
+    ['corp', 'Встреча с руководителем стажировки: цели на испытательный срок', 'done', '2026-05-26', 'u-kustavinova', [], 'Цели согласованы, протокол встречи в карточке задачи', CORP[7].description],
     ['corp', 'Изучить оргструктуру ЦАС и зоны ответственности подразделений', 'done', '2026-06-03', null, [], null, CORP[8].description],
     ['corp', 'Пройти обучение по работе в 1С:Документооборот', 'done', '2026-06-10', null, [], 'Обучение пройдено', CORP[9].description],
     ['corp', 'Изучить регламент согласования документов', 'done', '2026-06-17', null, [], null, 'Маршруты согласования договоров, служебных записок и приказов, сроки и ответственные'],
@@ -267,12 +279,12 @@
     ['spec', 'Изучить портфель текущих проектов отдела', 'done', '2026-06-15', null, [], null, 'Статусы, сроки, риски и ключевые заказчики по активным проектам'],
     ['spec', 'Пройти курс по работе в системе управления проектами', 'done', '2026-06-24', null, [], 'Курс пройден', 'Планирование, ведение задач, трудозатраты и отчёты в корпоративной системе'],
     ['spec', 'Принять участие в планёрках проектной команды', 'done', '2026-07-10', null, [], 'Посетил 6 планёрок, вёл протокол на двух', 'Еженедельные планёрки по проектам отдела: слушать, вести протокол, задавать вопросы'],
-    ['spec', 'Подготовить анализ конкурентов', 'in_progress', '2026-07-22', null, ['u-petrova', 'u-novikov', 'u-fedorova'], null, 'Сравнить 3–5 компаний по предложениям для федеральных заказчиков, выводы для пилотного проекта'],
-    ['spec', 'Разработать устав пилотного проекта', 'not_started', '2026-07-17', 'u-novikov', [], null, 'Цели, границы, участники, бюджет и критерии успеха пилотного проекта'],
+    ['spec', 'Подготовить анализ конкурентов', 'in_progress', '2026-07-22', null, ['u-kustavinova', 'u-mazurova', 'u-vorfolomeeva'], null, 'Сравнить 3–5 компаний по предложениям для федеральных заказчиков, выводы для пилотного проекта'],
+    ['spec', 'Разработать устав пилотного проекта', 'not_started', '2026-07-17', 'u-mazurova', [], null, 'Цели, границы, участники, бюджет и критерии успеха пилотного проекта'],
     ['spec', 'Составить план-график пилотного проекта', 'in_progress', '2026-08-05', null, [], null, 'Декомпозиция работ, ресурсы, контрольные точки, согласование с наставником'],
     ['spec', 'Подготовить реестр рисков проекта', 'in_progress', '2026-08-10', null, [], null, 'Выявить риски, оценить вероятность и влияние, предложить меры реагирования'],
-    ['spec', 'Провести встречу с заказчиком по пилотному проекту', 'in_progress', '2026-08-12', null, ['u-novikov'], null, 'Подготовить повестку, провести встречу вместе с наставником, разослать протокол'],
-    ['spec', 'Подготовить итоговую презентацию по результатам стажировки', 'in_progress', '2026-08-18', 'u-petrova', [], null, 'Результаты, выводы и план развития на следующий период']
+    ['spec', 'Провести встречу с заказчиком по пилотному проекту', 'in_progress', '2026-08-12', null, ['u-mazurova'], null, 'Подготовить повестку, провести встречу вместе с наставником, разослать протокол'],
+    ['spec', 'Подготовить итоговую презентацию по результатам стажировки', 'in_progress', '2026-08-18', 'u-kustavinova', [], null, 'Результаты, выводы и план развития на следующий период']
   ].forEach(function (r) {
     tasks.push({
       id: 'task-' + (taskSeq++), programId: 'pr-lebedev', block: r[0], name: r[1], description: r[7],
@@ -281,14 +293,14 @@
     });
   });
 
-  // --- Орлова Д. П. — active, 1 просрочка, изменена после согласования
+  // --- Орлова Д. П. — active, 1 просрочка
   programs.push({
     id: 'pr-orlova', traineeId: 't-orlova', templateId: 'tpl-pm',
     history: [
-      { at: '2026-06-01T12:00', userId: 'u-novikov',  action: 'АП создана по шаблону «Руководитель проектов»' },
-      { at: '2026-06-05T10:20', userId: 'u-petrova',  action: 'АП отправлена на согласование' },
-      { at: '2026-06-08T15:45', userId: 'u-fedorova', action: 'АП согласована' },
-      { at: '2026-07-21T14:20', userId: 'u-petrova',  action: 'Изменён срок задачи «Подготовить анализ конкурентов»: 25.07.26 → 28.07.26' }
+      { at: '2026-06-01T12:00', userId: 'u-kustavinova',  action: 'АП создана по шаблону «Руководитель проектов»' },
+      { at: '2026-06-05T10:20', userId: 'u-gorbunova', action: 'АП отправлена на согласование' },
+      { at: '2026-06-08T15:45', userId: 'u-samsonova', action: 'АП согласована' },
+      { at: '2026-07-21T14:20', userId: 'u-gorbunova', action: 'Изменён срок задачи «Подготовить анализ конкурентов»: 25.07.26 → 28.07.26' }
     ]
   });
   buildFromTemplate('pr-orlova', 'tpl-pm', '2026-06-15',
@@ -301,10 +313,10 @@
   programs.push({
     id: 'pr-popova', traineeId: 't-popova', templateId: 'tpl-analyst',
     history: [
-      { at: '2026-04-15T11:00', userId: 'u-vasiliev', action: 'АП создана по шаблону «Аналитик»' },
-      { at: '2026-04-16T09:10', userId: 'u-vasiliev', action: 'Добавлено задач: 7' },
-      { at: '2026-04-20T10:00', userId: 'u-petrova',  action: 'АП отправлена на согласование' },
-      { at: '2026-04-22T17:30', userId: 'u-fedorova', action: 'АП согласована' }
+      { at: '2026-04-15T11:00', userId: 'u-gorbunova', action: 'АП создана по шаблону «Аналитик»' },
+      { at: '2026-04-16T09:10', userId: 'u-gorbunova', action: 'Добавлено задач: 7' },
+      { at: '2026-04-20T10:00', userId: 'u-mazurova',  action: 'АП отправлена на согласование' },
+      { at: '2026-04-22T17:30', userId: 'u-andreeva',  action: 'АП согласована' }
     ]
   });
   buildFromTemplate('pr-popova', 'tpl-analyst', '2026-04-30',
@@ -324,9 +336,9 @@
   programs.push({
     id: 'pr-smirnov', traineeId: 't-smirnov', templateId: 'tpl-base',
     history: [
-      { at: '2026-06-15T14:00', userId: 'u-morozova', action: 'АП создана по шаблону «Базовый — для всех должностей»' },
-      { at: '2026-06-18T10:30', userId: 'u-petrova',  action: 'АП отправлена на согласование' },
-      { at: '2026-06-19T12:05', userId: 'u-fedorova', action: 'АП согласована' }
+      { at: '2026-06-15T14:00', userId: 'u-tsumankov', action: 'АП создана по шаблону «Базовый — для всех должностей»' },
+      { at: '2026-06-18T10:30', userId: 'u-maznichenko',  action: 'АП отправлена на согласование' },
+      { at: '2026-06-19T12:05', userId: 'u-andreeva',  action: 'АП согласована' }
     ]
   });
   buildFromTemplate('pr-smirnov', 'tpl-base', '2026-07-01',
@@ -336,8 +348,8 @@
   programs.push({
     id: 'pr-kuznetsova', traineeId: 't-kuznetsova', templateId: 'tpl-analyst',
     history: [
-      { at: '2026-07-15T13:25', userId: 'u-morozova', action: 'АП создана по шаблону «Аналитик»' },
-      { at: '2026-07-22T09:50', userId: 'u-petrova',  action: 'АП отправлена на согласование' }
+      { at: '2026-07-15T13:25', userId: 'u-maznichenko', action: 'АП создана по шаблону «Аналитик»' },
+      { at: '2026-07-22T09:50', userId: 'u-tsumankov',  action: 'АП отправлена на согласование' }
     ]
   });
   buildFromTemplate('pr-kuznetsova', 'tpl-analyst', '2026-08-01', []);
@@ -346,7 +358,7 @@
   programs.push({
     id: 'pr-sidorov', traineeId: 't-sidorov', templateId: 'tpl-base',
     history: [
-      { at: '2026-07-23T11:40', userId: 'u-vasiliev', action: 'АП создана по шаблону «Базовый — для всех должностей»' }
+      { at: '2026-07-23T11:40', userId: 'u-tsumankov', action: 'АП создана по шаблону «Базовый — для всех должностей»' }
     ]
   });
   buildFromTemplate('pr-sidorov', 'tpl-base', '2026-08-05', []);
@@ -380,7 +392,7 @@
   var closureSeq = 1;
   function buildClosureChecklist(tr) {
     return closureChecklistTemplate.map(function (c) {
-      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? HR_ID :
+      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId :
         c.responsibleRole === 'ksh' ? KSH_ID : c.responsibleRole === 'trainee' ? tr.id : tr.mentorId;
       return { id: 'cc-' + (closureSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole, responsibleId: responsibleId,
         offsetDays: c.offsetDays, optional: c.optional, done: false, doneBy: null, doneAt: null, linkedDocType: c.linkedDocType };
@@ -390,11 +402,11 @@
 
   // Выполненные пункты: индекс пункта → [кто, когда, номер документа]
   var checklistDone = {
-    't-ivanov':     { 0: ['u-petrova', '2026-07-21'], 2: ['u-sokolova', '2026-07-23', '0911-00118'] },
+    't-ivanov':     { 0: ['u-podyniglazov', '2026-07-21'], 2: ['u-sudomoykina', '2026-07-23', '0911-00118'] },
     't-belova':     {},
-    't-sidorov':    { 0: ['u-petrova', '2026-07-20'], 5: ['u-vasiliev', '2026-07-23'] },
-    't-kuznetsova': { 0: ['u-petrova', '2026-07-14'], 1: ['u-sokolova', '2026-07-24', '0911-00121'],
-                      2: ['u-sokolova', '2026-07-24', '0911-00122'], 5: ['u-morozova', '2026-07-15'] }
+    't-sidorov':    { 0: ['u-maznichenko', '2026-07-20'], 5: ['u-tsumankov', '2026-07-23'] },
+    't-kuznetsova': { 0: ['u-tsumankov', '2026-07-14'], 1: ['u-kondurova', '2026-07-24', '0911-00121'],
+                      2: ['u-kondurova', '2026-07-24', '0911-00122'], 5: ['u-maznichenko', '2026-07-15'] }
   };
   var checklistFull = ['t-smirnov', 't-popova', 't-orlova', 't-lebedev'];
 
@@ -403,7 +415,7 @@
   var docSeq = 90;
   trainees.forEach(function (tr) {
     checklistTemplate.forEach(function (c, i) {
-      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? HR_ID : tr.mentorId;
+      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId : tr.mentorId;
       var item = {
         id: 'cl-' + (clSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: responsibleId, offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
@@ -419,6 +431,43 @@
       }
       checklist.push(item);
     });
+  });
+
+  /* ---------- Маршрут согласования АП (FT_8, п. 5) ----------
+   * program.approval = { startedAt, steps: [{ role, userId, status, doneAt }] } — нет у АП, которую ни разу не отправляли.
+   * role: 'head' — руководитель стажировки, 'dept' — руководитель подразделения (отдела), 'cas' — руководитель ЦАС,
+   * 'hr' — HR-менеджер стажёра, 'extra' — добавленный согласующий.
+   * status: 'pending' — ещё не дошло, 'current' — задача сейчас у согласующего, 'approved' / 'rejected' — выполнено
+   * с положительным / отрицательным результатом, 'skipped' — шаг пропущен.
+   */
+  function topDepartment(id) {
+    var d = departments.filter(function (x) { return x.id === id; })[0];
+    while (d && d.parentId && d.parentId !== 'd-cas') { var pid = d.parentId; d = departments.filter(function (x) { return x.id === pid; })[0]; }
+    return d;
+  }
+  function defaultRoute(tr) {
+    return [
+      { role: 'head', userId: tr.headId },
+      { role: 'dept', userId: (topDepartment(tr.departmentId) || {}).responsibleId || CAS_HEAD_ID },
+      { role: 'cas',  userId: CAS_HEAD_ID },
+      { role: 'hr',   userId: tr.hrId }
+    ].map(function (x) { x.status = 'pending'; x.doneAt = null; return x; });
+  }
+  // [статус, дата выполнения] по шагам маршрута по умолчанию
+  var approvalSeed = {
+    't-lebedev':    ['2026-05-14T09:30', [['approved', '2026-05-14'], ['approved', '2026-05-14'], ['approved', '2026-05-15'], ['approved', '2026-05-15']]],
+    't-orlova':     ['2026-06-05T10:20', [['approved', '2026-06-05'], ['skipped', '2026-06-06'], ['approved', '2026-06-07'], ['approved', '2026-06-08']]],
+    't-popova':     ['2026-04-20T10:00', [['approved', '2026-04-20'], ['approved', '2026-04-21'], ['approved', '2026-04-21'], ['approved', '2026-04-22']]],
+    't-smirnov':    ['2026-06-18T10:30', [['approved', '2026-06-18'], ['approved', '2026-06-18'], ['approved', '2026-06-19'], ['approved', '2026-06-19']]],
+    't-kuznetsova': ['2026-07-22T09:50', [['approved', '2026-07-22'], ['approved', '2026-07-24'], ['current', null], ['pending', null]]]
+  };
+  programs.forEach(function (pr) {
+    var seed = approvalSeed[pr.traineeId];
+    if (!seed) return;
+    var tr = trainees.filter(function (x) { return x.id === pr.traineeId; })[0];
+    var steps = defaultRoute(tr);
+    seed[1].forEach(function (st, i) { steps[i].status = st[0]; steps[i].doneAt = st[1]; });
+    pr.approval = { startedAt: seed[0], steps: steps };
   });
 
   /* ---------- Тип задачи, обязательность и ссылки для ознакомления (FT_2) ----------
@@ -443,7 +492,7 @@
     var items = buildClosureChecklist(tr);
     items[0].done = true; items[0].doneBy = tr.headId; items[0].doneAt = '2026-07-22';
     items[1].done = true; items[1].doneBy = tr.id;     items[1].doneAt = '2026-07-23';
-    items[2].done = true; items[2].doneBy = HR_ID;     items[2].doneAt = '2026-07-24';
+    items[2].done = true; items[2].doneBy = tr.hrId;     items[2].doneAt = '2026-07-24';
     Array.prototype.push.apply(closureChecklist, items);
   });
 
@@ -457,11 +506,13 @@
   window.DATA = {
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
-    REAPPROVAL_ON_CHANGE: REAPPROVAL_ON_CHANGE,
     LAG_THRESHOLD: LAG_THRESHOLD,
     CLOSE_AVAILABLE_DAYS: CLOSE_AVAILABLE_DAYS,
     QUALIFICATION_LEVELS: QUALIFICATION_LEVELS,
-    HR_ID: HR_ID,
+    HR_IDS: HR_IDS,
+    CAS_HEAD_ID: CAS_HEAD_ID,
+    defaultRoute: defaultRoute,
+    topDepartment: topDepartment,
     ROLE_TITLES: ROLE_TITLES,
     departments: departments,
     users: users,

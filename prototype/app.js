@@ -155,7 +155,7 @@
 
   // Замечания блока аналитики (фаза 11, 5.2). Поля: id, severity, text. Тот же текст — в дереве и в колонке «Требует действия» сводной (11.7).
   // Порядок: danger → warning → info, внутри уровня — порядок NOTE_IDS (таблица 5.2)
-  var NOTE_IDS = ['prep_overdue', 'tasks_overdue', 'closure_overdue', 'no_program', 'draft_stale', 'rejected', 'changed_after_approval', 'lag', 'close_soon', 'closure_ready'];
+  var NOTE_IDS = ['prep_overdue', 'tasks_overdue', 'closure_overdue', 'no_program', 'draft_stale', 'rejected', 'lag', 'close_soon', 'closure_ready'];
   function getNotifications(t) {
     var list = [];
     var s = t.stage;
@@ -208,12 +208,6 @@
       list.push({
         id: 'rejected', severity: 'warning',
         text: 'Адаптационная программа возвращена на доработку: «' + t.rejectionComment + '»'
-      });
-    }
-    if (t.changedAfterApproval && (s === 'active' || s === 'closing')) {
-      list.push({
-        id: 'changed_after_approval', severity: 'warning',
-        text: 'Адаптационная программа изменена после согласования'
       });
     }
     if (s === 'active' && lag(t)) {
@@ -276,6 +270,10 @@
     info: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/>',
     alert: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".9" fill="currentColor"/>',
     dot: '<circle cx="8" cy="8" r="5" fill="currentColor"/>',
+    circleX: '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+    arrowFill: '<path d="M2 6h6.5V3L14 8l-5.5 5v-3H2z" fill="currentColor"/>',
+    arrowUp: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    arrowDown: '<path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     flag: '<path d="M3.5 14V2.5M3.5 3h8l-1.8 3 1.8 3h-8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>',
     calendar: '<rect x="2.5" y="3.5" width="11" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
     print: '<path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.5" y="9.5" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/>',
@@ -414,6 +412,7 @@
     checklistMode: 'all',        // 'all' | 'mine'
     closureMode: 'all',          // чек-лист закрытия: 'all' | 'mine'
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
+    demoUserMenuOpen: false,     // НЕ_ПЕРЕНОСИТЬ: меню демо-переключателя пользователя (FT_8)
     markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
     toasts: []
   };
@@ -457,22 +456,14 @@
    * Левая панель (раздел 7.2)
    * --------------------------------------------------------------------- */
 
-  // Просрочка где угодно (фаза 11, 3.2): задачи АП, пункты подготовки, пункты закрытия
-  function hasOverdue(t) {
-    if (t.stage === 'closed') return false;
-    var st = statsOf(t);
-    return !!(st && st.overdue) || checklistOf(t).some(checklistOverdue) || closureOf(t).some(closureOverdue);
-  }
   // Скоро окончание: этап active и до окончания ≤ CLOSE_AVAILABLE_DAYS дней (фаза 11, 3.2)
   function closeSoon(t) { return t.stage === 'active' && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS; }
 
-  // Фильтры левой панели (фаза 11, 3.2): плоский список, взаимоисключающие, активен максимум один.
-  // Разделитель — после «Просроченные» (sepAfter)
+  // Фильтры левой панели (фаза 11, 3.2; FT_8: без «Просроченные»): плоский список, взаимоисключающие, активен максимум один.
+  // Разделитель — после «Требуют внимания» (sepAfter)
   var FILTERS = [
-    { id: 'attention',    title: 'Требуют внимания',    icon: 'alert',    color: 'danger', name: 'ТребуютВнимания',
+    { id: 'attention',    title: 'Требуют внимания',    icon: 'alert',    color: 'danger', name: 'ТребуютВнимания', sepAfter: true,
       match: function (t) { return needsAttention(t); } },
-    { id: 'overdue',      title: 'Просроченные',        icon: 'dot',      color: 'danger', name: 'Просроченные', sepAfter: true,
-      match: function (t) { return hasOverdue(t); } },
     { id: 'awaitProgram', title: 'Ожидают АП',          icon: 'clock',    color: 'warning',        stages: ['found', 'draft'], name: 'ОжидаютАП' },
     { id: 'approval',     title: 'На согласовании',     icon: 'docCheck', color: 'info',           stages: ['approval'],       name: 'НаСогласовании' },
     { id: 'active',       title: 'Проходят стажировку', icon: 'users',    color: 'success',        name: 'ПроходятСтажировку',
@@ -875,7 +866,7 @@
         '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
         '<div class="col gap-0 tcard-who-text"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
           '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
-          '<div class="tcard-line">' + link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения', name: 'ГиперссылкаПодразделение' }) + '</div>' +
+          '<div class="tcard-line tcard-dept">' + link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения «' + (dep ? dep.name : '') + '»', name: 'ГиперссылкаПодразделение' }) + '</div>' +
           '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(formatPosition(t)) + '</div>' +
         '</div>' +
       '</div>' +
@@ -930,7 +921,8 @@
     if (!programOf(t)) list.push({ text: 'Создать АП', main: true, action: 'createProgram', name: 'КнопкаСоздатьАП' });
     if (programOf(t) && canSendToApproval(t)) list.push({ text: 'Отправить на согласование', main: true, action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' });
     if (closeSoon(t)) list.push({ text: 'Начать закрытие стажировки', main: true, action: 'openDialog', data: { dialog: 'startClosing' }, name: 'КнопкаНачатьЗакрытиеСтажировки' });
-    if (s === 'approval') list.push({ text: 'Открыть лист согласования', action: 'openApprovalSheet', name: 'КнопкаОткрытьЛистСогласования' });
+    // FT_8, п. 5: лист согласования — на согласовании и после возврата на доработку (только просмотр прошлого маршрута)
+    if (s === 'approval' || (s === 'draft' && programOf(t) && programOf(t).approval)) list.push({ text: 'Открыть лист согласования', action: 'openApprovalSheet', name: 'КнопкаОткрытьЛистСогласования' });
     if (s === 'active' || s === 'closing') {
       list.push({ text: 'Продлить стажировку', action: 'openDialog', data: { dialog: 'extend' }, name: 'КнопкаПродлитьСтажировку' });
       list.push({ text: 'Отменить стажировку', cls: 'btn-danger-text', action: 'openDialog', data: { dialog: 'cancel' }, name: 'КнопкаАналитикиОтменитьСтажировку' });
@@ -940,10 +932,9 @@
     return list;
   }
 
-  // Блок «Аналитика по адаптационной программе» (фаза 11, 5.1): рамка и заливка — по самому критичному замечанию,
+  // Блок «Аналитика по адаптационной программе» (фаза 11, 5.1; FT_8: без иконки в заголовке, у строк — только цветные кружки):
+  // рамка и заливка — по самому критичному замечанию,
   // кнопки действий — в строке заголовка (видны и в свёрнутом блоке); у строк замечаний кнопок нет
-  var HEAD_ICONS = { danger: 'alert', warning: 'warn', info: 'info' };
-  var ROW_ICONS = { danger: 'dot', warning: 'warn', info: 'info' };
   function renderAnalytics(t) {
     var list = getNotifications(t);
     var acts = analyticsActions(t);
@@ -952,16 +943,15 @@
     var sev = n ? list[0].severity : 'none';
     var open = state.analyticsOpen && n > 0;
     var title = '<span class="analytics-title"' + a1c('Надпись', 'ДекорацияЗаголовокАналитики') + '>Аналитика по адаптационной программе (' + n + ')</span>';
-    var headIcon = n ? '<span class="analytics-icon c-' + sev + '"' + a1c('Картинка', 'КартинкаАналитики') + '>' + icon(HEAD_ICONS[sev]) + '</span>' : '';
     var head = n
       ? '<button type="button" class="analytics-head" data-action="toggleAnalytics" aria-expanded="' + open + '"' +
           ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' + a1c('ЗаголовокГруппы', 'ГруппаАналитикаЗаголовок') + '>' +
-          '<span class="analytics-arrow">' + icon(open ? 'chevronDown' : 'chevronRight') + '</span>' + headIcon + title + '</button>'
+          '<span class="analytics-arrow">' + icon(open ? 'chevronDown' : 'chevronRight') + '</span>' + title + '</button>'
       : '<div class="analytics-head"' + a1c('ЗаголовокГруппы', 'ГруппаАналитикаЗаголовок') + '>' + title + '</div>';
     function row(x, i) {
       var k = i + 1;
       return '<div class="row analytics-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСтрокаАналитики' + k) + '>' +
-        '<span class="analytics-row-icon c-' + x.severity + '"' + a1c('Картинка', 'КартинкаАналитики' + k) + '>' + icon(ROW_ICONS[x.severity]) + '</span>' +
+        '<span class="analytics-row-icon c-' + x.severity + '"' + a1c('Картинка', 'КартинкаАналитики' + k) + '>' + icon('dot') + '</span>' +
         '<span class="analytics-row-text"' + a1c('Надпись', 'ДекорацияАналитики' + k) + '>' + esc(x.text) + '</span>' +
         '</div>';
     }
@@ -976,6 +966,12 @@
       '</div>';
   }
 
+  // Пункт подменю, недоступный с причиной в подсказке
+  function menuItemIf(text, action, data, name, reason) {
+    var attrs = '';
+    if (data) for (var k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
+    return '<button type="button" data-action="' + action + '"' + attrs + (reason ? ' disabled title="' + esc(reason) + '"' : '') + a1c('Кнопка', name) + '>' + esc(text) + '</button>';
+  }
   function menuItem(text, action, data, name, cls) {
     var attrs = '';
     if (data) for (var k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
@@ -1081,10 +1077,9 @@
     if (t.stage === 'closed') return 'Стажировка закрыта — АП доступна только для просмотра';
     return null;
   }
-  // Изменение АП: запись в историю; изменение согласованной АП требует повторного согласования
+  // Изменение АП: запись в историю (FT_8: изменения согласованной АП повторного согласования не требуют)
   function programChanged(t, action) {
     addHistory(programOf(t), action);
-    if (D.REAPPROVAL_ON_CHANGE && (t.stage === 'active' || t.stage === 'closing')) t.changedAfterApproval = true;
   }
 
   function taskMatchesFilter(task, f) {
@@ -1121,7 +1116,7 @@
   // Наблюдатели новой задачи: руководитель стажировки, наставник, HR-менеджер, ответственный за подразделение
   function newTaskObservers(t) {
     var list = [];
-    [t.headId, t.mentorId, D.HR_ID, deptResponsible(t.departmentId)].forEach(function (id) { if (id && list.indexOf(id) < 0) list.push(id); });
+    [t.headId, t.mentorId, t.hrId, deptResponsible(t.departmentId)].forEach(function (id) { if (id && list.indexOf(id) < 0) list.push(id); });
     return list;
   }
 
@@ -1164,6 +1159,7 @@
   function renderTaskCommandBar(t, all) {
     var lock = editLock(t);
     var sel = selectedTaskIds(t).length;
+    var allCorp = sel > 0 && selectedTaskIds(t).every(function (id) { return corpLocked(taskById(id)); });   // FT_8, п. 4
     var items = [{ value: 'all', text: 'Все ' + all.length, name: 'Все' }].concat(STATUS_VARIANTS.map(function (v) {
       var n = all.filter(function (x) { return taskMatchesFilter(x, v.f); }).length;
       return n ? { value: v.f, text: v.text + ' ' + n, name: v.name, cls: v.cls, risk: v.risk } : null;
@@ -1178,9 +1174,9 @@
       (sel ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
-            menuItem('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего'),
+            menuItemIf('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего', allCorp ? CORP_LOCK_TEXT : ''),
             menuItem('Наблюдатели', 'openDialog', { dialog: 'massObservers' }, 'КнопкаНаблюдатели'),
-            menuItem('Перенести срок', 'openDialog', { dialog: 'massDeadline' }, 'КнопкаПеренестиСрок'),
+            menuItemIf('Перенести срок', 'openDialog', { dialog: 'massDeadline' }, 'КнопкаПеренестиСрок', allCorp ? CORP_LOCK_TEXT : ''),
             '<div class="menu-sep"></div>',
             menuItem('Удалить', 'openDialog', { dialog: 'deleteTasks' }, 'КнопкаУдалитьЗадачи', 'danger-text')
           ], { text: 'Действия с выбранными ▾' }) +
@@ -1191,7 +1187,8 @@
         toggle('ТумблерСтатусЗадач', 'taskFilter', items, state.taskFilter || 'all') +
       '</div>';
   }
-  function canSendToApproval(t) { return t.stage === 'draft' || !!t.changedAfterApproval && (t.stage === 'active' || t.stage === 'closing'); }
+  // FT_8, п. 3: «Отправить на согласование» — только АП, которая ещё ни разу не отправлялась, или возвращённая на доработку (этап «Черновик АП»)
+  function canSendToApproval(t) { return t.stage === 'draft'; }
 
   // Таблица задач (8.4, 5.3–5.4): всегда сгруппирована по блокам
   function renderTaskTable(t, all) {
@@ -1287,8 +1284,8 @@
     var orderReason = lock || (sorted ? 'Сбросьте сортировку, чтобы менять порядок задач' : '');
     return submenu('row:' + x.id, 'КонтекстноеМенюЗадачи', [
       item(lock ? 'Открыть' : 'Изменить', 'openDialog', { dialog: 'task', task: x.id }, 'КонтекстноеМенюЗадачиИзменить'),
-      item('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer', task: x.id }, 'КонтекстноеМенюЗадачиНазначитьПроверяющего', lock),
-      item('Перенести срок', 'openDialog', { dialog: 'massDeadline', task: x.id }, 'КонтекстноеМенюЗадачиПеренестиСрок', lock),
+      item('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer', task: x.id }, 'КонтекстноеМенюЗадачиНазначитьПроверяющего', lock || (corpLocked(x) ? CORP_LOCK_TEXT : '')),
+      item('Перенести срок', 'openDialog', { dialog: 'massDeadline', task: x.id }, 'КонтекстноеМенюЗадачиПеренестиСрок', lock || (corpLocked(x) ? CORP_LOCK_TEXT : '')),
       item('Выше', 'moveTask', { task: x.id, dir: -1 }, 'КонтекстноеМенюЗадачиВыше', orderReason || (idx === 0 ? 'Задача уже первая в блоке' : '')),
       item('Ниже', 'moveTask', { task: x.id, dir: 1 }, 'КонтекстноеМенюЗадачиНиже', orderReason || (idx === siblings.length - 1 ? 'Задача уже последняя в блоке' : '')),
       '<div class="menu-sep"></div>',
@@ -1350,6 +1347,11 @@
     toast('АП создана');
   }
   var newTaskSeq = 1;
+  // FT_8, п. 4: реквизиты задач корпоративного блока меняет только HR-менеджер; руководитель — только наблюдателей.
+  // Добавить задачу в корпоративный блок можно только из шаблона (новая задача и перенос из спец. блока — нельзя)
+  var CORP_LOCK_TEXT = 'Реквизиты задач корпоративного блока изменяет только HR-менеджер';
+  function isHR() { return D.HR_IDS.indexOf(D.CURRENT_USER_ID) >= 0; }
+  function corpLocked(x) { return !!x && x.block === 'corp' && !isHR(); }
   function withObservers(t, s) { s.observerIds = newTaskObservers(t); return s; }
   function newTask(program, s) {
     return {
@@ -1592,23 +1594,34 @@
       }).join('') + '</div>';
   }
 
-  // НЕ_ПЕРЕНОСИТЬ: демо-переключатель этапа выбранного стажёра
+  // НЕ_ПЕРЕНОСИТЬ: демо-переключатели пользователя (FT_8, п. 4) и этапа выбранного стажёра
   function renderDemo() {
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
+    var me = user(D.CURRENT_USER_ID);
     var html = '';
-    if (t && state.demoMenuOpen) {
-      html += '<div class="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоМенюЭтапов') + '>' +
-        STAGES.map(function (s) {
-          return '<button type="button" data-action="demoSetStage" data-stage="' + s.code + '"' +
-            a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоЭтап' + n1c(s.code)) + '>' + (t.stage === s.code ? '● ' : '○ ') + esc(s.title) + '</button>';
-        }).join('') + '</div>';
-    }
     if (state.markup) {
       html += '<span class="markup-flag"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ИндикаторРежимаРазметки') + '>Режим разметки 1С · Shift+D — выключить</span>';
     }
-    html += '<button type="button" class="btn demo-btn" data-action="demoToggle"' +
-      (t ? ' title="Сменить этап: ' + esc(t.fullName) + '"' : ' disabled title="Выберите стажёра, чтобы сменить этап"') +
-      a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '><span>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</span></button>';
+    html += '<div class="demo-host">' +
+      (state.demoUserMenuOpen ? '<div class="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоМенюПользователей') + '>' +
+        [D.CAS_HEAD_ID].concat(D.HR_IDS).map(function (id) {
+          var u = user(id);
+          return '<button type="button" data-action="demoSetUser" data-user="' + id + '"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоПользователь' + (id === D.CAS_HEAD_ID ? 'Руководитель' : 'HR' + (D.HR_IDS.indexOf(id) + 1))) + '>' +
+            (D.CURRENT_USER_ID === id ? '● ' : '○ ') + esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></button>';
+        }).join('') + '</div>' : '') +
+      '<button type="button" class="btn demo-btn" data-action="demoUserToggle" title="' + esc('Текущий пользователь: ' + me.fullName + ' (' + me.role + ')') + '"' +
+        a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаПользователь') + '><span>Демо: ' + esc(me.role) + ' ▾</span></button>' +
+      '</div>';
+    html += '<div class="demo-host">' +
+      (t && state.demoMenuOpen ? '<div class="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоМенюЭтапов') + '>' +
+        STAGES.map(function (s) {
+          return '<button type="button" data-action="demoSetStage" data-stage="' + s.code + '"' +
+            a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоЭтап' + n1c(s.code)) + '>' + (t.stage === s.code ? '● ' : '○ ') + esc(s.title) + '</button>';
+        }).join('') + '</div>' : '') +
+      '<button type="button" class="btn demo-btn" data-action="demoToggle"' +
+        (t ? ' title="Сменить этап: ' + esc(t.fullName) + '"' : ' disabled title="Выберите стажёра, чтобы сменить этап"') +
+        a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '><span>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</span></button>' +
+      '</div>';
     el('demoDock').innerHTML = html;
   }
 
@@ -1691,7 +1704,7 @@
   }
   function inputDate(name, oneC, min) {
     return '<input type="date" class="input" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
-      (min ? ' min="' + min + '"' : '') + (state.dialog.readOnly ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
+      (min ? ' min="' + min + '"' : '') + (state.dialog.readOnly || state.dialog.corpLock ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
   }
   function textarea(name, oneC) {
     return '<textarea class="textarea grow" rows="3" id="f_' + name + '" data-field="' + name + '"' +
@@ -1720,21 +1733,6 @@
         return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросНачатьЗакрытие') + '>Начать закрытие стажировки? Появится вкладка с чек-листом закрытия</p>';
       },
       apply: function (t) { startClosing(t); }
-    },
-    sendToApproval: {
-      title: 'Отправить на согласование', form: 'ФормаОтправкаНаСогласование', submit: 'Отправить на согласование',
-      body: function (t) {
-        return '<p class="dlg-text">Адаптационная программа стажёра ' + esc(t.fullName) + ' будет отправлена на согласование.</p>' +
-          field('Комментарий', textarea('comment', 'ПолеКомментарий'), { forId: 'f_comment' });
-      },
-      apply: function (t, v) {
-        var program = programOf(t);
-        setStage(t, 'approval');
-        t.changedAfterApproval = false;
-        t.rejectionComment = null;
-        addHistory(program, 'АП отправлена на согласование' + (required(v.comment) ? '. Комментарий: «' + v.comment.trim() + '»' : ''));
-        toast('АП отправлена на согласование');
-      }
     },
     // Фаза 11, 5.3: заголовок и кнопка — «Продлить стажировку»
     extend: {
@@ -1848,11 +1846,18 @@
 
   function dlgCtx() { return state.dialog.ctx || {}; }
   function dlgRO() { return !!state.dialog.readOnly; }
-  function ro() { return dlgRO() ? ' disabled' : ''; }
+  function ro() { return dlgRO() || state.dialog.corpLock ? ' disabled' : ''; }
   // Задачи, к которым применяется массовое действие: из строки или выбранные флажками
   function targetTasks(t) {
     var ids = dlgCtx().taskIds || selectedTaskIds(t);
     return ids.map(taskById).filter(Boolean);
+  }
+  // FT_8, п. 4: проверяющий и срок — только у задач, реквизиты которых текущий пользователь может менять
+  function editableTargets(t) { return targetTasks(t).filter(function (x) { return !corpLocked(x); }); }
+  function corpSkipNote(t) {
+    var n = targetTasks(t).length - editableTargets(t).length;
+    return n ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаПропускКорпБлока') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияПропускКорпБлока') + '>' +
+      esc('Задачи корпоративного блока (' + n + ') не изменятся: ' + CORP_LOCK_TEXT.charAt(0).toLowerCase() + CORP_LOCK_TEXT.slice(1) + '.') + '</span></div>' : '';
   }
   function selectOptions(name, oneC, options, attrs) {
     return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + (attrs || '') + ro() +
@@ -1894,7 +1899,7 @@
   // Таблица «Ссылки для ознакомления»: командная панель «Создать» / «Удалить», флажки выбора строк
   function linksTable() {
     var links = state.dialog.values.links;
-    var ro_ = dlgRO();
+    var ro_ = dlgRO() || !!state.dialog.corpLock;
     var sel = links.filter(function (l) { return l.sel; }).length;
     var rows = links.map(function (l, i) {
       return '<tr>' +
@@ -1932,7 +1937,7 @@
       // HR-менеджер и ответственный за подразделение (FT_6)
       if (tt) return { name: tt.name, block: tt.block, description: tt.description, deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
         reviewerId: tt.reviewerId || '', observers: newTaskObservers(t), result: '', type: tt.type, required: tt.required, links: links(tt.links) };
-      if (!x) return { name: '', block: 'corp', description: '', deadline: '', status: 'not_started',
+      if (!x) return { name: '', block: 'spec', description: '', deadline: '', status: 'not_started',
         reviewerId: '', observers: newTaskObservers(t), result: '', type: 'task', required: false, links: [] };
       return { name: x.name, block: x.block, description: x.description, deadline: x.deadline, status: x.status,
         reviewerId: x.reviewerId || '', observers: x.observerIds.slice(), result: x.result || '',
@@ -1946,7 +1951,13 @@
       var note = fromTemplate
         ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблона') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаШаблона') + '>' +
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
-        : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>' : '';
+        : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>'
+        : state.dialog.corpLock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаКорпБлока') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаКорпБлока') + '>' +
+          esc('Задача корпоративного блока: изменить можно только наблюдателей. ' + CORP_LOCK_TEXT + '.') + '</span></div>' : '';
+      // Блок (FT_8): в корпоративный блок задача попадает только из шаблона — у новой задачи и у задачи спец. блока варианта «Корпоративный» нет
+      var curTask = ctx.taskId ? taskById(ctx.taskId) : null;
+      var blockOptions = fromTemplate || (curTask && curTask.block === 'corp')
+        ? [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }] : [{ value: 'spec', text: 'Специальный' }];
       var reviewerId = dlgValue('reviewerId');
       var obs = state.dialog.values.observers;
       var obsText = namesBrief(obs, 2);
@@ -1969,7 +1980,7 @@
           tfField('Проверяющий', '<div class="row gap-2">' +
               (fromTemplate
                 ? '<input type="text" class="input grow" disabled value="' + esc(reviewerId ? userName(reviewerId) : 'Не назначен') + '"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
-                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен'))) +
+                : selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен'), state.dialog.corpLock ? ' title="' + esc(CORP_LOCK_TEXT) + '"' : '')) +
               (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
                 title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
             { forId: 'f_reviewerId' }) +
@@ -1980,7 +1991,7 @@
           tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
         '</div>' +
         '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаБлокСтатус') + '>' +
-          tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block', cls: 'tf-half' }) +
+          tfField('Блок', selectOptions('block', 'ПолеБлок', blockOptions, blockOptions.length === 1 && !dlgRO() ? ' title="Задачи в корпоративный блок добавляются только из шаблона"' : ''), { forId: 'f_block', cls: 'tf-half' }) +
           (fromTemplate ? '<div class="tf-field tf-half"></div>' :
             tfField('Статус', selectOptions('status', 'ПолеСтатус', [
               { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status', cls: 'tf-half' })) +
@@ -2012,6 +2023,11 @@
         links: v.links.filter(function (l) { return required(l.url); }).map(function (l) { return { url: l.url.trim(), comment: (l.comment || '').trim() }; })
       };
       var x = dlgCtx().taskId ? taskById(dlgCtx().taskId) : null;
+      if (corpLocked(x)) {   // FT_8: у задачи корп. блока руководитель меняет только наблюдателей
+        if (!sameList(x.observerIds, spec.observerIds)) { x.observerIds = spec.observerIds; programChanged(t, 'Изменена задача «' + x.name + '»: наблюдатели'); }
+        toast('Задача сохранена');
+        return;
+      }
       if (!x) {
         D.tasks.push(newTask(program, spec));
         delete state.collapsedBlocks[spec.block];   // новая задача видна: её группа раскрывается
@@ -2033,6 +2049,142 @@
       for (var k in spec) x[k] = spec[k];
       if (changed.length) programChanged(t, 'Изменена задача «' + oldName + '»: ' + changed.join(', '));
       toast('Задача сохранена');
+    }
+  };
+
+  /* ---------- Лист согласования АП (FT_8, п. 5) ----------
+   * Маршрут: руководитель стажировки → руководитель подразделения (отдела) → руководитель ЦАС → HR-менеджер (+ добавленные).
+   * Одна форма для отправки (маршрут ещё не стартован) и для просмотра на этапе «Согласование».
+   * Добавлять согласующих можно (в конец маршрута, стрелками — выше/ниже, но не выше текущего шага); удалять нельзя.
+   */
+  var ROUTE_TITLES = { head: 'Согласование руководителем стажировки', dept: 'Согласование руководителем подразделения',
+    cas: 'Утверждение руководителем ЦАС', hr: 'Согласование HR-менеджером', extra: 'Дополнительное согласование' };
+  var ROUTE_ICONS = {
+    approved: { icon: 'check', cls: 'c-success', title: 'Выполнено: согласовано' },
+    rejected: { icon: 'check', cls: 'c-danger', title: 'Выполнено: не согласовано' },
+    skipped:  { icon: 'circleX', cls: 'muted', title: 'Шаг пропущен' },
+    current:  { icon: 'arrowFill', cls: 'c-info', title: 'Задача сейчас у согласующего' }
+  };
+  var ROUTE_STEP_DAYS = 2;   // срок на один шаг согласования, дней
+  function cloneSteps(steps) { return steps.map(function (x) { var y = {}; for (var k in x) y[k] = x[k]; return y; }); }
+  // Подразделение сотрудника для колонки «Сотрудники»: где он ответственный; иначе — роль
+  function userPlace(id) {
+    var d = D.departments.filter(function (x) { return x.responsibleId === id; })[0];
+    return d ? d.name : (user(id) || {}).role || '';
+  }
+  // Первый шаг, который ещё можно двигать: после текущего и выполненных
+  function firstMovable(steps) {
+    var i = steps.length;
+    while (i > 0 && steps[i - 1].status === 'pending') i--;
+    return i;
+  }
+  // Плановые сроки шагов: от начала обработки (или сегодня) по ROUTE_STEP_DAYS на шаг, выполненные — от даты выполнения
+  function routeDeadlines(startedAt, steps) {
+    var cursor = (startedAt || D.TODAY).slice(0, 10);
+    return steps.map(function (x) {
+      var due = addDays(cursor, ROUTE_STEP_DAYS);
+      cursor = x.doneAt && x.status !== 'pending' && x.status !== 'current' ? x.doneAt : due;
+      return due;
+    });
+  }
+  function fmtStamp(iso) { return fmtDate(iso.slice(0, 10)) + (iso.length > 10 ? ' ' + iso.slice(11, 16) : ''); }
+  function approvalBody(t) {
+    var v = state.dialog.values;
+    var ro_ = dlgRO();
+    var dues = routeDeadlines(v.startedAt, v.steps);
+    var from = firstMovable(v.steps);
+    var sel = v.sel;
+    var canMove = sel != null && v.steps[sel] && v.steps[sel].added && !ro_;
+    var rows = v.steps.map(function (x, i) {
+      var st = ROUTE_ICONS[x.status];
+      var name = userName(x.userId) + ' (' + userPlace(x.userId) + ')';
+      var late = x.status === 'current' && dues[i] < D.TODAY;
+      return '<tr class="route-row' + (sel === i ? ' selected' : '') + '" data-action="routeSelect" data-index="' + i + '"' + a1c('ТаблицаФормы', 'ТаблицаМаршрутСтрока') + '>' +
+        '<td><input type="checkbox" data-action="routeSelect" data-index="' + i + '"' + (sel === i ? ' checked' : '') + ' aria-label="Выбрать шаг ' + (i + 1) + '"' + a1c('Флажок', 'ТаблицаМаршрутВыбран') + '></td>' +
+        '<td class="route-status">' + (st ? '<span class="route-ico ' + st.cls + '" title="' + esc(st.title + (x.doneAt ? ' ' + fmtDate(x.doneAt) : '')) + '"' + a1c('Картинка', 'ТаблицаМаршрутСостояние', 'check') + '>' + icon(st.icon) + '</span>' : '') + '</td>' +
+        '<td class="route-action"' + a1c('Надпись', 'ТаблицаМаршрутДействие') + '>' + (i + 1) + '. ' + esc(ROUTE_TITLES[x.role]) + '</td>' +
+        '<td><div class="ellipsis" title="' + esc(name) + '"' + a1c('Надпись', 'ТаблицаМаршрутСотрудник') + '>' + esc(name) + '</div></td>' +
+        '<td class="nowrap' + (late ? ' danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаМаршрутСрок') + '>' + (x.status === 'skipped' ? '' : fmtDate(dues[i])) + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="row route-state"' + a1c('ГруппаГоризонтальная', 'ГруппаСостояниеОбработки') + '>' +
+        '<span class="route-play' + (v.startedAt ? ' c-info' : ' muted') + '"' + a1c('Картинка', 'КартинкаСостояниеОбработки') + '>' + icon('chevronRight') + '</span>' +
+        '<span' + a1c('Надпись', 'ДекорацияСостояниеОбработки') + '>' + (v.finishedAt ? 'Обработка завершена ' + fmtStamp(v.finishedAt) : v.startedAt ? 'Обработка начата ' + fmtStamp(v.startedAt) : 'Обработка не начата') + '</span>' +
+      '</div>' +
+      (ro_ ? '' : '<div class="row command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельМаршрут') + '>' +
+        button('Добавить согласующего', { icon: 'plus', action: 'openApproverPicker', name: 'КнопкаДобавитьСогласующего' }) +
+        button('', { cls: 'btn-icon', icon: 'arrowUp', action: 'routeMove', data: { dir: -1 }, disabled: !canMove || sel <= from,
+          title: canMove ? (sel <= from ? (v.startedAt ? 'Выше текущего согласующего перенести нельзя' : 'Шаг уже первый') : 'Переместить выше') : 'Выберите добавленного согласующего', name: 'КнопкаМаршрутВыше' }) +
+        button('', { cls: 'btn-icon', icon: 'arrowDown', action: 'routeMove', data: { dir: 1 }, disabled: !canMove || sel >= v.steps.length - 1,
+          title: canMove ? (sel >= v.steps.length - 1 ? 'Шаг уже последний' : 'Переместить ниже') : 'Выберите добавленного согласующего', name: 'КнопкаМаршрутНиже' }) +
+        '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияМаршрутПодсказка') + '>Удалять согласующих нельзя; двигать можно только добавленных</span>' +
+      '</div>') +
+      '<div class="table-box"><table class="grid route-table"' + a1c('ТаблицаФормы', 'ТаблицаМаршрут') + '>' +
+        '<colgroup><col class="w-check"><col class="w-status"><col><col class="w-emp"><col class="w-due"></colgroup>' +
+        '<thead><tr><th><input type="checkbox" disabled aria-label="Выбор шагов"' + a1c('Флажок', 'ТаблицаМаршрутВыбратьВсе') + '></th>' +
+        '<th class="route-status" title="Результат"><span class="route-ico c-success">' + icon('check') + '</span></th>' +
+        '<th>Действия</th><th>Сотрудники</th><th>Срок</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+      (v.startedAt || ro_ ? '' : field('Комментарий', textarea('comment', 'ПолеКомментарий'), { forId: 'f_comment' }));
+  }
+  function routeNames(steps) { return steps.map(function (x) { return userName(x.userId); }).join(', '); }
+
+  // Отправка на согласование: маршрут по умолчанию, обработка не начата
+  DIALOGS.sendToApproval = {
+    title: 'Отправить на согласование', form: 'ФормаЛистСогласования', submit: 'Отправить на согласование', xl: true,
+    init: function (t) { return { steps: D.defaultRoute(t), startedAt: null, sel: null, comment: '' }; },
+    body: approvalBody,
+    apply: function (t, v) {
+      var program = programOf(t);
+      var steps = cloneSteps(v.steps).map(function (x, i) { x.status = i ? 'pending' : 'current'; x.doneAt = null; delete x.added; return x; });
+      program.approval = { startedAt: nowStamp(), steps: steps };
+      setStage(t, 'approval');
+      t.rejectionComment = null;
+      addHistory(program, 'АП отправлена на согласование. Маршрут: ' + routeNames(steps) + (required(v.comment) ? '. Комментарий: «' + v.comment.trim() + '»' : ''));
+      toast('АП отправлена на согласование');
+    }
+  };
+  // Лист согласования на этапе «Согласование»: состояние шагов, можно добавить согласующего
+  DIALOGS.approvalSheet = {
+    title: 'Лист согласования', form: 'ФормаЛистСогласования', submit: 'Сохранить', xl: true,
+    init: function (t) {
+      var a = programOf(t).approval;
+      state.dialog.readOnly = t.stage !== 'approval';   // после возврата на доработку — только просмотр завершённой обработки
+      return { steps: cloneSteps(a.steps), startedAt: a.startedAt, finishedAt: a.finishedAt || null, sel: null };
+    },
+    body: approvalBody,
+    // НЕ_ПЕРЕНОСИТЬ: демо — результат текущего шага (согласовано / не согласовано / пропущен)
+    extraFoot: function (t) {
+      if (t.stage !== 'approval') return '';
+      return '<span class="row gap-2"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоРезультатШага') + '>' +
+        ['approved', 'rejected', 'skipped'].map(function (r) {
+          return '<button type="button" class="btn demo-btn" data-action="routeDemo" data-result="' + r + '"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоШаг' + n1c(r)) + '><span>Демо: ' +
+            { approved: 'согласовать', rejected: 'отклонить', skipped: 'пропустить' }[r] + ' шаг</span></button>';
+        }).join('') + '</span>';
+    },
+    apply: function (t, v) {
+      var program = programOf(t);
+      var added = v.steps.filter(function (x) { return x.added; });
+      program.approval.steps = cloneSteps(v.steps).map(function (x) { delete x.added; return x; });
+      if (added.length) {
+        addHistory(program, 'В маршрут согласования ' + (added.length === 1 ? 'добавлен согласующий ' : 'добавлены согласующие ') + routeNames(added));
+        toast(added.length === 1 ? 'Согласующий добавлен' : 'Согласующие добавлены');
+      }
+    }
+  };
+  // Выбор согласующего: добавляется в конец маршрута формы-владельца
+  DIALOGS.approverPicker = {
+    title: 'Добавить согласующего', form: 'ФормаВыборСогласующего', submit: 'Добавить',
+    init: function () { return { userId: '' }; },
+    body: function () {
+      return field('Согласующий', selectOptions('userId', 'ПолеСогласующий', userOptions('Выберите сотрудника')),
+        { required: true, error: state.dialog.errors.userId, forId: 'f_userId', name: 'Согласующий' });
+    },
+    validate: function (t, v) { return required(v.userId) ? {} : { userId: 'Выберите согласующего' }; },
+    apply: function (t, v) {
+      var owner = state.dialogStack[state.dialogStack.length - 1];
+      owner.values.steps.push({ role: 'extra', userId: v.userId, status: 'pending', doneAt: null, added: true });
+      owner.values.sel = owner.values.steps.length - 1;
     }
   };
 
@@ -2069,13 +2221,13 @@
     title: 'Назначить проверяющего', form: 'ФормаНазначитьПроверяющего', submit: 'Назначить',
     init: function (t) { return { userId: '' }; },
     body: function (t) {
-      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
+      return '<p class="dlg-text">Задач: ' + editableTargets(t).length + '</p>' + corpSkipNote(t) +
         field('Проверяющий', selectOptions('userId', 'ПолеПроверяющий', userOptions('Выберите сотрудника')),
           { required: true, error: state.dialog.errors.userId, forId: 'f_userId', name: 'Проверяющий' });
     },
     validate: function (t, v) { return required(v.userId) ? {} : { userId: 'Выберите проверяющего' }; },
     apply: function (t, v) {
-      var list = targetTasks(t);
+      var list = editableTargets(t);
       list.forEach(function (x) { x.reviewerId = v.userId; });
       programChanged(t, 'Назначен проверяющий ' + userName(v.userId) + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
       state.selectedTasks = {};
@@ -2115,7 +2267,7 @@
     init: function () { return { mode: 'days', days: '7', date: '' }; },
     body: function (t) {
       var e = state.dialog.errors;
-      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
+      return '<p class="dlg-text">Задач: ' + editableTargets(t).length + '</p>' + corpSkipNote(t) +
         field('Способ', choice('mode', 'ПолеСпособПереноса', [
           { value: 'days', text: 'На N дней', name: 'НаДни' }, { value: 'date', text: 'На дату', name: 'НаДату' }])) +
         (dlgValue('mode') === 'days'
@@ -2132,7 +2284,7 @@
       return required(v.date) ? {} : { date: 'Укажите новый срок' };
     },
     apply: function (t, v) {
-      var list = targetTasks(t);
+      var list = editableTargets(t);
       list.forEach(function (x) { x.deadline = v.mode === 'days' ? addDays(x.deadline, Number(v.days)) : v.date; });
       var how = v.mode === 'days' ? 'на ' + pluralN(Math.abs(Number(v.days)), W_DAYS) + (Number(v.days) < 0 ? ' раньше' : '') : 'на ' + fmtDate(v.date);
       programChanged(t, 'Перенесён срок ' + how + ': ' + (list.length === 1 ? 'задача «' + list[0].name + '»' : 'задач ' + list.length));
@@ -2279,7 +2431,7 @@
     c.doneBy = done ? D.CURRENT_USER_ID : null;
     c.doneAt = done ? D.TODAY : null;
   }
-  function roleDefaultUser(t, role) { return role === 'head' ? t.headId : role === 'hr' ? D.HR_ID : t.mentorId; }
+  function roleDefaultUser(t, role) { return role === 'head' ? t.headId : role === 'hr' ? t.hrId : t.mentorId; }
 
   // Имитация формы документа «Заявка (0911)»
   DIALOGS.request0911 = {
@@ -2355,7 +2507,7 @@
       return e;
     },
     apply: function (t, v) {
-      var who = v.role === 'head' ? t.headId : v.role === 'hr' ? D.HR_ID : v.role === 'ksh' ? D.KSH_ID : v.role === 'trainee' ? t.id : t.mentorId;
+      var who = v.role === 'head' ? t.headId : v.role === 'hr' ? t.hrId : v.role === 'ksh' ? D.KSH_ID : v.role === 'trainee' ? t.id : t.mentorId;
       D.closureChecklist.push({
         id: 'cc-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: who,
         offsetDays: diffDays(t.endDate, v.date), optional: !!v.optional, done: false, doneBy: null, doneAt: null, linkedDocType: null
@@ -2412,6 +2564,7 @@
     else state.dialogStack = [];
     state.dialog = { type: type, traineeId: traineeId, ctx: ctx, values: {}, errors: {},
       readOnly: type === 'task' && (!!ctx.templateId || (!!lock && !!ctx.taskId)) };
+    state.dialog.corpLock = type === 'task' && !state.dialog.readOnly && !!ctx.taskId && corpLocked(taskById(ctx.taskId));   // FT_8, п. 4
     state.dialog.values = def.init ? def.init(t, ctx) : {};
     render();
     focusFirst();
@@ -2457,7 +2610,8 @@
           button('', { cls: 'btn-icon btn-flat', icon: 'close', title: 'Закрыть', action: 'dialogCancel', name: def.form + 'Закрыть' }) + '</div>' +
         '<div class="modal-body col gap-3">' + def.body(t) + '</div>' +
         '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' +
-          button(readOnly ? 'Закрыть' : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') }) +
+          (def.extraFoot ? def.extraFoot(t) : '') +
+          button(readOnly ? 'Закрыть' : def.submitFn ? def.submitFn() : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') }) +
           (readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' })) +
         '</div></div></div>';
     }).join('');
@@ -2533,7 +2687,53 @@
     toggleHelp: function () { state.helpOpen = !state.helpOpen; render(); },
     openHelp: function () { toast('Инструкция откроется в базе знаний'); },
     toggleAnalytics: function () { state.analyticsOpen = !state.analyticsOpen; renderCenter(); },
-    openApprovalSheet: function () { toast('Откроется лист согласования'); },
+    openApprovalSheet: function () { openDialog('approvalSheet', state.selectedTraineeId); },
+    openApproverPicker: function () { openDialog('approverPicker', state.dialog.traineeId, {}, { stack: true }); },
+    // Лист согласования: выбор строки маршрута и перемещение добавленного согласующего
+    routeSelect: function (el, e) {
+      var v = state.dialog.values; var i = Number(el.getAttribute('data-index'));
+      v.sel = v.sel === i && el.type === 'checkbox' ? null : i;
+      renderDialog();
+    },
+    routeMove: function (btn) {
+      var v = state.dialog.values; var i = v.sel; var j = i + Number(btn.getAttribute('data-dir'));
+      if (i == null || j < firstMovable(v.steps) || j >= v.steps.length || !v.steps[i].added) return;
+      var x = v.steps[i]; v.steps[i] = v.steps[j]; v.steps[j] = x; v.sel = j;
+      renderDialog();
+    },
+    // НЕ_ПЕРЕНОСИТЬ: демо-результат текущего шага согласования
+    routeDemo: function (btn) {
+      var t = trainee(state.selectedTraineeId);
+      var program = programOf(t);
+      var v = state.dialog.values;
+      var i = v.steps.map(function (x) { return x.status; }).indexOf('current');
+      if (i < 0) return;
+      var r = btn.getAttribute('data-result');
+      v.steps[i].status = r; v.steps[i].doneAt = D.TODAY;
+      program.approval.steps = cloneSteps(v.steps).map(function (x) { delete x.added; return x; });
+      var who = userName(v.steps[i].userId);
+      if (r === 'rejected') {
+        t.rejectionComment = 'Доработайте состав задач';
+        program.approval.finishedAt = nowStamp();
+        setStage(t, 'draft');
+        addHistory(program, 'АП возвращена на доработку: ' + who);
+        state.dialog = null; state.dialogStack = [];
+        render(); toast('АП возвращена на доработку');
+        return;
+      }
+      var next = i + 1 < v.steps.length ? i + 1 : -1;
+      if (next >= 0) { v.steps[next].status = 'current'; program.approval.steps[next].status = 'current'; }
+      addHistory(program, (r === 'approved' ? 'Шаг согласован: ' : 'Шаг пропущен: ') + who);
+      if (next < 0) {
+        program.approval.finishedAt = nowStamp();
+        setStage(t, 'active');
+        addHistory(program, 'АП согласована');
+        state.dialog = null; state.dialogStack = [];
+        render(); toast('АП согласована');
+        return;
+      }
+      render();
+    },
     createProgram: function () {
       state.traineeTab = 'program';
       renderCenter();
@@ -2648,7 +2848,15 @@
     },
 
     // НЕ_ПЕРЕНОСИТЬ
-    demoToggle: function () { state.demoMenuOpen = !state.demoMenuOpen; renderDemo(); },
+    demoToggle: function () { state.demoMenuOpen = !state.demoMenuOpen; state.demoUserMenuOpen = false; renderDemo(); },
+    demoUserToggle: function () { state.demoUserMenuOpen = !state.demoUserMenuOpen; state.demoMenuOpen = false; renderDemo(); },
+    // FT_8, п. 4: смена текущего пользователя — руководитель ЦАС или HR-менеджер (права на задачи корпоративного блока, «Мои»)
+    demoSetUser: function (btn) {
+      D.CURRENT_USER_ID = btn.getAttribute('data-user');
+      state.demoUserMenuOpen = false;
+      render();
+      toast('Текущий пользователь: ' + userName(D.CURRENT_USER_ID));
+    },
     demoSetStage: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var code = btn.getAttribute('data-stage');
@@ -2678,7 +2886,7 @@
     }
     var target = e.target.closest('[data-action]');
     if (!target || target.disabled) {
-      if (state.demoMenuOpen && !e.target.closest('#demoDock')) { state.demoMenuOpen = false; renderDemo(); }
+      if ((state.demoMenuOpen || state.demoUserMenuOpen) && !e.target.closest('#demoDock')) { state.demoMenuOpen = false; state.demoUserMenuOpen = false; renderDemo(); }
       return;
     }
     var fn = actions[target.getAttribute('data-action')];
@@ -2819,7 +3027,7 @@
     if (e.key === 'Escape') {
       if (state.dialog) closeDialog();
       else if (state.openMenu) { state.openMenu = null; renderLeft(); renderCenter(); }
-      else if (state.demoMenuOpen) { state.demoMenuOpen = false; renderDemo(); }
+      else if (state.demoMenuOpen || state.demoUserMenuOpen) { state.demoMenuOpen = false; state.demoUserMenuOpen = false; renderDemo(); }
     }
   });
 
