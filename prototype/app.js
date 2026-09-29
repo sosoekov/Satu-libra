@@ -153,7 +153,7 @@
 
   var TONE_ORDER = { danger: 0, warning: 1, info: 2 };
 
-  // Замечания блока аналитики (фаза 11, 5.2). Поля: id, severity, text, shortText (короткий текст для дерева и сводной).
+  // Замечания блока аналитики (фаза 11, 5.2). Поля: id, severity, text. Тот же текст — в дереве и в колонке «Требует действия» сводной (11.7).
   // Порядок: danger → warning → info, внутри уровня — порядок NOTE_IDS (таблица 5.2)
   var NOTE_IDS = ['prep_overdue', 'tasks_overdue', 'closure_overdue', 'no_program', 'draft_stale', 'rejected', 'changed_after_approval', 'lag', 'close_soon', 'closure_ready'];
   function getNotifications(t) {
@@ -166,8 +166,7 @@
     if (clOver > 0) {
       list.push({
         id: 'prep_overdue', severity: 'danger',
-        text: clOver + ' ' + plural(clOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' подготовки к выходу',
-        shortText: 'Просрочено пунктов подготовки: ' + clOver
+        text: clOver + ' ' + plural(clOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' подготовки к выходу'
       });
     }
     if (s === 'active') {
@@ -175,8 +174,7 @@
       if (st && st.overdue > 0) {
         list.push({
           id: 'tasks_overdue', severity: 'danger',
-          text: st.overdue + ' ' + plural(st.overdue, ['просроченная задача', 'просроченные задачи', 'просроченных задач']) + ' адаптационной программы',
-          shortText: 'Просрочено задач: ' + st.overdue
+          text: st.overdue + ' ' + plural(st.overdue, ['просроченная задача', 'просроченные задачи', 'просроченных задач']) + ' адаптационной программы'
         });
       }
     }
@@ -185,8 +183,7 @@
       if (ccOver > 0) {
         list.push({
           id: 'closure_overdue', severity: 'danger',
-          text: ccOver + ' ' + plural(ccOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' закрытия стажировки',
-          shortText: 'Просрочено пунктов закрытия: ' + ccOver
+          text: ccOver + ' ' + plural(ccOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' закрытия стажировки'
         });
       }
     }
@@ -196,38 +193,33 @@
       list.push({
         id: 'no_program', severity: 'warning',
         text: 'Не создана адаптационная программа. ' +
-              (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate)),
-        shortText: 'Создать АП' + (ds > 0 ? ', выход через ' + ds + ' дн.' : ds === 0 ? ', выход сегодня' : '')
+              (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate))
       });
     }
     if (s === 'draft' && t.draftSince && !t.rejectionComment && diffDays(t.draftSince, D.TODAY) >= 2) {
       var dd = diffDays(t.draftSince, D.TODAY);
       list.push({
         id: 'draft_stale', severity: 'warning',
-        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS),
-        shortText: 'Не отправлена на согласование ' + dd + ' дн.'
+        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS)
       });
     }
     // Фаза 11, 5.2: возврат на доработку — warning (красный — только просрочки)
     if (s === 'draft' && t.rejectionComment) {
       list.push({
         id: 'rejected', severity: 'warning',
-        text: 'Адаптационная программа возвращена на доработку: «' + t.rejectionComment + '»',
-        shortText: 'Возвращена на доработку'
+        text: 'Адаптационная программа возвращена на доработку: «' + t.rejectionComment + '»'
       });
     }
     if (t.changedAfterApproval && (s === 'active' || s === 'closing')) {
       list.push({
         id: 'changed_after_approval', severity: 'warning',
-        text: 'Адаптационная программа изменена после согласования',
-        shortText: 'Изменена после согласования'
+        text: 'Адаптационная программа изменена после согласования'
       });
     }
     if (s === 'active' && lag(t)) {
       list.push({
         id: 'lag', severity: 'warning',
-        text: 'Задачи отстают от графика: выполнено ' + statsOf(t).pct + '% при прошедших ' + timePct(t) + '% срока',
-        shortText: 'Отстаёт от графика'
+        text: 'Задачи отстают от графика: выполнено ' + statsOf(t).pct + '% при прошедших ' + timePct(t) + '% срока'
       });
     }
 
@@ -236,15 +228,13 @@
       var de = Math.max(0, daysToEnd(t));
       list.push({
         id: 'close_soon', severity: 'info',
-        text: 'До окончания стажировки ' + pluralN(de, W_DAYS) + ', пора начинать закрытие',
-        shortText: 'До окончания ' + de + ' дн.'
+        text: 'До окончания стажировки ' + pluralN(de, W_DAYS) + ', пора начинать закрытие'
       });
     }
     if (s === 'closing' && closureReady(t)) {
       list.push({
         id: 'closure_ready', severity: 'info',
-        text: 'Все обязательные пункты закрытия выполнены',
-        shortText: 'Можно завершить стажировку'
+        text: 'Все обязательные пункты закрытия выполнены'
       });
     }
 
@@ -548,7 +538,7 @@
   function treeNotification(t) { return getNotifications(t).filter(isAttention)[0] || null; }
   function treeRowTitle(t) {
     var n = treeNotification(t);
-    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.shortText : '');
+    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.text : '');
   }
 
   function renderLeft() {
@@ -648,7 +638,7 @@
                 '<span class="tree-name"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
               '</span>' +
               '<span class="tree-col-status">' +
-                (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.shortText) + '"' +
+                (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.text) + '"' +
                   a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</span>' +
               '<span class="tree-col-count">' + (state.selectedTraineeId === t.id ? '<span class="tree-chevron">' + icon('chevronRight') + '</span>' : '') + '</span></div>');
           });
@@ -723,9 +713,9 @@
     var n = list[0];
     return '<div class="row gap-1 top ' + ACTION_COLORS[n.severity] + '">' +
         '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
-        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.shortText) + '</span></div>' +
+        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.text) + '</span></div>' +
       (list.length > 1 ? '<div class="muted text-s action-more"' + a1c('Надпись', 'ТаблицаСтажеровЕщеУведомлений') + ' title="' +
-        esc(list.slice(1).map(function (x) { return x.shortText; }).join('; ')) + '">ещё ' +
+        esc(list.slice(1).map(function (x) { return x.text; }).join('; ')) + '">ещё ' +
         pluralN(list.length - 1, ['уведомление', 'уведомления', 'уведомлений']) + '</div>' : '');
   }
   // «Задачи»: нет АП / количество задач / полоса с процентом и просрочкой
@@ -878,7 +868,8 @@
     }
     var dep = dept(t.departmentId);
 
-    return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка') + '>' +
+    // Рамка со скруглением у группы формы — data-1c-risk="check" (фаза 11, 8)
+    return '<div class="panel tcard"' + a1c('ГруппаГоризонтальная', 'ГруппаКарточкаСтажераШапка', 'check') + '>' +
       // 1. Аватар; ФИО, подразделение, должность с уровнем
       '<div class="row gap-3 tcard-part tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
         '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
