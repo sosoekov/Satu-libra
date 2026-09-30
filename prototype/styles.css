@@ -820,3 +820,8 @@ table.grid.imp-table td { vertical-align: middle; }
 table.grid.cols-table td { vertical-align: middle; }
 .cols-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); }
 .col-title { width: 100%; }
+/* FT_12: порядок колонок — выделенная строка и стрелки */
+.cols-table .col-row { cursor: pointer; }
+.cols-table .col-row:hover td { background: var(--c-bg-panel); }
+.cols-table .col-row.selected td { background: var(--c-bg-selected); }
+.col-arrow { color: var(--c-primary); }
