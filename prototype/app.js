@@ -282,7 +282,7 @@
     lock: '<rect x="3.5" y="7" width="9" height="6.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/>',
     plus: '<path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
     // FT_10: настройка важности, удаление уровня, флажок важности (заливка)
-    gear: '<circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    gear: '<path d="M13.0 8.5 14.7 9.4 13.7 11.8 11.9 11.2 11.2 11.9 11.8 13.7 9.4 14.7 8.5 13.0 7.5 13.0 6.6 14.7 4.2 13.7 4.8 11.9 4.1 11.2 2.3 11.8 1.3 9.4 3.0 8.5 3.0 7.5 1.3 6.6 2.3 4.2 4.1 4.8 4.8 4.1 4.2 2.3 6.6 1.3 7.5 3.0 8.5 3.0 9.4 1.3 11.8 2.3 11.2 4.1 11.9 4.8 13.7 4.2 14.7 6.6 13.0 7.5Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/>',   // Err_1: классическая шестерёнка (8 зубцов)
     trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9M7 7v4.5M9 7v4.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
     flagFill: '<path d="M3.5 14V2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3.5 3h8l-1.8 3 1.8 3h-8z" fill="currentColor"/>',
     up: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
