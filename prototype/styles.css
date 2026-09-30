@@ -525,7 +525,7 @@ body.markup-1c table[data-1c]::before {
 .summary-row:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; }
 .fio-link { white-space: normal; }
 .summary-table td:first-child { min-width: 150px; }
-.summary-table td:nth-child(4) { min-width: 136px; }
+.summary-table td:nth-child(3) { min-width: 136px; }  /* FT_16: «Требует действия» — третья колонка (без «Подразделения») */
 .action-icon { display: inline-flex; flex: 0 0 16px; padding-top: 1px; }
 .action-more { padding-left: 20px; }
 .task-meter { flex-wrap: nowrap; }
@@ -830,8 +830,6 @@ table.grid.cols-table td { vertical-align: middle; }
 /* ================= FT_14: страницы карточки задачи АП, история выполнения ================= */
 .dlg-tabs { margin: 0 0 var(--sp-1); }
 .dlg-tabs .tab.active { font-weight: var(--fw-bold); }
-.tf-readonly { min-height: 32px; display: flex; align-items: center; padding: 6px 0; }
-.tf-readonly-text { white-space: pre-wrap; align-items: flex-start; line-height: 1.45; }
 .tf-sep { height: 1px; background: var(--c-border); margin: var(--sp-1) 0; }
 .exec-table .w-at { width: 140px; }
 .exec-table .w-who { width: 26%; }
@@ -878,3 +876,14 @@ table.grid.rc-table td { vertical-align: middle; }
 .rc-mark-unplanned { color: var(--c-danger); font-weight: 700; font-size: 16px; }
 .rc-mark-replace { color: var(--c-info); }
 .rc-panel-foot { flex: 0 0 auto; }
+
+/* ================= FT_16: группы подразделений сводной таблицы ================= */
+.summary-table tr.summary-group > td { background: var(--c-bg-panel); height: 32px; padding-top: 0; padding-bottom: 0; vertical-align: middle; }
+.summary-table tr.summary-group:hover > td { background: var(--c-neutral-bg); }
+.summary-table tr.summary-group .muted { font-weight: normal; }
+
+/* ================= FT_16: страница «Выполнение» карточки задачи АП ================= */
+.exec-comment { background: var(--c-bg-panel); color: var(--c-text); }
+.exec-comment::placeholder, .exec-date::placeholder { color: var(--c-text-secondary); }
+.input.exec-date { width: 200px; }
+.task-exec .tf-field { flex: 0 0 auto; }

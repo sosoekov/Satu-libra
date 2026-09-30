@@ -389,6 +389,7 @@
     summarySort: { key: 'action', dir: 1 },  // по умолчанию — по важности главного уведомления
     summaryCurrent: null,        // текущая строка сводной таблицы (одиночный клик, ↑ ↓)
     summaryFocus: false,         // вернуть фокус текущей строке после перерисовки
+    summaryCollapsed: {},        // FT_16: свёрнутые группы подразделений сводной таблицы: {deptId: true}
     analyticsOpen: false,        // блок «Аналитика по адаптационной программе» развёрнут — общий для всех стажёров до перезагрузки
     openMenu: null,              // открытое подменю
     dialog: null,                // открытый диалог (верхний)
@@ -870,18 +871,42 @@
         text + (on ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
     }
 
-    var rows = list.map(function (t) {
-      var d = dept(t.departmentId).name;
-      return '<tr class="summary-row' + (state.summaryCurrent === t.id ? ' selected' : '') + '" tabindex="' + (state.summaryCurrent === t.id || (!state.summaryCurrent && t === list[0]) ? '0' : '-1') + '"' +
+    // FT_16: строки сгруппированы по подразделениям в иерархии, как дерево слева; сортировка — внутри групп, пустые подразделения не выводятся
+    var shown = [];
+    var groups = [];
+    (function walk(nodes, level) {
+      nodes.forEach(function (n) {
+        if (!n.count) return;
+        var open = searchQuery() ? true : !state.summaryCollapsed[n.dept.id];
+        groups.push({ node: n, level: level, open: open });
+        if (!open) return;
+        walk(n.children, level + 1);
+        var own = list.filter(function (t) { return t.departmentId === n.dept.id; });
+        if (own.length) groups.push({ trainees: own, level: level + 1 });
+        shown = shown.concat(own);
+      });
+    })(list.length ? buildTree() : [], 0);
+    if (state.summaryCurrent && !shown.some(function (t) { return t.id === state.summaryCurrent; })) state.summaryCurrent = null;
+    function traineeRow(t) {
+      return '<tr class="summary-row' + (state.summaryCurrent === t.id ? ' selected' : '') + '" tabindex="' + (state.summaryCurrent === t.id || (!state.summaryCurrent && t === shown[0]) ? '0' : '-1') + '"' +
         ' data-action="summaryRow" data-id="' + t.id + '" title="Двойной клик или Enter — открыть карточку стажёра">' +
         '<td>' + link(t.fullName, { cls: 'fio-link', action: 'selectTrainee', data: { id: t.id }, title: 'Открыть карточку стажёра', name: 'ТаблицаСтажеровФИО' }).replace("data-1c-name=\"ТаблицаСтажеровФИО\"", "data-1c-name=\"ТаблицаСтажеровФИО\" data-1c-risk=\"check\"") +
           '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(formatPosition(t)) + '</div></td>' +
-        '<td><div title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаСтажеровПодразделение') + '>' + esc(d) + '</div></td>' +
         '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
         '<td>' + actionCell(t) + '</td>' +
         '<td>' + tasksCell(t) + '</td>' +
         '<td>' + dateCell(t) + '</td>' +
         '</tr>';
+    }
+    var rows = groups.map(function (g) {
+      if (g.trainees) return g.trainees.map(traineeRow).join('');
+      var n = g.node;
+      return '<tr class="group-row summary-group" tabindex="0" data-action="toggleSummaryDept" data-dept="' + n.dept.id + '"' +
+        ' title="' + esc(deptPath({ departmentId: n.dept.id }) + (searchQuery() ? '' : '. ' + (g.open ? 'Свернуть группу' : 'Развернуть группу'))) + '"' +
+        ' aria-expanded="' + g.open + '"' + a1c('ТаблицаФормы', 'ТаблицаСтажеровГруппаПодразделение', 'check') + '>' +
+        '<td colspan="5"><span class="row gap-1" style="padding-left:' + g.level * 16 + 'px">' + icon(g.open ? 'chevronDown' : 'chevronRight') +
+          '<b' + a1c('Надпись', 'ТаблицаСтажеровГруппаПодразделениеНаименование') + '>' + esc(n.dept.name) + '</b>' +
+          '<span class="muted"' + a1c('Надпись', 'ТаблицаСтажеровГруппаПодразделениеКоличество') + '>' + n.count + '</span></span></td></tr>';
     }).join('');
 
     var total = myTrainees().length;
@@ -907,7 +932,7 @@
       (list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
-        '<thead><tr>' + th('Стажёр') + th('Подразделение') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
+        '<thead><tr>' + th('Стажёр') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>'
         : emptyFilterState('Сводка')) +
       '</div>';
@@ -1497,7 +1522,7 @@
   function withObservers(t, s) { s.observerIds = newTaskObservers(t); return s; }
   function newTask(program, s) {
     return {
-      id: 'task-new-' + (newTaskSeq++), programId: program.id, block: s.block, name: s.name, description: s.description || '',
+      id: 'task-new-' + (newTaskSeq++), programId: program.id, block: s.block, name: s.name, description: s.description || '', criteria: s.criteria || '',
       status: s.status || 'not_started', deadline: s.deadline, reviewerId: s.reviewerId || null,
       observerIds: s.observerIds || [], result: s.result || null, externalUrl: 'forus-team:task/new',
       type: s.type || 'task', required: !!s.required,
@@ -2980,10 +3005,11 @@
         '<td' + a1c('Надпись', 'ТаблицаИсторияВыполненияКомментарий') + '>' + esc(h.comment || '') + '</td></tr>';
     }).join('');
     return '<div class="col gap-3 task-exec"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаВыполнение') + '>' +
-      tfField('Комментарий стажёра к выполнению', '<div class="tf-readonly tf-readonly-text' + (x.result ? '' : ' muted') + '"' + a1c('Надпись', 'ДекорацияКомментарийСтажера') + '>' +
-        esc(x.result || 'Стажёр не оставил комментарий') + '</div>') +
-      tfField('Фактическая дата выполнения', '<div class="tf-readonly' + (doneNow && x.doneAt ? '' : ' muted') + '"' + a1c('Надпись', 'ДекорацияФактическаяДатаВыполнения') + '>' +
-        (doneNow && x.doneAt ? fmtStamp(x.doneAt) : 'Задача ещё не выполнена') + '</div>') +
+      // FT_16: поля только для просмотра — комментарий многострочным полем, дата — полем ввода; пусто — подсказка в поле
+      tfField('Комментарий стажёра к выполнению', '<textarea class="textarea tf-textarea exec-comment" rows="5" id="f_execComment" readonly tabindex="-1"' +
+        ' placeholder="Стажёр не оставил комментарий"' + a1c('ПолеВвода', 'ПолеКомментарийСтажера') + '>' + esc(x.result || '') + '</textarea>', { forId: 'f_execComment' }) +
+      tfField('Фактическая дата выполнения', '<input type="text" class="input exec-date" id="f_execDate" readonly value="' + (doneNow && x.doneAt ? fmtStamp(x.doneAt) : '') + '"' +
+        ' placeholder="Задача ещё не выполнена"' + a1c('ПолеВвода', 'ПолеФактическаяДатаВыполнения') + '>', { forId: 'f_execDate' }) +
       '<div class="tf-sep"></div>' +
       '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияИсторияВыполнения') + '>История выполнения</div>' +
       '<div class="table-box"><table class="grid exec-table"' + a1c('ТаблицаФормы', 'ТаблицаИсторияВыполнения') + '>' +
@@ -3002,11 +3028,11 @@
       var links = function (list) { return (list || []).map(function (l) { return { url: l.url, comment: l.comment, sel: false }; }); };
       // Новая задача и задача шаблона: проверяющий — из шаблона (если есть), наблюдатели — руководитель стажировки, наставник,
       // HR-менеджер и ответственный за подразделение (FT_6)
-      if (tt) return { name: tt.name, block: tt.block, description: tt.description, deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
+      if (tt) return { name: tt.name, block: tt.block, description: tt.description, criteria: tt.criteria || '', deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
         reviewerId: tt.reviewerId || '', observers: newTaskObservers(t), result: '', type: tt.type, required: tt.required, links: links(tt.links) };
-      if (!x) return { name: '', block: 'spec', description: '', deadline: '', status: 'not_started',
+      if (!x) return { name: '', block: 'spec', description: '', criteria: '', deadline: '', status: 'not_started',
         reviewerId: '', observers: newTaskObservers(t), result: '', type: 'task', required: false, links: [] };
-      return { name: x.name, block: x.block, description: x.description, deadline: x.deadline, status: x.status,
+      return { name: x.name, block: x.block, description: x.description, criteria: x.criteria || '', deadline: x.deadline, status: x.status,
         reviewerId: x.reviewerId || '', observers: x.observerIds.slice(), result: x.result || '',
         type: x.type || 'task', required: !!x.required, links: links(x.links), tab: 'task' };   // FT_14: страница карточки «Задача» / «Выполнение»
     },
@@ -3072,9 +3098,15 @@
           '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
             a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
         '</div>' +
-        tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="6" id="f_description" data-field="description"' + ro() +
-          a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
-        // FT_14: результат выполнения — комментарий стажёра на странице «Выполнение», в основной части его нет
+        // FT_16: справа от описания — «Результат выполнения»: критерии, по которым проверяющий принимает задачу.
+        // Комментарий стажёра к выполнению — на странице «Выполнение» (FT_14)
+        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаОписаниеРезультат') + '>' +
+          tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="6" id="f_description" data-field="description"' + ro() +
+            a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
+          tfField('Результат выполнения', '<textarea class="textarea tf-textarea" rows="6" id="f_criteria" data-field="criteria"' + ro() +
+            ' placeholder="' + (dlgRO() || state.dialog.corpLock ? '' : 'Критерии, по которым проверяющий примет задачу') + '"' +
+            ' title="Критерии приёмки: по ним проверяющий принимает задачу"' + a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('criteria')) + '</textarea>', { forId: 'f_criteria' }) +
+        '</div>' +
         '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаСсылки') + '>' + linksTable() + '</div>' +
         '</div>';
     },
@@ -3088,7 +3120,7 @@
     apply: function (t, v) {
       var program = programOf(t);
       var spec = {
-        name: v.name.trim(), block: v.block, description: (v.description || '').trim(), deadline: v.deadline, status: v.status,
+        name: v.name.trim(), block: v.block, description: (v.description || '').trim(), criteria: (v.criteria || '').trim(), deadline: v.deadline, status: v.status,
         reviewerId: v.reviewerId || null, observerIds: v.observers.slice(), result: required(v.result) ? v.result.trim() : null,   // FT_14: в форме не меняется
         type: v.type, required: !!v.required,
         links: v.links.filter(function (l) { return required(l.url); }).map(function (l) { return { url: l.url.trim(), comment: (l.comment || '').trim() }; })
@@ -3107,7 +3139,7 @@
         return;
       }
       // Изменением АП считаются наименование, срок, блок, тип, обязательность, проверяющий и наблюдатели;
-      // статус, результат, описание и ссылки — нет
+      // статус, комментарий стажёра, описание, результат выполнения (FT_16) и ссылки — нет
       var changed = [];
       if (x.name !== spec.name) changed.push('наименование');
       if (x.deadline !== spec.deadline) changed.push('срок ' + fmtDate(x.deadline) + ' → ' + fmtDate(spec.deadline));
@@ -3431,7 +3463,7 @@
   }
   function templateTasksFor(t, tp) {
     return tp.tasks.map(function (x) {
-      return { block: x.block, name: x.name, description: x.description, deadline: addDays(t.startDate, x.offsetDays),
+      return { block: x.block, name: x.name, description: x.description, criteria: x.criteria || '', deadline: addDays(t.startDate, x.offsetDays),
         type: x.type, required: x.required, links: x.links, reviewerId: x.reviewerId || null };  // проверяющий — из шаблона, если есть
     });
   }
@@ -3475,7 +3507,7 @@
     apply: function (t, v) {
       var src = trainee(v.source);
       var specs = tasksOf(programOf(src)).map(function (x) {
-        return { block: x.block, name: x.name, description: x.description, reviewerId: x.reviewerId || null,
+        return { block: x.block, name: x.name, description: x.description, criteria: x.criteria || '', reviewerId: x.reviewerId || null,
           deadline: addDays(t.startDate, diffDays(src.startDate, x.deadline)), type: x.type, required: x.required, links: x.links };
       });
       createProgram(t, programOf(src).templateId, 'АП создана копированием у стажёра ' + src.fullName, specs);
@@ -4035,6 +4067,15 @@
     },
 
     // Сводная таблица
+    // FT_16: группа подразделения сводной таблицы. При поиске группы раскрыты, как в дереве
+    toggleSummaryDept: function (row) {
+      if (searchQuery()) return;
+      var id = row.getAttribute('data-dept');
+      state.summaryCollapsed[id] = !state.summaryCollapsed[id];
+      renderCenter();
+      var r = el('centerZone').querySelector('.summary-group[data-dept="' + id + '"]');
+      if (r) r.focus();
+    },
     summaryRow: function (row, e) {
       if (e.target.closest('button')) return;
       state.summaryCurrent = row.getAttribute('data-id');
@@ -4551,6 +4592,7 @@
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         var next = e.key === 'ArrowDown' ? t.nextElementSibling : t.previousElementSibling;
+        while (next && !next.classList.contains('summary-row')) next = e.key === 'ArrowDown' ? next.nextElementSibling : next.previousElementSibling;   // FT_16: строки групп пропускаются
         state.summaryCurrent = (next || t).getAttribute('data-id');
         renderSummaryCurrent(true);
         return;
