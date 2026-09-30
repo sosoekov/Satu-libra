@@ -92,8 +92,9 @@
   function totalDays(t) { return diffDays(t.startDate, t.endDate) + 1; }
   function dayNo(t) { return clamp(diffDays(t.startDate, D.TODAY) + 1, 0, totalDays(t)); }
   function timePct(t) { return Math.round(dayNo(t) / totalDays(t) * 100); }
-  function daysToStart(t) { return diffDays(D.TODAY, t.startDate); }
-  function daysToEnd(t) { return diffDays(D.TODAY, t.endDate); }
+  // FT_13: без даты выхода / окончания — null
+  function daysToStart(t) { return t.startDate ? diffDays(D.TODAY, t.startDate) : null; }
+  function daysToEnd(t) { return t.endDate ? diffDays(D.TODAY, t.endDate) : null; }
 
   // Сводка по задачам АП: выполнено / в работе / просрочено / не начато. Просроченная считается только в «просрочено».
   function taskStats(list) {
@@ -118,8 +119,9 @@
     return timePct(t) - p > D.LAG_THRESHOLD;
   }
 
-  function checklistDate(item) { return addDays(trainee(item.traineeId).startDate, item.offsetDays); }
-  function checklistOverdue(item) { return !item.done && checklistDate(item) < D.TODAY; }
+  // FT_13: без даты выхода срок пункта не определён (null), просрочки нет
+  function checklistDate(item) { var s = trainee(item.traineeId).startDate; return s ? addDays(s, item.offsetDays) : null; }
+  function checklistOverdue(item) { var d = checklistDate(item); return !item.done && !!d && d < D.TODAY; }
   // Чек-лист закрытия (фаза 10, 5.2): срок — от даты окончания стажировки
   function closureOf(t) { return D.closureChecklist.filter(function (c) { return c.traineeId === t.id; }); }
   function closureDate(item) { return addDays(trainee(item.traineeId).endDate, item.offsetDays); }
@@ -157,82 +159,63 @@
 
   // Замечания блока аналитики (фаза 11, 5.2). Поля: id, severity, text. Тот же текст — в дереве и в колонке «Требует действия» сводной (11.7).
   // Порядок: danger → warning → info, внутри уровня — порядок NOTE_IDS (таблица 5.2)
-  var NOTE_IDS = ['prep_overdue', 'tasks_overdue', 'closure_overdue', 'no_program', 'draft_stale', 'rejected', 'lag', 'close_soon', 'closure_ready'];
+  // FT_13: единый набор замечаний (колонка «Требует действия», блок аналитики, дерево, фильтр «Требуют внимания», уведомления)
+  var NOTE_IDS = ['no_program', 'prep_overdue', 'closure_overdue', 'close_soon', 'not_sent', 'tasks_overdue', 'approval_days', 'close_later'];
+  var CLOSE_RED_DAYS = 7;     // «Закрытие стажировки через N дней» — красное, если осталось меньше недели
+  var CLOSE_INFO_DAYS = 21;   // синее — от недели до трёх недель
+  // Просрочку задач стажёра видят наставник, руководитель стажировки и HR-менеджер этого стажёра (и сам стажёр — FT_9)
+  function seesTaskOverdue(t) {
+    var me = D.CURRENT_USER_ID;
+    return me === t.mentorId || me === t.headId || me === t.hrId || me === t.id;
+  }
+  function closeText(de, t) {
+    return de > 0 ? 'Закрытие стажировки через ' + pluralN(de, W_DAYS) : de === 0 ? 'Закрытие стажировки сегодня' : 'Срок стажировки истёк ' + fmtDate(t.endDate);
+  }
   function getNotifications(t) {
     var list = [];
     var s = t.stage;
     var program = programOf(t);
     if (s === 'closed') return list;
 
+    // Красные: не создана АП, просрочены пункты чек-листов, закрытие меньше чем через неделю
+    if (s === 'found' && !program) list.push({ id: 'no_program', severity: 'danger', text: 'Не создана АП' });
     var clOver = checklistOf(t).filter(checklistOverdue).length;
     if (clOver > 0) {
-      list.push({
-        id: 'prep_overdue', severity: 'danger',
-        text: clOver + ' ' + plural(clOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' подготовки к выходу'
-      });
-    }
-    if (s === 'active') {
-      var st = statsOf(t);
-      if (st && st.overdue > 0) {
-        list.push({
-          id: 'tasks_overdue', severity: 'danger',
-          text: st.overdue + ' ' + plural(st.overdue, ['просроченная задача', 'просроченные задачи', 'просроченных задач']) + ' адаптационной программы'
-        });
-      }
+      list.push({ id: 'prep_overdue', severity: 'danger',
+        text: (clOver === 1 ? 'Просрочен пункт' : 'Просрочены пункты') + ' подготовки к выходу (' + clOver + ')' });
     }
     if (s === 'closing') {
       var ccOver = closureOf(t).filter(closureOverdue).length;
       if (ccOver > 0) {
-        list.push({
-          id: 'closure_overdue', severity: 'danger',
-          text: ccOver + ' ' + plural(ccOver, ['просроченный пункт', 'просроченных пункта', 'просроченных пунктов']) + ' закрытия стажировки'
-        });
+        list.push({ id: 'closure_overdue', severity: 'danger',
+          text: (ccOver === 1 ? 'Просрочен пункт' : 'Просрочены пункты') + ' закрытия стажировки (' + ccOver + ')' });
+      }
+    }
+    var de = t.endDate ? daysToEnd(t) : null;
+    var running = s === 'active' || s === 'closing';
+    if (running && de !== null && de < CLOSE_RED_DAYS) list.push({ id: 'close_soon', severity: 'danger', text: closeText(de, t) });
+
+    // Жёлтые: АП не отправлена на согласование; просрочка задач стажёра — только наставнику, руководителю стажировки, HR стажёра
+    if (s === 'draft') {
+      list.push({ id: 'not_sent', severity: 'warning', text: 'АП не отправлена на согласование',
+        hint: t.rejectionComment ? 'Возвращена на доработку: «' + t.rejectionComment + '»' : '' });
+    }
+    if (running && seesTaskOverdue(t)) {
+      var st = statsOf(t);
+      if (st && st.overdue > 0) {
+        list.push({ id: 'tasks_overdue', severity: 'warning',
+          text: (D.CURRENT_USER_ID === t.id ? '' : 'Стажёром ') + plural(st.overdue, ['просрочена', 'просрочены', 'просрочено']) + ' ' +
+            pluralN(st.overdue, ['задача', 'задачи', 'задач']) });
+        if (D.CURRENT_USER_ID === t.id) list[list.length - 1].text = upperFirst(list[list.length - 1].text);
       }
     }
 
-    if (s === 'found' && !program) {
-      var ds = daysToStart(t);
-      list.push({
-        id: 'no_program', severity: 'warning',
-        text: 'Не создана адаптационная программа. ' +
-              (ds > 0 ? 'Выход через ' + pluralN(ds, W_DAYS) : ds === 0 ? 'Выход сегодня' : 'Стажёр вышел ' + fmtDate(t.startDate))
-      });
+    // Синие: АП на согласовании N дней; закрытие через 1–3 недели
+    if (s === 'approval') {
+      var da = diffDays(t.stageDates.approval || D.TODAY, D.TODAY);
+      list.push({ id: 'approval_days', severity: 'info', text: da > 0 ? 'АП на согласовании ' + pluralN(da, W_DAYS) : 'АП на согласовании с сегодняшнего дня' });
     }
-    if (s === 'draft' && t.draftSince && !t.rejectionComment && diffDays(t.draftSince, D.TODAY) >= 2) {
-      var dd = diffDays(t.draftSince, D.TODAY);
-      list.push({
-        id: 'draft_stale', severity: 'warning',
-        text: 'Адаптационная программа не отправлена на согласование уже ' + pluralN(dd, W_DAYS)
-      });
-    }
-    // Фаза 11, 5.2: возврат на доработку — warning (красный — только просрочки)
-    if (s === 'draft' && t.rejectionComment) {
-      list.push({
-        id: 'rejected', severity: 'warning',
-        text: 'Адаптационная программа возвращена на доработку: «' + t.rejectionComment + '»'
-      });
-    }
-    if (s === 'active' && lag(t)) {
-      list.push({
-        id: 'lag', severity: 'warning',
-        text: 'Задачи отстают от графика: выполнено ' + statsOf(t).pct + '% при прошедших ' + timePct(t) + '% срока'
-      });
-    }
-
-    // Фаза 11, 5.2: «пора начинать закрытие» — только этап active с ≤ CLOSE_AVAILABLE_DAYS дней до окончания
-    if (closeSoon(t)) {
-      var de = Math.max(0, daysToEnd(t));
-      list.push({
-        id: 'close_soon', severity: 'info',
-        text: 'До окончания стажировки ' + pluralN(de, W_DAYS) + ', пора начинать закрытие'
-      });
-    }
-    if (s === 'closing' && closureReady(t)) {
-      list.push({
-        id: 'closure_ready', severity: 'info',
-        text: 'Все обязательные пункты закрытия выполнены'
-      });
-    }
+    if (running && de !== null && de >= CLOSE_RED_DAYS && de <= CLOSE_INFO_DAYS) list.push({ id: 'close_later', severity: 'info', text: closeText(de, t) });
 
     return list.sort(function (a, b) {
       return TONE_ORDER[a.severity] - TONE_ORDER[b.severity] || NOTE_IDS.indexOf(a.id) - NOTE_IDS.indexOf(b.id);
@@ -586,7 +569,7 @@
    * --------------------------------------------------------------------- */
 
   // Скоро окончание: этап active и до окончания ≤ CLOSE_AVAILABLE_DAYS дней (фаза 11, 3.2)
-  function closeSoon(t) { return t.stage === 'active' && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS; }
+  function closeSoon(t) { return t.stage === 'active' && !!t.endDate && daysToEnd(t) <= D.CLOSE_AVAILABLE_DAYS; }
 
   // Фильтры левой панели (фаза 11, 3.2; FT_8: без «Просроченные»): плоский список, взаимоисключающие, активен максимум один.
   // Разделитель — после «Требуют внимания» (sepAfter)
@@ -809,6 +792,7 @@
   function actionRank(t) { var n = getNotifications(t)[0]; return n ? TONE_RANK[n.severity] : 3; }
   // Дата колонки «Срок»: выход — для found, дата закрытия — для closed, иначе окончание
   function summaryDate(t) {
+    if (!t.startDate) return '9999-12-31';   // FT_13: дата выхода не назначена — в конце по сроку
     if (t.stage === 'found') return t.startDate;
     if (t.stage === 'closed') return t.closedAt || t.endDate;
     return t.endDate;
@@ -818,7 +802,7 @@
     stage: function (t) { return stageIndex(t.stage); },
     action: null, // как по умолчанию
     tasks: function (t) { var p = taskPct(t); return p === null ? -1 : p; },
-    deadline: function (t) { return t.endDate; } // по дате окончания стажировки
+    deadline: function (t) { return t.endDate || '9999-12-31'; } // по дате окончания стажировки; без даты — в конце
   };
   function sortedSummary() {
     var list = visibleTrainees().slice();
@@ -834,40 +818,38 @@
   function deptPath(t) { return deptChain(t.departmentId).map(function (d) { return d.name; }).reverse().join(' / '); }
 
   // «Требует действия»: иконка и короткий текст главного уведомления, «ещё N»
-  var ACTION_COLORS = { danger: 'c-danger', warning: 'c-warning', info: 'muted' };
+  var ACTION_COLORS = { danger: 'c-danger', warning: 'c-warning', info: 'c-info' };   // FT_13: синие — со значком «i»
   function actionCell(t) {
     var list = getNotifications(t);
     if (!list.length) return '';
     var n = list[0];
     return '<div class="row gap-1 top ' + ACTION_COLORS[n.severity] + '">' +
         '<span class="action-icon"' + a1c('Картинка', 'ТаблицаСтажеровЗначокДействия') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' +
-        '<span' + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.text) + '</span></div>' +
+        '<span' + (n.hint ? ' title="' + esc(n.hint) + '"' : '') + a1c('Надпись', 'ТаблицаСтажеровТребуетДействия') + '>' + esc(n.text) + '</span></div>' +
       (list.length > 1 ? '<div class="muted text-s action-more"' + a1c('Надпись', 'ТаблицаСтажеровЕщеУведомлений') + ' title="' +
         esc(list.slice(1).map(function (x) { return x.text; }).join('; ')) + '">ещё ' +
         pluralN(list.length - 1, ['уведомление', 'уведомления', 'уведомлений']) + '</div>' : '');
   }
-  // «Задачи»: нет АП / количество задач / полоса с процентом и просрочкой
+  // FT_13, «Задачи»: «Нет АП»; иначе полоса и «X из N». До выхода стажёра (или без даты выхода) — «0 из N». Просрочки здесь нет
   function tasksCell(t) {
     var st = statsOf(t);
-    if (!st) return '<span class="muted"' + a1c('Надпись', 'ТаблицаСтажеровНетАП') + '>АП нет</span>';
-    if (['found', 'draft', 'approval'].indexOf(t.stage) >= 0) {
-      return '<span' + a1c('Надпись', 'ТаблицаСтажеровКоличествоЗадач') + '>' + pluralN(st.total, ['задача', 'задачи', 'задач']) + '</span>';
-    }
-    var late = lag(t);
-    return '<div class="row gap-1 task-meter" title="' + esc('Выполнено ' + st.done + ' из ' + st.total + (late ? '. Отстаёт от графика' : '')) + '">' +
-        '<div class="indicator' + (late ? ' warning' : '') + '"' + a1c('Индикатор', 'ТаблицаСтажеровИндикаторЗадач', 'check') + '>' +
-          '<span style="width:' + st.pct + '%"></span></div>' +
-        '<span' + a1c('Надпись', 'ТаблицаСтажеровПроцентЗадач') + '>' + st.pct + '%</span></div>' +
-      (st.overdue ? '<div class="text-s c-danger"' + a1c('Надпись', 'ТаблицаСтажеровПросроченоЗадач') + '>' + st.overdue + ' просроч.</div>' : '');
+    if (!st) return '<span class="muted"' + a1c('Надпись', 'ТаблицаСтажеровНетАП') + '>Нет АП</span>';
+    var done = !t.startDate || t.startDate > D.TODAY ? 0 : st.done;
+    var pct = st.total ? Math.round(done / st.total * 100) : 0;
+    return '<div class="row gap-2 task-meter" title="' + esc('Выполнено ' + done + ' из ' + st.total) + '">' +
+        '<div class="indicator"' + a1c('Индикатор', 'ТаблицаСтажеровИндикаторЗадач', 'check') + '><span style="width:' + pct + '%"></span></div>' +
+        '<span class="nowrap"' + a1c('Надпись', 'ТаблицаСтажеровВыполненоЗадач') + '>' + done + ' из ' + st.total + '</span></div>';
   }
-  // «Срок»: дата и «через N дн.», если до неё не больше CLOSE_AVAILABLE_DAYS
+  // FT_13, «Срок»: «Дата выхода не назначена» / «Дата выхода ДД.ММ.ГГ (через N дней)» / «Стажировка до ДД.ММ.ГГ»; закрытая — «Закрыта ДД.ММ.ГГ»
   function dateCell(t) {
-    var d = summaryDate(t);
-    var text = t.stage === 'found' ? 'Выход ' : t.stage === 'closed' ? 'закрыта ' : 'до ';
-    var days = diffDays(D.TODAY, d);
-    return '<div' + a1c('Надпись', 'ТаблицаСтажеровСрок') + '>' + text + fmtDate(d) + '</div>' +
-      (t.stage !== 'closed' && days >= 0 && days <= D.CLOSE_AVAILABLE_DAYS
-        ? '<div class="text-s c-warning"' + a1c('Надпись', 'ТаблицаСтажеровЧерез') + '>' + (days ? 'через ' + days + ' дн.' : 'сегодня') + '</div>' : '');
+    var text;
+    if (t.stage === 'closed') text = 'Закрыта ' + fmtDate(t.closedAt || t.endDate);
+    else if (!t.startDate) text = 'Дата выхода не назначена';
+    else if (t.startDate > D.TODAY) {
+      var ds = daysToStart(t);
+      text = 'Дата выхода ' + fmtDate(t.startDate) + ' <span class="nowrap">(через ' + pluralN(ds, W_DAYS) + ')</span>';
+    } else text = 'Стажировка до ' + fmtDate(t.endDate);
+    return '<div' + (t.startDate ? '' : ' class="muted"') + a1c('Надпись', 'ТаблицаСтажеровСрок') + '>' + text + '</div>';
   }
 
   function renderSummary() {
@@ -893,7 +875,7 @@
         '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
         '<td>' + actionCell(t) + '</td>' +
         '<td>' + tasksCell(t) + '</td>' +
-        '<td class="nowrap">' + dateCell(t) + '</td>' +
+        '<td>' + dateCell(t) + '</td>' +
         '</tr>';
     }).join('');
 
@@ -985,6 +967,8 @@
       var result = t.closeKind === 'passed' ? 'Результат: пройдена' : t.closeKind === 'failed' ? 'Результат: не пройдена' : '';
       line2 = '<span' + (result ? ' title="' + result + '"' : '') + a1c('Надпись', 'ДекорацияСтажировкаЗакрыта') + '>' +
         (t.closeKind === 'cancelled' ? 'Стажировка отменена ' : 'Стажировка закрыта ') + fmtDate(t.closedAt) + '</span>';
+    } else if (!t.startDate) {   // FT_13
+      line2 = '<span class="bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>Дата выхода не назначена</span>';
     } else if (t.stage === 'found' || daysToStart(t) > 0) {
       var ds = daysToStart(t);
       line2 = '<span class="bold"' + a1c('Надпись', 'ДекорацияВыходЧерез') + '>' +
@@ -993,7 +977,6 @@
       var de = daysToEnd(t);
       line2 = '<span' + a1c('Надпись', 'ДекорацияДоЗакрытия') + ' title="' + esc('день ' + dayNo(t) + ' из ' + totalDays(t)) + '">' +
         (de >= 0 ? 'До закрытия: ' + pluralN(de, W_DAYS) : 'Срок окончания прошёл ' + fmtDate(t.endDate)) + '</span>';
-      if (lag(t)) line3 = '<div class="tcard-line tcard-indent c-warning"' + a1c('Надпись', 'ДекорацияОтклонениеОтГрафика') + '>Задачи отстают от графика</div>';
     }
     var dep = dept(t.departmentId);
 
@@ -1018,7 +1001,7 @@
       '<div class="col gap-0 tcard-part tcard-dates"' + a1c('ГруппаВертикальная', 'ГруппаСроки') + '>' +
         '<div class="row tcard-line tcard-term"><span class="tcard-ico"' + a1c('Картинка', 'КартинкаДатыСтажировки') + '>' + icon('calendar') + '</span>' +
           '<span class="muted"' + a1c('Надпись', 'ДекорацияЗаголовокДаты') + '>Даты стажировки</span>' +
-          '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) + '</span></div>' +
+          '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + (t.startDate ? fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) : 'не назначены') + '</span></div>' +
         '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаСрок') + '><span class="tcard-ico"' + a1c('Картинка', 'КартинкаСрок') + '>' + icon('clock') + '</span>' + line2 + '</div>' +
         line3 +
       '</div>' +
@@ -1058,7 +1041,7 @@
     var list = [];
     var s = t.stage;
     if (s === 'closed') return list;
-    if (!programOf(t)) list.push({ text: 'Создать АП', main: true, action: 'createProgram', name: 'КнопкаСоздатьАП' });
+    if (!programOf(t) && t.startDate) list.push({ text: 'Создать АП', main: true, action: 'createProgram', name: 'КнопкаСоздатьАП' });   // FT_13: без даты выхода — нельзя
     if (programOf(t) && canSendToApproval(t)) list.push({ text: 'Отправить на согласование', main: true, action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' });
     if (closeSoon(t)) list.push({ text: 'Начать закрытие стажировки', main: true, action: 'openDialog', data: { dialog: 'startClosing' }, name: 'КнопкаНачатьЗакрытиеСтажировки' });
     // FT_8, п. 5: лист согласования — на согласовании и после возврата на доработку (только просмотр прошлого маршрута)
@@ -1449,6 +1432,11 @@
     if (isClosed(t)) {
       return '<div class="empty"' + a1c('Надпись', 'ДекорацияАПНеСоздавалась') + '>Адаптационная программа не создавалась</div>';
     }
+    if (!t.startDate) {   // FT_13: сроки задач АП считаются от даты выхода — без неё создать АП нельзя
+      return '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаАПНетДатыВыхода') + '>' +
+        '<span class="h-block"' + a1c('Надпись', 'ДекорацияАПНеСозданаНетДаты') + '>Адаптационная программа ещё не создана</span>' +
+        '<span' + a1c('Надпись', 'ДекорацияАПНетДатыВыхода') + '>Дата выхода стажёра не назначена. Сроки задач считаются от даты выхода — АП можно будет создать после её назначения.</span></div>';
+    }
     var rec = recommendedTemplate(t);
     var ds = daysToStart(t);
     function option(title, text, extra, btnText, dialog, name) {
@@ -1555,7 +1543,8 @@
       '<span class="muted"' + a1c('Надпись', 'ДекорацияЗапретИзмененияПодготовки') + '>' + esc(lock) + '</span></div>' : '';
     // Фаза 11, 7.1: строка кнопок, под ней — тумблер «Все | Мои»
     var bar = (lock ? '' : '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
-        button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт' }) +
+        button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт',
+          disabled: !t.startDate, title: t.startDate ? '' : 'Срок пункта задаётся от даты выхода — она ещё не назначена' }) +
         button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'КнопкаЗаполнитьПоШаблону' }) +
       '</div>') +
       '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерМоиПункты') + '>' +
@@ -1668,7 +1657,7 @@
   }
   // Срок (фаза 11, 7.2): дата; второй строкой — смещение, у невыполненного просроченного — «просрочено на N дн.» (дата и текст danger)
   function dueCell(date, over, offset, prefix) {
-    return '<td class="nowrap"><div class="' + (over ? 'danger-text' : '') + '"' + a1c('Надпись', prefix + 'Срок') + '>' + fmtDate(date) + '</div>' +
+    return '<td class="nowrap"><div class="' + (over ? 'danger-text' : '') + (date ? '' : ' muted') + '"' + a1c('Надпись', prefix + 'Срок') + '>' + (date ? fmtDate(date) : '—') + '</div>' +
       '<div class="text-s ' + (over ? 'danger-text' : 'muted') + '"' + a1c('Надпись', prefix + 'СрокПояснение') + '>' +
         esc(over ? 'просрочено на ' + diffDays(date, D.TODAY) + ' дн.' : offset) + '</div></td>';
   }
@@ -1815,7 +1804,7 @@
       deadline: prep ? checklistDate(c) : closureDate(c), authorId: checklistAuthor(t, c),
       createdAt: (prep ? t.stageDates.found : t.stageDates.closing) || '',
       description: prep
-        ? 'Пункт чек-листа подготовки к выходу стажёра ' + t.fullName + '. Дата выхода — ' + fmtDate(t.startDate) + ', срок пункта — ' + offsetText(c.offsetDays) + '.'
+        ? 'Пункт чек-листа подготовки к выходу стажёра ' + t.fullName + '. Дата выхода — ' + (t.startDate ? fmtDate(t.startDate) : 'не назначена') + ', срок пункта — ' + offsetText(c.offsetDays) + '.'
         : 'Пункт чек-листа закрытия стажировки ' + t.fullName + (c.optional ? ' (необязательный)' : '') + '. Окончание стажировки — ' + fmtDate(t.endDate) +
           ', срок пункта — ' + closureOffsetText(c.offsetDays) + '.' });
   }
@@ -1901,10 +1890,11 @@
     for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
     return null;
   }
-  function tvDays(x) { return diffDays(D.TODAY, x.deadline); }
-  function tvGroup(x) { var d = tvDays(x); return d < 0 ? 'overdue' : d <= ATTENTION_DAYS ? 'attention' : 'other'; }
+  // FT_13: у пункта стажёра без даты выхода срока нет (null) — не просрочен, группа «Остальные»
+  function tvDays(x) { return x.deadline ? diffDays(D.TODAY, x.deadline) : null; }
+  function tvGroup(x) { var d = tvDays(x); return d === null ? 'other' : d < 0 ? 'overdue' : d <= ATTENTION_DAYS ? 'attention' : 'other'; }
   function tvFilterMatch(x, f) {
-    if (f === 'overdue') return tvDays(x) < 0;
+    if (f === 'overdue') return tvDays(x) !== null && tvDays(x) < 0;
     if (f === 'attention') return tvGroup(x) === 'attention';
     if (f === 'today') return tvDays(x) === 0;
     return true;   // 'all' и 'done' (FT_11: список выполненных строится отдельно)
@@ -1953,20 +1943,19 @@
     var notes = getNotifications(t);
     if (isTraineeUser()) {   // стажёр — только просрочку своих задач (как в блоке аналитики, FT_9)
       notes = notes.filter(function (n) { return n.id === 'tasks_overdue'; });
-      return notes.length ? { severity: notes[0].severity, text: 'У вас ' + notes[0].text, ids: notes[0].id } : null;
+      return notes.length ? { severity: notes[0].severity, text: notes[0].text, ids: notes[0].id } : null;   // FT_13: «Просрочены 2 задачи»
     }
     var ds = daysToStart(t);
-    var soon = ['found', 'draft', 'approval'].indexOf(t.stage) >= 0 && ds >= 0 && ds <= START_SOON_DAYS;
+    var soon = ['found', 'draft', 'approval'].indexOf(t.stage) >= 0 && ds !== null && ds >= 0 && ds <= START_SOON_DAYS;
     var has = function (id) { return notes.some(function (n) { return n.id === id; }); };
     var parts = notes.map(function (n) {
-      return { id: n.id, severity: n.severity, text: n.id === 'no_program' && soon ? 'не создана адаптационная программа' : lowerFirst(n.text) };
+      return { id: n.id, severity: n.severity, text: lowerFirst(n.text) };
     });
     if (soon) {
       var sev = ds <= ATTENTION_DAYS ? 'warning' : 'info';
       var all = checklistOf(t);
       var left = all.filter(function (c) { return !c.done; }).length;
       if (left && !has('prep_overdue')) parts.push({ id: 'prep_left', severity: sev, text: 'не завершены пункты подготовки к выходу: ' + left + ' из ' + all.length });
-      if (t.stage === 'approval' || (t.stage === 'draft' && !has('rejected') && !has('draft_stale'))) parts.push({ id: 'not_approved', severity: sev, text: 'адаптационная программа не согласована' });
     }
     if (!parts.length) return null;
     parts.sort(function (a, b) { return TONE_ORDER[a.severity] - TONE_ORDER[b.severity]; });
@@ -2263,6 +2252,7 @@
   }
 
   function tvDueHint(x) {
+    if (!x.deadline) return { cls: 'muted', text: 'после назначения даты выхода' };   // FT_13: срок пункта без даты выхода
     var d = tvDays(x);
     return d < 0 ? { cls: 'danger-text', text: 'Просрочено на ' + d * -1 + ' дн.' }
       : d === 0 ? { cls: 'warning-text', text: 'Сегодня' }
@@ -2270,14 +2260,14 @@
   }
   function tvDueCell(x) {
     if (x.done) {   // FT_11: у выполненной — в срок или с опозданием
-      var late = x.done.at ? diffDays(x.deadline, x.done.at.slice(0, 10)) : 0;
+      var late = x.done.at && x.deadline ? diffDays(x.deadline, x.done.at.slice(0, 10)) : 0;
       return '<td class="nowrap"><div' + a1c('Надпись', 'ТаблицаМоиЗадачиСрок') + '>' + fmtDate(x.deadline) + '</div>' +
         '<div class="text-s ' + (late > 0 ? 'warning-text' : 'muted') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрокПояснение') + '>' +
         (late > 0 ? 'С опозданием на ' + late + ' дн.' : 'В срок') + '</div></td>';
     }
     var d = tvDays(x);
     var hint = tvDueHint(x);
-    return '<td class="nowrap"><div class="' + (d < 0 ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрок') + '>' + fmtDate(x.deadline) + '</div>' +
+    return '<td class="nowrap"><div class="' + (d < 0 ? 'danger-text' : '') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрок') + '>' + (x.deadline ? fmtDate(x.deadline) : '—') + '</div>' +
       '<div class="text-s ' + hint.cls + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиСрокПояснение') + '>' + esc(hint.text) + '</div></td>';
   }
   // Действие: основная кнопка — главная команда типа задачи; ▾ — остальные команды. В 1С кнопок в строке таблицы нет — см. 1c-mapping.md
@@ -2503,7 +2493,8 @@
     html += '<div class="demo-host">' +
       (t && state.demoMenuOpen ? '<div class="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоМенюЭтапов') + '>' +
         STAGES.map(function (s) {
-          return '<button type="button" data-action="demoSetStage" data-stage="' + s.code + '"' +
+          var noDate = !t.startDate && s.code !== 'found';   // FT_13: без даты выхода дальше «Подготовки к выходу» не перевести
+          return '<button type="button" data-action="demoSetStage" data-stage="' + s.code + '"' + (noDate ? ' disabled title="Дата выхода стажёра не назначена"' : '') +
             a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоЭтап' + n1c(s.code)) + '>' + (t.stage === s.code ? '● ' : '○ ') + esc(s.title) + '</button>';
         }).join('') + '</div>' : '') +
       '<button type="button" class="btn demo-btn" data-action="demoToggle"' +
@@ -3395,7 +3386,7 @@
       }
       return fixed('Сотрудник', t.fullName, 'ПолеСотрудник') +
         fixed('Подразделение', dept(t.departmentId).name, 'ПолеПодразделение') +
-        fixed('Дата выхода', fmtDate(t.startDate), 'ПолеДатаВыхода') +
+        fixed('Дата выхода', t.startDate ? fmtDate(t.startDate) : 'не назначена', 'ПолеДатаВыхода') +
         fixed('Вид заявки', requestKind(c).replace(/^./, function (x) { return x.toUpperCase(); }), 'ПолеВидЗаявки') +
         field('Комментарий', textarea('comment', 'ПолеКомментарийЗаявки'), { forId: 'f_comment' });
     },
@@ -3523,7 +3514,7 @@
         field('Автор', tvCardValue(esc(personById(x.authorId)), 'ДекорацияАвторЗадачи')) +
         field('Подразделение автора', tvCardValue(esc(dept_ || '—'), 'ДекорацияПодразделениеАвтораЗадачи', dept_ ? '' : 'muted')) +
         field('Дата создания', tvCardValue(x.createdAt ? fmtStamp(x.createdAt) : '—', 'ДекорацияДатаСозданияЗадачи')) +
-        field('Срок выполнения', tvCardValue(fmtDate(x.deadline) + (hint ? ' <span class="text-s ' + hint.cls + '">' + esc(hint.text) + '</span>' : ''), 'ДекорацияСрокЗадачи')) +
+        field('Срок выполнения', tvCardValue((x.deadline ? fmtDate(x.deadline) : '—') + (hint ? ' <span class="text-s ' + hint.cls + '">' + esc(hint.text) + '</span>' : ''), 'ДекорацияСрокЗадачи')) +
         field('Предмет', '<div class="tv-card-value">' + link(x.subjectText, { action: 'tvOpenSubject', data: { key: x.key }, name: 'ГиперссылкаПредметЗадачи',
           title: x.source === 'recruit' ? 'Открыть документ подбора персонала' : 'Открыть карточку стажёра в новой вкладке' }) + '</div>') +
         (d ? '<div class="col gap-3 tv-card-done"' + a1c('ГруппаВертикальная', 'ГруппаВыполнениеЗадачи') + '>' +

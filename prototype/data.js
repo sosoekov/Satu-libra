@@ -138,6 +138,14 @@
       stage: 'active', rejectionComment: null, draftSince: null,
       stageDates: { found: '2026-05-04', draft: '2026-05-12', approval: '2026-05-14', active: '2026-05-20' },
       closedAt: null, closeKind: null
+    },
+    // FT_13: стажёр, которому ещё не назначена дата выхода (startDate и endDate — null): сроки чек-листа не определены, АП создать нельзя
+    {
+      id: 't-grigoriev', fullName: 'Григорьев Максим Олегович', position: 'Программист', positionFamily: 'programmer', qualificationLevel: 'П1',
+      departmentId: 'd-doc',
+      mentorId: 'u-sizova', headId: 'u-podyniglazov', hrId: 'u-kondurova', startDate: null, endDate: null,
+      stage: 'found', rejectionComment: null, draftSince: null,
+      stageDates: { found: '2026-07-22' }, closedAt: null, closeKind: null
     }
   ];
 
