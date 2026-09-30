@@ -513,6 +513,41 @@
   templates.forEach(function (tp) { tp.tasks.forEach(withExtras); });
   tasks.forEach(withExtras);
 
+  /* ---------- FT_14: история выполнения задач АП ----------
+   * task.log = [{ at, by, ev, comment, text }] — ev: 'work' (взята в работу), 'done' (выполнена), 'review' (выполнена, отправлена на проверку),
+   * 'checked' (проверена), 'return' (возвращена на доработку), 'status' (статус изменён в карточке). task.result — комментарий стажёра к выполнению,
+   * task.doneAt — когда стажёр нажал «Выполнено». Для тестовых данных история строится от срока задачи.
+   */
+  var traineeOfProgram = {};
+  programs.forEach(function (pr) { traineeOfProgram[pr.id] = pr.traineeId; });
+  tasks.forEach(function (x) {
+    if (x.log) return;
+    var tr = traineeOfProgram[x.programId];
+    var cap = function (d) { return d > TODAY ? TODAY : d; };
+    if (x.status === 'done') {
+      var at = cap(addDays(x.deadline, -1));
+      x.doneBy = x.doneBy || tr; x.doneAt = x.doneAt || at + 'T17:00';
+      x.log = [{ at: cap(addDays(x.deadline, -4)) + 'T10:00', by: tr, ev: 'work', comment: null, text: null },
+        { at: x.doneAt, by: tr, ev: x.reviewerId ? 'review' : 'done', comment: x.result || null, text: null }];
+      if (x.reviewerId) {
+        x.log.push({ at: cap(x.deadline) + 'T11:00', by: x.reviewerId, ev: 'checked', comment: null, text: null });
+        x.reviews = [{ by: x.reviewerId, at: cap(x.deadline) + 'T11:00', result: 'checked', comment: null }];
+      }
+    } else if (x.status === 'in_progress') {
+      x.log = [{ at: cap(addDays(x.deadline, -5)) + 'T10:00', by: tr, ev: 'work', comment: null, text: null }];
+    } else x.log = [];
+  });
+  // Задача Смирнова «На проверке»: проверяющий уже возвращал её на доработку
+  tasks.filter(function (x) { return x.programId === 'pr-smirnov' && x.status === 'review'; }).forEach(function (x) {
+    x.log = [
+      { at: '2026-07-20T10:05', by: 't-smirnov', ev: 'work', comment: null, text: null },
+      { at: '2026-07-22T12:10', by: 't-smirnov', ev: 'review', comment: 'Задание выполнено', text: null },
+      { at: '2026-07-23T09:30', by: 'u-strygin', ev: 'return', comment: 'Приложите файл с результатом задания', text: null },
+      { at: '2026-07-24T15:40', by: 't-smirnov', ev: 'review', comment: x.result, text: null }
+    ];
+    x.reviews = [{ by: 'u-strygin', at: '2026-07-23T09:30', result: 'return', comment: 'Приложите файл с результатом задания' }];
+  });
+
   /* ---------- FT_10: задачи и уведомления подбора персонала (тестовые — модуля подбора в прототипе нет) ----------
    * recruitTasks: id, assigneeId, type ('approve' | 'execute' | 'acquaint'), subject, deadline, authorId, status ('open' | 'in_progress' | 'done'),
    * FT_11: createdAt, doc (документ-предмет), description; у выполненной — result, doneBy, doneAt, comment.

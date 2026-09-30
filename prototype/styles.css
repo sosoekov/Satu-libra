@@ -430,7 +430,8 @@ th.num, td.num { text-align: right; }
 .task-table .w-deadline { width: 124px; }
 .task-table .w-person { width: 20%; }
 .task-table .w-observers { width: 20%; }
-.task-table .w-result { width: 64px; }
+.task-table .w-result { width: 120px; }   /* FT_14: «Комментарий к выполнению» */
+.task-table th.th-wrap { white-space: normal; line-height: 1.2; }
 .task-table .w-menu { width: 40px; }
 table.grid.task-table td { vertical-align: middle; }
 .task-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
@@ -825,3 +826,15 @@ table.grid.cols-table td { vertical-align: middle; }
 .cols-table .col-row:hover td { background: var(--c-bg-panel); }
 .cols-table .col-row.selected td { background: var(--c-bg-selected); }
 .col-arrow { color: var(--c-primary); }
+
+/* ================= FT_14: страницы карточки задачи АП, история выполнения ================= */
+.dlg-tabs { margin: 0 0 var(--sp-1); }
+.dlg-tabs .tab.active { font-weight: var(--fw-bold); }
+.tf-readonly { min-height: 32px; display: flex; align-items: center; padding: 6px 0; }
+.tf-readonly-text { white-space: pre-wrap; align-items: flex-start; line-height: 1.45; }
+.tf-sep { height: 1px; background: var(--c-border); margin: var(--sp-1) 0; }
+.exec-table .w-at { width: 140px; }
+.exec-table .w-who { width: 26%; }
+.exec-table .w-ev { width: 28%; }
+table.grid.exec-table td { vertical-align: middle; }
+.task-exec { min-height: 420px; }
