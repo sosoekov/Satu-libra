@@ -34,10 +34,15 @@
               <h1 class="window-title grow" aria-hidden="true">Личный кабинет руководителя</h1>
               <!-- Демо-переключатель этапа выбранного стажёра: только для прототипа -->
               <div class="demo-dock" id="demoDock" data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="ДемоПереключательЭтапа"></div>
-              <div class="row window-tools" aria-hidden="true">
-                <span class="form-tool" data-shell-icon="refresh"></span>
-                <span class="form-tool" data-shell-icon="more"></span>
-                <span class="form-tool" data-shell-icon="close"></span>
+              <div class="row window-tools">
+                <span class="form-tool" data-shell-icon="refresh" aria-hidden="true"></span>
+                <!-- FT_12: меню «Ещё» окна — рисует платформа; в прототипе действует только «Изменить форму» -->
+                <div class="menu-host form-menu-host" id="formMenuHost">
+                  <button type="button" class="form-tool form-tool-btn" data-shell-icon="more" data-action="formMenuToggle" title="Ещё" aria-haspopup="menu"
+                          data-1c="НЕ_ПЕРЕНОСИТЬ" data-1c-name="КнопкаЕщеПлатформы"></button>
+                  <div id="formMenu"></div>
+                </div>
+                <span class="form-tool" data-shell-icon="close" aria-hidden="true"></span>
               </div>
             </div>
 

@@ -793,3 +793,30 @@ table.grid.imp-table td { vertical-align: middle; }
 .tv-card-text { white-space: pre-wrap; line-height: 1.45; }
 .tv-card-done { border-top: 1px solid var(--c-border); padding-top: var(--sp-3); }
 .modal-foot .menu-pop { top: auto; bottom: calc(100% + var(--sp-1)); }
+
+/* ================= FT_12: меню «Ещё» окна (платформенное, НЕ_ПЕРЕНОСИТЬ), настройка колонок, сортировка ================= */
+.form-menu-host { position: relative; }
+.platform-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 70;
+  display: flex; flex-direction: column; min-width: 320px; padding: 6px;
+  background: #2F2F2F; color: #F2F2F2; border: 1px solid #454545; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); font-size: var(--fs-s);
+}
+.pm-item {
+  display: flex; flex-direction: row; align-items: center; gap: var(--sp-2);
+  min-height: 30px; padding: 0 var(--sp-2); border: none; border-radius: 6px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: default;
+}
+.pm-static { color: #D6D6D6; }
+.pm-active { cursor: pointer; color: #FFFFFF; font-weight: var(--fw-bold); }
+.pm-active:hover:not(:disabled), .pm-active:focus-visible { background: #464646; }
+.pm-active:disabled { color: #8A8A8A; font-weight: normal; }
+.pm-ico { display: inline-flex; width: 16px; flex: 0 0 16px; color: #CFCFCF; }
+.pm-key { color: #9A9A9A; font-size: 11px; margin-left: var(--sp-4); }
+.pm-arrow { display: inline-flex; color: #CFCFCF; }
+.pm-sep { height: 1px; background: #474747; margin: 6px var(--sp-1); }
+.cols-table .w-show { width: 104px; }
+.cols-table .w-colname { width: 42%; }
+table.grid.cols-table td { vertical-align: middle; }
+.cols-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); }
+.col-title { width: 100%; }

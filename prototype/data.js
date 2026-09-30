@@ -578,6 +578,8 @@
   };
   // Уведомления о событиях, адресованные пользователю (например, стажёру — результат проверки задачи). Пополняются в app.js
   var userNotes = [];
+  // FT_12: настройки таблиц вкладки «Задачи и уведомления» по пользователю — сортировка, видимость и заголовки колонок (заполняется в app.js)
+  var formSettings = {};
 
   window.DATA = {
     recruitTasks: recruitTasks,
@@ -585,6 +587,7 @@
     importance: importance,
     IMPORTANCE_DEFAULT: IMPORTANCE_DEFAULT,
     userNotes: userNotes,
+    formSettings: formSettings,
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
     LAG_THRESHOLD: LAG_THRESHOLD,
