@@ -418,6 +418,8 @@
       selected: {},              // выбранные флажками задачи: {ключ: true}
       noteFilter: 'all', noteSourcesOff: {}, noteSearch: ''
     },
+    // FT_15: вкладка «Подбор персонала» — свёрнутые группы таблицы заявок и флажок «Показывать закрытые»
+    rc: { collapsed: {}, showClosed: false },
     toasts: []
   };
 
@@ -523,10 +525,12 @@
     renderTopTabs();
     var isAdaptation = state.topTab === 'adaptation';
     var isTasks = state.topTab === 'tasks';   // FT_10
+    var isRecruit = state.topTab === 'recruiting';   // FT_15
     el('adaptationPage').classList.toggle('hidden', !isAdaptation);
     el('tasksPage').classList.toggle('hidden', !isTasks);
-    el('stubZone').classList.toggle('hidden', isAdaptation || isTasks);
+    el('recruitPage').classList.toggle('hidden', !isRecruit);
     if (isTasks) renderTasksPage();
+    if (isRecruit) renderRecruitPage();
     if (isAdaptation) {
       // FT_9: у стажёра и сотрудника КШ левой панели нет
       var noLeft = isTraineeUser() || isKshUser();
@@ -546,6 +550,7 @@
     if (state.dialog) renderDialog();   // FT_11: подменю в подвале карточки задачи
     if (activeDoc()) { renderCenter(); return; }
     if (state.topTab === 'tasks') { renderTasksPage(); return; }
+    if (state.topTab === 'recruiting') { renderRecruitPage(); return; }   // FT_15
     renderLeft();
     renderCenter();
   }
@@ -2439,7 +2444,11 @@
   }
   // FT_11: ссылка «Предмет» — документ подбора (заглушка) или карточка стажёра в новой вкладке окна клиента
   function openTaskSubject(x) {
-    if (x.source === 'recruit') { toast('Ещё не реализовано в прототипе'); return; }
+    if (x.source === 'recruit') {
+      var r = vrByDoc(x.subjectText);   // FT_15: заявка на подбор — форма заявки поверх карточки задачи; остальные документы — заглушка
+      if (r) openRequest(r, true); else toast('Ещё не реализовано в прототипе');
+      return;
+    }
     var t = trainee(x.traineeId);
     if (isTraineeUser() && t.id === D.CURRENT_USER_ID) { openDocTab(t.id, 'program'); return; }   // стажёр видит только свою АП
     if (!canOpenTrainee(t, x.kind)) { toast('Откроется ' + TV_OPEN_WHAT[x.kind] + ' стажёра ' + t.fullName); return; }
@@ -2452,6 +2461,130 @@
     if (n.taskId && taskById(n.taskId)) openTraineeFrom(t.id, 'program', function () { openDialog('task', t.id, { taskId: n.taskId }); });
     else openTraineeFrom(t.id, isTraineeUser() ? 'program' : null);
   }
+
+  /* ---------------------------------------------------------------------
+   * FT_15: вкладка «Подбор персонала» — визуальная имитация блока подбора.
+   * Слева — счётчики вакансий, сотрудников в подборе и ресурсного плана, кнопки создания заявок;
+   * справа — «Заявки в работе» с группировкой по состоянию. Открываются только заявки (форма заявки — заглушка до FT_16),
+   * остальные команды — оповещение «Ещё не реализовано в прототипе»
+   * --------------------------------------------------------------------- */
+
+  // Порядок групп таблицы: «На согласовании» — первой (ждёт действия руководителя), далее — как на макете; «Закрыта» — по флажку
+  var VR_STATES = [
+    { id: 'approval', title: 'На согласовании', name: 'НаСогласовании' },
+    { id: 'approved', title: 'Согласована',     name: 'Согласована' },
+    { id: 'progress', title: 'Выполняется',     name: 'Выполняется' },
+    { id: 'new',      title: 'Новая',           name: 'Новая' },
+    { id: 'closed',   title: 'Закрыта',         name: 'Закрыта' }
+  ];
+  var VR_EXPIRE_DAYS = 7;   // «Истекает срок»: до срока закрытия вакансии не больше недели или срок прошёл
+  var RC_STUB = 'Ещё не реализовано в прототипе';
+  function vrInWork(r) { return r.state === 'approved' || r.state === 'progress'; }
+  function vrExpiring(r) { return vrInWork(r) && diffDays(D.TODAY, r.deadline) <= VR_EXPIRE_DAYS; }
+  function vrTitle(r) { return 'Заявка на подбор персонала № ' + r.num + ' от ' + fmtDate(r.date); }
+  // Документ задачи подбора — заявка, если это «Заявка на подбор персонала № …» (резюме кандидата по заявке — другой документ)
+  function vrByDoc(doc) {
+    return D.vacancyRequests.filter(function (r) { return doc === vrTitle(r); })[0] || null;
+  }
+  function vrYear(r) { return r.date.slice(0, 4) === String(D.resourcePlan.year); }
+  function sumQty(list) { return list.reduce(function (s, r) { return s + r.qty; }, 0); }
+  function rcStats() {
+    var all = D.vacancyRequests;
+    var approval = all.filter(function (r) { return r.state === 'approval'; });
+    var expiring = all.filter(vrExpiring);
+    var work = all.filter(vrInWork);
+    var year = all.filter(vrYear);
+    return {
+      total: all.length,
+      vacancies: [approval.length, expiring.length, work.length],
+      people: [sumQty(approval), sumQty(expiring), sumQty(work)],
+      plan: D.resourcePlan.approved,
+      hired: year.filter(function (r) { return !r.unplanned; }).reduce(function (s, r) { return s + r.found; }, 0),
+      unplanned: sumQty(year.filter(function (r) { return r.unplanned && r.state !== 'new' && r.state !== 'approval'; }))
+    };
+  }
+  // Карточка счётчиков. items: [{value, label, name, title}]
+  function rcCard(cls, group, title, items, extra) {
+    return '<div class="rc-card ' + cls + '"' + a1c('ГруппаВертикальная', group) + '>' +
+      '<div class="rc-card-title"' + a1c('Надпись', 'Декорация' + group.replace(/^Группа/, '') + 'Заголовок') + '>' + esc(title) + '</div>' +
+      '<div class="row rc-metrics">' + items.map(function (it) {
+        return '<div class="col gap-0 rc-metric">' +
+          link(String(it.value), { cls: 'rc-num', action: 'rcStub', name: 'Гиперссылка' + it.name, title: it.title }) +
+          '<span class="rc-label"' + a1c('Надпись', 'Декорация' + it.name + 'Подпись') + '>' + esc(it.label) + '</span></div>';
+      }).join('') + '</div>' + (extra || '') + '</div>';
+  }
+  function rcCounterItems(values, prefix, what) {
+    return [
+      { value: values[0], label: 'На согласовании', name: prefix + 'НаСогласовании', title: what + ': заявки на согласовании' },
+      { value: values[1], label: 'Истекает срок',   name: prefix + 'ИстекаетСрок',   title: what + ': до срока закрытия вакансии не больше ' + pluralN(VR_EXPIRE_DAYS, W_DAYS) + ' или срок прошёл' },
+      { value: values[2], label: 'В работе',        name: prefix + 'ВРаботе',        title: what + ': заявки в состояниях «Согласована» и «Выполняется»' }
+    ];
+  }
+  function renderRecruitPage() {
+    var st = rcStats();
+    var left = '<div class="col rc-left"' + a1c('ГруппаВертикальная', 'ГруппаПодборЛеваяКолонка') + '>' +
+      rcCard('rc-card-vacancy', 'ГруппаВакансииВРаботе', 'Вакансии в работе', rcCounterItems(st.vacancies, 'Вакансии', 'Вакансии'),
+        '<div class="row rc-card-foot"><span class="grow"></span>' +
+          link('Показать все (' + st.total + ')', { cls: 'rc-all', action: 'rcStub', name: 'ГиперссылкаПоказатьВсеВакансии', title: 'Открыть список всех заявок на подбор' }) + '</div>') +
+      rcCard('rc-card-vacancy', 'ГруппаСотрудниковВПодборе', 'Сотрудников в подборе', rcCounterItems(st.people, 'СотрудниковВПодборе', 'Сотрудники')) +
+      button('Создать заявку на подбор вне плана', { cls: 'rc-btn', action: 'rcStub', name: 'КнопкаСоздатьЗаявкуВнеПлана' }) +
+      button('Создать заявку на подбор по плану', { cls: 'rc-btn', action: 'rcStub', name: 'КнопкаСоздатьЗаявкуПоПлану' }) +
+      rcCard('rc-card-plan', 'ГруппаРесурсныйПлан', 'Ресурсный план (' + D.resourcePlan.year + ')', [
+        { value: st.plan,      label: 'План (согласовано)', name: 'РесурсныйПланСогласовано', title: 'Согласованная потребность в сотрудниках на ' + D.resourcePlan.year + ' год' },
+        { value: st.hired,     label: 'Нанято',             name: 'РесурсныйПланНанято',      title: 'Найдено сотрудников по плановым заявкам ' + D.resourcePlan.year + ' года' },
+        { value: st.unplanned, label: 'Внеплановые',        name: 'РесурсныйПланВнеплановые', title: 'Сотрудников во внеплановых заявках ' + D.resourcePlan.year + ' года (согласованных, в работе и закрытых)' }
+      ]) +
+      button('Перейти в «Управление ресурсными планами»', { cls: 'rc-btn', action: 'rcStub', name: 'КнопкаПерейтиВУправлениеРесурснымиПланами' }) +
+      '</div>';
+    el('recruitPage').innerHTML = left + renderRequestsPanel();
+  }
+  function rcNum(n) { return n ? String(n) : ''; }   // нули не выводятся, как на макете
+  function vrMarks(r) {
+    var parts = [];
+    if (r.unplanned) parts.push('<span class="rc-mark rc-mark-unplanned" title="Внеплановая заявка">!</span>');
+    if (r.replacement) parts.push('<span class="rc-mark rc-mark-replace" title="Заявка на замену сотрудника">' + icon('refresh') + '</span>');
+    return '<span class="row gap-1 rc-marks"' + a1c('ПолеКартинки', 'ТаблицаЗаявкиВРаботеКартинка', 'check') + '>' + parts.join('') + '</span>';
+  }
+  function vrRow(r) {
+    var dn = dept(r.deptId);
+    var hint = vrTitle(r) + (dn ? '\n' + dn.name : '') + '\nСрок закрытия вакансии: ' + fmtDate(r.deadline) + (r.closedAt ? '\nЗакрыта ' + fmtDate(r.closedAt) : '');
+    var st = byId(VR_STATES, r.state);
+    return '<tr class="rc-row clickable" tabindex="0" data-vr="' + r.id + '" title="' + esc(hint + '\n\nДвойной клик — открыть заявку') + '">' +
+      '<td class="rc-c-mark">' + vrMarks(r) + '</td>' +
+      '<td><span class="ellipsis"' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеСостояние') + '>' + esc(st.title) + '</span></td>' +
+      '<td><span class="ellipsis"' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеВакансия', 'check') + '>' + esc(r.position) + '</span></td>' +
+      '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеТребуемоеКоличество') + '>' + rcNum(r.qty) + '</span></td>' +
+      '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеКандидатовВПроработке') + '>' + rcNum(r.candidates) + '</span></td>' +
+      '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеНайдено') + '>' + rcNum(r.found) + '</span></td></tr>';
+  }
+  function renderRequestsPanel() {
+    var groups = VR_STATES.filter(function (g) { return g.id !== 'closed' || state.rc.showClosed; });
+    var body = groups.map(function (g) {
+      var rows = D.vacancyRequests.filter(function (r) { return r.state === g.id; });
+      if (!rows.length) return '';
+      var open = !state.rc.collapsed[g.id];
+      return '<tr class="group-row rc-group" tabindex="0" data-action="rcToggleGroup" data-group="' + g.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
+        a1c('ТаблицаФормы', 'ТаблицаЗаявкиВРаботеГруппа' + g.name, 'check') + '>' +
+        '<td colspan="6"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') + '<b>' + esc(g.title) + '</b></span></td></tr>' +
+        (open ? rows.map(vrRow).join('') : '');
+    }).join('');
+    if (!body) body = '<tr><td colspan="6"><div class="empty"' + a1c('Надпись', 'ДекорацияЗаявокНет') + '>Заявок нет</div></td></tr>';
+    return '<div class="col rc-panel"' + a1c('ГруппаВертикальная', 'ГруппаЗаявкиВРаботе') + '>' +
+      '<div class="rc-panel-title"' + a1c('Надпись', 'ДекорацияЗаявкиВРаботеЗаголовок') + '>Заявки в работе</div>' +
+      '<div class="table-box rc-table-box"><table class="grid rc-table"' + a1c('ТаблицаФормы', 'ТаблицаЗаявкиВРаботе', 'check') + '>' +
+        '<colgroup><col class="w-mark"><col class="w-state"><col><col class="w-num"><col class="w-num-l"><col class="w-num"></colgroup>' +
+        '<thead><tr><th title="Признаки заявки: «!» — внеплановая, стрелки — замена сотрудника"></th><th>Состояние</th><th>Вакансия</th>' +
+          '<th class="num">Требуемое количество</th><th class="num">Кандидатов в проработке</th><th class="num">Найдено</th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table></div>' +
+      '<div class="row rc-panel-foot"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаявкиВРаботеПодвал') + '>' +
+        '<label class="check"><input type="checkbox" data-rc-closed="1"' + (state.rc.showClosed ? ' checked' : '') +
+          ' title="Показать в таблице закрытые заявки"' + a1c('Флажок', 'ПоказыватьЗакрытыеЗаявки') + '>Показывать закрытые</label>' +
+        '<span class="grow"></span>' +
+        button('Аналитика по открытым вакансиям', { cls: 'rc-btn rc-btn-inline', action: 'rcStub', name: 'КнопкаАналитикаПоОткрытымВакансиям' }) +
+      '</div></div>';
+  }
+  // Форма заявки (заглушка до FT_16). stack — поверх карточки задачи (ссылка «Предмет»)
+  function openRequest(r, stack) { openDialog('vacancyRequest', null, { id: r.id }, stack ? { stack: true } : null); }
 
   /* ---------------------------------------------------------------------
    * Справка (раздел 7.8)
@@ -3737,6 +3870,17 @@
     }
   };
 
+  // FT_15: форма заявки на подбор персонала — заглушка, форму сделаем в FT_16
+  DIALOGS.vacancyRequest = {
+    form: 'ФормаЗаявкаНаПодборПерсонала', readOnly: true, plainClose: true,
+    titleFn: function () { var r = byId(D.vacancyRequests, dlgCtx().id); return r ? vrTitle(r) : 'Заявка на подбор персонала'; },
+    body: function () {
+      var r = byId(D.vacancyRequests, dlgCtx().id);
+      return '<p class="dlg-text"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДекорацияФормаЗаявкиВРазработке') + '>Форма заявки на подбор персонала ещё не реализована в прототипе' +
+        (r ? ': «' + esc(r.position) + '», ' + esc(byId(VR_STATES, r.state).title.toLowerCase()) : '') + '.</p>';
+    }
+  };
+
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
   var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
 
@@ -4112,6 +4256,13 @@
       state.tv.level = state.tv.level === id ? null : id;
       renderTasksPage();
     },
+    // FT_15: вкладка «Подбор персонала»
+    rcStub: function () { toast(RC_STUB); },
+    rcToggleGroup: function (row) {
+      var g = row.getAttribute('data-group');
+      state.rc.collapsed[g] = !state.rc.collapsed[g];
+      renderRecruitPage();
+    },
     tvToggleGroup: function (row) {
       var g = row.getAttribute('data-group');
       state.tv.collapsed[g] = !state.tv.collapsed[g];
@@ -4315,6 +4466,7 @@
       if (list === 'picked') renderDialog();
       return;
     }
+    if (tgt.hasAttribute('data-rc-closed')) { state.rc.showClosed = tgt.checked; renderRecruitPage(); return; }   // FT_15
     // FT_12: видимость колонки в «Изменить форму»
     if (tgt.hasAttribute('data-col-show') && state.dialog) { state.dialog.values.cols[tgt.getAttribute('data-col-show')].show = tgt.checked; return; }
     // FT_10: отборы и выбор задач на вкладке «Задачи и уведомления»
@@ -4378,6 +4530,8 @@
     if (nrow && !e.target.closest('input, button')) { var nx = noteByKey(nrow.getAttribute('data-note-key')); if (nx) openNoteSource(nx); return; }
     var srow = e.target.closest('tr.summary-row');
     if (srow && !e.target.closest('button')) { selectTrainee(srow.getAttribute('data-id')); return; }
+    var vrow = e.target.closest('tr[data-vr]');   // FT_15: заявка на подбор
+    if (vrow) { openRequest(byId(D.vacancyRequests, vrow.getAttribute('data-vr'))); return; }
     var row = e.target.closest('tr[data-task-id]');
     if (!row || e.target.closest('input, button')) return;
     openDialog('task', state.selectedTraineeId, { taskId: row.getAttribute('data-task-id') });
@@ -4402,6 +4556,7 @@
         return;
       }
     }
+    if (e.key === 'Enter' && t.hasAttribute && t.hasAttribute('data-vr')) { e.preventDefault(); openRequest(byId(D.vacancyRequests, t.getAttribute('data-vr'))); return; }   // FT_15
     if ((e.key === 'Enter' || e.key === ' ') && t.hasAttribute && t.hasAttribute('data-action') &&
         t.tagName !== 'BUTTON' && t.tagName !== 'INPUT') {
       e.preventDefault();

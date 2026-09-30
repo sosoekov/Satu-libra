@@ -838,3 +838,43 @@ table.grid.cols-table td { vertical-align: middle; }
 .exec-table .w-ev { width: 28%; }
 table.grid.exec-table td { vertical-align: middle; }
 .task-exec { min-height: 420px; }
+
+/* ================= FT_15: вкладка «Подбор персонала» ================= */
+.rc-page { gap: var(--sp-5); padding-bottom: var(--sp-4); }
+.rc-left { flex: 0 0 340px; width: 340px; gap: var(--sp-3); overflow: auto; min-height: 0; }
+/* Карточки счётчиков — цветные градиенты по макету */
+.rc-card { border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); flex: 0 0 auto; }
+.rc-card-vacancy { background: linear-gradient(135deg, #7B61C9 0%, #C06BC0 55%, #F08BB0 100%); color: #FFFFFF; }
+.rc-card-plan { background: linear-gradient(135deg, #F6D86B 0%, #CFE07A 55%, #9ED28C 100%); color: var(--c-text); }
+.rc-card-title { font-size: var(--fs-l); font-weight: var(--fw-bold); }
+.rc-metrics { align-items: flex-start; gap: var(--sp-2); }
+.rc-metric { flex: 1 1 0; min-width: 0; align-items: flex-start; }
+.rc-card .link { color: inherit; }
+.rc-card .rc-num { font-size: 28px; font-weight: var(--fw-bold); line-height: 1.15; }
+.rc-label { font-size: var(--fs-s); opacity: 0.92; }
+.rc-card .rc-all { font-size: var(--fs-s); text-decoration: underline; }
+/* Серые кнопки на всю ширину колонки */
+.btn.rc-btn { background: #E4E6EA; border-color: #E4E6EA; justify-content: center; white-space: normal; text-align: center; height: auto; min-height: 32px; padding: 6px var(--sp-3); }
+.btn.rc-btn:hover:not(:disabled) { background: #D8DBE0; border-color: #D8DBE0; }
+.btn.rc-btn-inline { white-space: nowrap; }
+/* Панель «Заявки в работе» */
+.rc-panel { flex: 1 1 auto; min-width: 0; min-height: 0; background: #ECEDEF; border-radius: 12px; padding: var(--sp-3) var(--sp-4) var(--sp-3); gap: var(--sp-3); }
+.rc-panel-title { text-align: center; font-size: var(--fs-l); font-weight: var(--fw-bold); }
+.rc-table-box { flex: 1 1 auto; min-height: 0; }
+.rc-table { table-layout: fixed; }
+.rc-table col.w-mark { width: 44px; }
+.rc-table col.w-state { width: 140px; }
+.rc-table col.w-num { width: 110px; }
+.rc-table col.w-num-l { width: 130px; }
+table.grid.rc-table th { white-space: normal; vertical-align: bottom; }
+table.grid.rc-table td { vertical-align: middle; }
+.rc-table td > .ellipsis { display: block; }
+.rc-table tr.rc-group > td { background: #FBE7F0; height: 32px; padding-top: 0; padding-bottom: 0; }
+.rc-table tr.rc-group:hover > td { background: #F7D9E7; }
+.rc-table tr.rc-row:focus { outline: none; }
+.rc-table tr.rc-row:focus > td { background: var(--c-bg-selected); }
+.rc-marks { justify-content: center; }
+.rc-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.rc-mark-unplanned { color: var(--c-danger); font-weight: 700; font-size: 16px; }
+.rc-mark-replace { color: var(--c-info); }
+.rc-panel-foot { flex: 0 0 auto; }
