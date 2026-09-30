@@ -2046,9 +2046,16 @@
     var u = D.formSettings[me] = D.formSettings[me] || {};
     return u[table] = u[table] || { sort: { key: null, dir: 1 }, cols: {} };
   }
+  // FT_12: порядок колонок по настройке пользователя (order — id колонок); колонки, которых нет в порядке, — в конце
+  function orderedCols(table, order) {
+    order = order || formSettings(table).order || [];
+    var all = colsOf(table);
+    return order.map(function (id) { return byId(all, id); }).filter(Boolean)
+      .concat(all.filter(function (c) { return order.indexOf(c.id) < 0; }));
+  }
   function visibleCols(table) {
     var cfg = formSettings(table).cols;
-    return colsOf(table).filter(function (c) { return c.locked || !(cfg[c.id] && cfg[c.id].hidden); });
+    return orderedCols(table).filter(function (c) { return c.locked || !(cfg[c.id] && cfg[c.id].hidden); });
   }
   function colTitle(table, c, doneMode) {
     var cfg = formSettings(table).cols[c.id];
@@ -3638,22 +3645,32 @@
     titleFn: function () { return 'Изменить форму: таблица «' + (dlgCtx().table === 'notes' ? 'Уведомления' : 'Задачи') + '»'; },
     init: function (t, ctx) {
       var cfg = formSettings(ctx.table).cols;
-      var v = { cols: {}, resetSort: false };
+      var v = { cols: {}, resetSort: false, order: orderedCols(ctx.table).map(function (c) { return c.id; }), sel: null };
       colsOf(ctx.table).forEach(function (c) { v.cols[c.id] = { show: !(cfg[c.id] && cfg[c.id].hidden), title: (cfg[c.id] && cfg[c.id].title) || '' }; });
       return v;
     },
     body: function () {
       var table = dlgCtx().table;
       var v = state.dialog.values;
-      return '<p class="dlg-text muted"' + a1c('Надпись', 'ДекорацияПояснениеНастройкиКолонок') + '>Снимите флажок, чтобы скрыть колонку; введите заголовок, чтобы переименовать. ' +
+      var pos = v.sel ? v.order.indexOf(v.sel) : -1;
+      return '<p class="dlg-text muted"' + a1c('Надпись', 'ДекорацияПояснениеНастройкиКолонок') + '>Снимите флажок, чтобы скрыть колонку; введите заголовок, чтобы переименовать; ' +
+          'выделите строку и переместите её стрелками, чтобы поменять порядок колонок. ' +
           'Колонки «' + colsOf(table).filter(function (c) { return c.locked; }).map(function (c) { return c.title; }).join('» и «') + '» скрыть нельзя. Настройки — ваши личные.</p>' +
+        // FT_12: порядок колонок — выделенная строка выше / ниже
+        '<div class="row command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельКолонки') + '>' +
+          button('', { cls: 'btn-icon btn-flat col-arrow', icon: 'arrowUp', action: 'colMove', data: { dir: -1 }, disabled: pos <= 0, name: 'КнопкаКолонкаВыше',
+            title: pos < 0 ? 'Выделите строку колонки' : pos === 0 ? 'Колонка уже первая' : 'Переместить колонку выше' }) +
+          button('', { cls: 'btn-icon btn-flat col-arrow', icon: 'arrowDown', action: 'colMove', data: { dir: 1 }, disabled: pos < 0 || pos === v.order.length - 1, name: 'КнопкаКолонкаНиже',
+            title: pos < 0 ? 'Выделите строку колонки' : pos === v.order.length - 1 ? 'Колонка уже последняя' : 'Переместить колонку ниже' }) +
+        '</div>' +
         '<div class="table-box"><table class="grid cols-table"' + a1c('ТаблицаФормы', 'ТаблицаКолонки') + '>' +
         '<colgroup><col class="w-show"><col class="w-colname"><col></colgroup>' +
         '<thead><tr><th>Показывать</th><th>Колонка</th><th>Заголовок</th></tr></thead><tbody>' +
-        colsOf(table).map(function (c) {
+        orderedCols(table, v.order).map(function (c) {
           var x = v.cols[c.id];
           var std = c.title + (c.doneTitle ? ' / ' + c.doneTitle : '');
-          return '<tr><td><input type="checkbox" data-col-show="' + c.id + '"' + (x.show ? ' checked' : '') + (c.locked ? ' disabled title="Эту колонку убрать нельзя"' : ' title="Показывать колонку"') +
+          return '<tr class="col-row' + (v.sel === c.id ? ' selected' : '') + '" data-action="colSelect" data-id="' + c.id + '" aria-selected="' + (v.sel === c.id) + '">' +
+            '<td><input type="checkbox" data-col-show="' + c.id + '"' + (x.show ? ' checked' : '') + (c.locked ? ' disabled title="Эту колонку убрать нельзя"' : ' title="Показывать колонку"') +
               ' aria-label="' + esc('Показывать колонку «' + c.title + '»') + '"' + a1c('Флажок', 'ТаблицаКолонкиПоказывать') + '></td>' +
             '<td' + a1c('Надпись', 'ТаблицаКолонкиКолонка') + '>' + esc(std) + (c.locked ? ' <span class="muted text-s">обязательная</span>' : '') + '</td>' +
             '<td><input type="text" class="input col-title" data-col-title="' + c.id + '" maxlength="40" value="' + esc(x.title) + '" placeholder="' + esc(std) + '"' +
@@ -3674,6 +3691,8 @@
         if (o.hidden || o.title) st.cols[c.id] = o;
       });
       if (v.resetSort) st.sort = { key: null, dir: 1 };
+      var std = colsOf(dlgCtx().table).map(function (c) { return c.id; });
+      if (v.order.join() === std.join()) delete st.order; else st.order = v.order.slice();   // FT_12: порядок колонок
       toast('Настройки формы сохранены');
     }
   };
@@ -4091,9 +4110,35 @@
       renderFormMenu();
       if (table) openDialog('formSettings', null, { table: table });
     },
+    // FT_12: выделение строки колонки и перемещение выше / ниже
+    colSelect: function (row, e) {
+      var v = state.dialog.values;
+      v.sel = row.getAttribute('data-id');
+      if (e.target.closest('input')) {   // щелчок по флажку или полю — без перерисовки, чтобы не потерять ввод
+        Array.prototype.forEach.call(topModal().querySelectorAll('.col-row'), function (r) {
+          var on = r.getAttribute('data-id') === v.sel;
+          r.classList.toggle('selected', on); r.setAttribute('aria-selected', on);
+        });
+        var pos = v.order.indexOf(v.sel);
+        topModal().querySelector('[data-action="colMove"][data-dir="-1"]').disabled = pos <= 0;
+        topModal().querySelector('[data-action="colMove"][data-dir="1"]').disabled = pos === v.order.length - 1;
+        return;
+      }
+      renderDialog();
+    },
+    colMove: function (btn) {
+      var v = state.dialog.values;
+      var i = v.order.indexOf(v.sel), j = i + Number(btn.getAttribute('data-dir'));
+      if (i < 0 || j < 0 || j >= v.order.length) return;
+      v.order[i] = v.order[j]; v.order[j] = v.sel;
+      renderDialog();
+      var b = topModal().querySelector('[data-action="colMove"][data-dir="' + btn.getAttribute('data-dir') + '"]');
+      if (b && !b.disabled) b.focus();
+    },
     formSettingsReset: function () {
       var v = state.dialog.values;
       Object.keys(v.cols).forEach(function (id) { v.cols[id] = { show: true, title: '' }; });
+      v.order = colsOf(state.dialog.ctx.table).map(function (c) { return c.id; });   // стандартный порядок колонок
       v.resetSort = true;
       renderDialog();
     },
