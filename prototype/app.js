@@ -419,6 +419,7 @@
     closureMode: 'all',          // чек-лист закрытия: 'all' | 'mine'
     demoMenuOpen: false,         // НЕ_ПЕРЕНОСИТЬ
     demoUserMenuOpen: false,     // НЕ_ПЕРЕНОСИТЬ: меню демо-переключателя пользователя (FT_8)
+    formMenuOpen: false,         // FT_12, НЕ_ПЕРЕНОСИТЬ: меню «Ещё» (⋮) окна формы
     markup: false,               // НЕ_ПЕРЕНОСИТЬ: режим разметки 1С (Shift+D)
     // FT_11: вкладки окон клиента. tabs — открытые карточки стажёров {id, traineeId, ctx}; active — id открытой (null — «Начало»);
     // home — состояние карточки / сводной окна «Начало», пока открыта другая вкладка
@@ -553,6 +554,7 @@
     }
     renderDialog();
     renderDemo();
+    renderFormMenu();
     renderToasts();
   }
 
@@ -1912,7 +1914,7 @@
     var q = state.tv.search.trim().toLowerCase();
     var lv = state.tv.level;
     var marks = importanceOf().marks;
-    return all.filter(function (x) {
+    var list = all.filter(function (x) {
       return tvFilterMatch(x, state.tv.filter) && !state.tv.sourcesOff[x.source] && !state.tv.typesOff[x.type] &&
         (!lv || marks[x.markKey || x.key] === lv) &&
         (!q || (x.subject + ' ' + x.context + ' ' + personById(x.authorId) + ' ' + authorDept(x.authorId)).toLowerCase().indexOf(q) >= 0);
@@ -1920,6 +1922,7 @@
       if (a.done) return a.done.at < b.done.at ? 1 : a.done.at > b.done.at ? -1 : 0;   // выполненные — новые сверху
       return a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : 0;
     });
+    return sortBySetting(list, 'tasks');   // FT_12: сортировка по колонке; группы по сроку строятся из этого порядка
   }
   function tvSelected(all) { return all.filter(function (x) { return state.tv.selected[x.key]; }); }
 
@@ -2009,10 +2012,76 @@
   }
   function tvVisibleNotes(all) {
     var q = state.tv.noteSearch.trim().toLowerCase();
-    return all.filter(function (n) {
+    return sortBySetting(all.filter(function (n) {
       return (state.tv.noteFilter === 'all' || n.severity === state.tv.noteFilter) && !state.tv.noteSourcesOff[n.source] &&
         (!q || n.text.toLowerCase().indexOf(q) >= 0);
-    });
+    }), 'notes');
+  }
+
+  /* ---------- FT_12: колонки таблиц «Задачи» и «Уведомления» ----------
+   * Видимость и заголовки меняются в «Изменить форму» (меню «⋮» окна), сортировка — щелчком по заголовку «Источник» / «Тип задачи».
+   * Настройки — свои у каждого пользователя (D.formSettings[userId][table] = {sort: {key, dir}, cols: {id: {hidden, title}}}).
+   * locked — колонку убрать нельзя (наименование и действие). В 1С — платформенные пользовательские настройки формы.
+   */
+  var TV_COLS = [
+    { id: 'task',   title: 'Задача', locked: true, name: 'Задача' },
+    { id: 'source', title: 'Источник', w: 'w-src', sort: true, name: 'Источник' },
+    { id: 'type',   title: 'Тип задачи', w: 'w-type', sort: true, name: 'ТипЗадачи' },
+    { id: 'due',    title: 'Срок', w: 'w-due', name: 'Срок' },
+    { id: 'author', title: 'Автор', w: 'w-author', name: 'Автор' },
+    { id: 'adept',  title: 'Подразделение автора', w: 'w-adept', name: 'ПодразделениеАвтора' },
+    { id: 'action', title: 'Действие', doneTitle: 'Результат', w: 'w-act', locked: true, name: 'Действие' }
+  ];
+  var NOTE_COLS = [
+    { id: 'sev',    title: 'Важность', w: 'w-sev', noHeader: true, name: 'Важность' },
+    { id: 'text',   title: 'Уведомление', locked: true, name: 'Текст' },
+    { id: 'source', title: 'Источник', w: 'w-src', sort: true, name: 'Источник' },
+    { id: 'date',   title: 'Дата', w: 'w-date', name: 'Дата' },
+    { id: 'action', title: 'Действие', w: 'w-note-act', locked: true, name: 'Действие' }
+  ];
+  var TABLE_1C = { tasks: 'ТаблицаМоиЗадачи', notes: 'ТаблицаУведомления' };
+  function colsOf(table) { return table === 'notes' ? NOTE_COLS : TV_COLS; }
+  function formSettings(table) {
+    var me = D.CURRENT_USER_ID;
+    var u = D.formSettings[me] = D.formSettings[me] || {};
+    return u[table] = u[table] || { sort: { key: null, dir: 1 }, cols: {} };
+  }
+  function visibleCols(table) {
+    var cfg = formSettings(table).cols;
+    return colsOf(table).filter(function (c) { return c.locked || !(cfg[c.id] && cfg[c.id].hidden); });
+  }
+  function colTitle(table, c, doneMode) {
+    var cfg = formSettings(table).cols[c.id];
+    return cfg && cfg.title ? cfg.title : doneMode && c.doneTitle ? c.doneTitle : c.title;
+  }
+  function colGroup(table, lead) {
+    return '<colgroup>' + (lead || '') + visibleCols(table).map(function (c) { return '<col' + (c.w ? ' class="' + c.w + '"' : '') + '>'; }).join('') + '</colgroup>';
+  }
+  // Заголовок колонки; у сортируемой — кнопка: ▲ по возрастанию, ▼ по убыванию, повторный щелчок меняет направление
+  function colHeader(table, c, doneMode) {
+    var cfg = formSettings(table).cols[c.id];
+    var title = colTitle(table, c, doneMode);
+    if (c.noHeader && !(cfg && cfg.title)) return '<th title="' + esc(title) + '"></th>';
+    if (!c.sort) return '<th>' + esc(title) + '</th>';
+    var s = formSettings(table).sort;
+    var on = s.key === c.id;
+    return '<th aria-sort="' + (on ? (s.dir > 0 ? 'ascending' : 'descending') : 'none') + '">' +
+      '<button type="button" class="th-sort' + (on ? ' on' : '') + '" data-action="tvSort" data-table="' + table + '" data-key="' + c.id + '"' +
+      ' title="' + esc(on ? 'Сортировать в обратном порядке' : 'Сортировать по колонке «' + title + '»') + '"' +
+      a1c('ТаблицаФормы', TABLE_1C[table] + 'Сортировка' + c.name) + '>' + esc(title) + (on ? (s.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
+  }
+  // Одна сортировка на таблицу: по представлению источника или типа; при равенстве — прежний порядок (срок / дата)
+  var SORT_TEXT = {
+    source: function (x) { return byId(TV_SOURCES, x.source).text; },
+    type: function (x) { return byId(TV_TYPES, x.type).text; }
+  };
+  function sortBySetting(list, table) {
+    var s = formSettings(table).sort;
+    if (!s.key) return list;
+    var f = SORT_TEXT[s.key];
+    return list.map(function (x, i) { return [x, i]; }).sort(function (a, b) {
+      return f(a[0]).localeCompare(f(b[0]), 'ru') * s.dir || a[1] - b[1];
+    }).map(function (p) { return p[0]; });
   }
 
   /* ---------- Рендер страницы ---------- */
@@ -2152,14 +2221,15 @@
         ' title="Поиск по задаче, стажёру, автору и подразделению"' + a1c('ПолеВвода', 'ПолеПоискаЗадач') + '></label>' +
       '</div>';
 
+    var span = visibleCols('tasks').length + 1;   // FT_12: колонки по настройке формы + флажок выбора
     var body;
     if (!all.length) {
-      body = '<tr><td colspan="8"><div class="empty"' + a1c('Надпись', doneMode ? 'ДекорацияВыполненныхЗадачНет' : 'ДекорацияЗадачНет') + '>' +
+      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('Надпись', doneMode ? 'ДекорацияВыполненныхЗадачНет' : 'ДекорацияЗадачНет') + '>' +
         (doneMode ? 'Выполненных задач нет' : 'Задач нет') + '</div></td></tr>';
     } else if (doneMode && list.length) {
       body = list.map(tvTaskRow).join('');
     } else if (!list.length) {
-      body = '<tr><td colspan="8"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадачПоОтбору') + '>' +
+      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетЗадачПоОтбору') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияНетЗадачПоОтбору') + '>Нет задач по выбранным условиям</span>' +
         link('Сбросить отбор', { action: 'tvResetFilters', name: 'ГиперссылкаСброситьОтборЗадач' }) + '</div></td></tr>';
     } else {
@@ -2169,7 +2239,7 @@
         var open = !state.tv.collapsed[g.id];
         return '<tr class="group-row" tabindex="0" data-action="tvToggleGroup" data-group="' + g.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
           a1c('ТаблицаФормы', 'ТаблицаМоиЗадачиГруппа' + g.name, 'check') + '>' +
-          '<td colspan="8"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') +
+          '<td colspan="' + span + '"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') +
             '<b' + (g.id === 'overdue' ? ' class="danger-text"' : '') + '>' + g.title + ' (' + rows.length + ')</b></span></td></tr>' +
           (open ? rows.map(tvTaskRow).join('') : '');
       }).join('');
@@ -2177,11 +2247,11 @@
     var keys = doneMode ? [] : list.map(function (x) { return x.key; });
     var selVisible = keys.filter(function (k) { return state.tv.selected[k]; }).length;
     return bar + '<div class="table-box"><table class="grid tv-table"' + a1c('ТаблицаФормы', 'ТаблицаМоиЗадачи') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-src"><col class="w-type"><col class="w-due"><col class="w-author"><col class="w-adept"><col class="w-act"></colgroup>' +
+      colGroup('tasks', '<col class="w-check">') +
       '<thead><tr><th><input type="checkbox" data-tv-select-all="1" title="Выбрать все видимые задачи"' +
         (keys.length && selVisible === keys.length ? ' checked' : '') + (keys.length ? '' : ' disabled') +
         (selVisible && selVisible < keys.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаМоиЗадачиВыбратьВсе') + '></th>' +
-        '<th>Задача</th><th>Источник</th><th>Тип задачи</th><th>Срок</th><th>Автор</th><th>Подразделение автора</th><th>' + (doneMode ? 'Результат' : 'Действие') + '</th></tr></thead>' +
+        visibleCols('tasks').map(function (c) { return colHeader('tasks', c, doneMode); }).join('') + '</tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
   }
 
@@ -2232,19 +2302,22 @@
     var selected = !!state.tv.selected[x.key];
     var full = tm.text + ': ' + x.subject;
     var dept_ = authorDept(x.authorId);
-    return '<tr class="tv-row' + (selected ? ' selected' : '') + '" data-tv-key="' + esc(x.key) + '" title="Двойной клик — открыть карточку задачи">' +
-      '<td>' + (x.done ? '' : '<input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '>') + '</td>' +
-      '<td><div class="row gap-1 tv-subject">' +
+    var cells = {   // FT_12: ячейки по колонкам; выводятся видимые по настройке формы
+      task: '<td><div class="row gap-1 tv-subject">' +
           (li >= 0 ? impFlag(li, 'Важность: ' + imp.levels[li].name, 'ТаблицаМоиЗадачиВажность') : '') +
           '<span class="clamp2 grow" title="' + esc(full) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиЗадача', 'check') + '><b>' + esc(tm.text) + ':</b> ' + esc(x.subject) + '</span>' +
           (x.inWork ? badge('info', 'В работе', 'ТаблицаМоиЗадачиВРаботе') : '') + '</div>' +
-        (x.context ? '<div class="muted text-s ellipsis" title="' + esc(x.context) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиКонтекст') + '>' + esc(x.context) + '</div>' : '') + '</td>' +
-      '<td>' + sourceBadge(x.source, 'ТаблицаМоиЗадачиИсточник') + '</td>' +
-      '<td>' + badge(tm.tone, tm.text, 'ТаблицаМоиЗадачиТипЗадачи') + '</td>' +
-      tvDueCell(x) +
-      '<td><div class="clamp2" title="' + esc(personById(x.authorId)) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиАвтор') + '>' + esc(personById(x.authorId)) + '</div></td>' +
-      '<td><div class="clamp2' + (dept_ ? '' : ' muted') + '" title="' + esc(dept_ || 'Подразделение не указано') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиПодразделениеАвтора') + '>' + esc(dept_ || '—') + '</div></td>' +
-      '<td>' + (x.done ? tvResultCell(x) : tvActionCell(x)) + '</td></tr>';
+        (x.context ? '<div class="muted text-s ellipsis" title="' + esc(x.context) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиКонтекст') + '>' + esc(x.context) + '</div>' : '') + '</td>',
+      source: '<td>' + sourceBadge(x.source, 'ТаблицаМоиЗадачиИсточник') + '</td>',
+      type: '<td>' + badge(tm.tone, tm.text, 'ТаблицаМоиЗадачиТипЗадачи') + '</td>',
+      due: tvDueCell(x),
+      author: '<td><div class="clamp2" title="' + esc(personById(x.authorId)) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиАвтор') + '>' + esc(personById(x.authorId)) + '</div></td>',
+      adept: '<td><div class="clamp2' + (dept_ ? '' : ' muted') + '" title="' + esc(dept_ || 'Подразделение не указано') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиПодразделениеАвтора') + '>' + esc(dept_ || '—') + '</div></td>',
+      action: '<td>' + (x.done ? tvResultCell(x) : tvActionCell(x)) + '</td>'
+    };
+    return '<tr class="tv-row' + (selected ? ' selected' : '') + '" data-tv-key="' + esc(x.key) + '" title="Двойной клик — открыть карточку задачи">' +
+      '<td>' + (x.done ? '' : '<input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '>') + '</td>' +
+      visibleCols('tasks').map(function (c) { return cells[c.id]; }).join('') + '</tr>';
   }
 
   function renderNotesList(all) {
@@ -2256,29 +2329,33 @@
         '<input type="text" class="input" data-input="noteSearch" placeholder="Поиск по уведомлениям…" value="' + esc(state.tv.noteSearch) + '"' +
         ' title="Поиск по тексту уведомления"' + a1c('ПолеВвода', 'ПолеПоискаУведомлений') + '></label>' +
       '</div>';
+    var span = visibleCols('notes').length;
     var body;
     if (!all.length) {
-      body = '<tr><td colspan="5"><div class="empty"' + a1c('Надпись', 'ДекорацияУведомленийНет') + '>Новых уведомлений нет</div></td></tr>';
+      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('Надпись', 'ДекорацияУведомленийНет') + '>Новых уведомлений нет</div></td></tr>';
     } else if (!list.length) {
-      body = '<tr><td colspan="5"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетУведомленийПоОтбору') + '>' +
+      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаНетУведомленийПоОтбору') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияНетУведомленийПоОтбору') + '>Нет уведомлений по выбранным условиям</span>' +
         link('Сбросить отбор', { action: 'noteResetFilters', name: 'ГиперссылкаСброситьОтборУведомлений' }) + '</div></td></tr>';
     } else {
       body = list.map(function (n) {
-        return '<tr class="tv-row" data-note-key="' + esc(n.key) + '" title="Двойной клик — перейти">' +
-          '<td class="tv-sev"><span class="note-dot c-' + n.severity + '" title="' + esc(TONE_TITLES[n.severity]) + '"' + a1c('Картинка', 'ТаблицаУведомленияВажность', 'check') + '>' + icon('dot') + '</span></td>' +
-          '<td><div class="tv-note-text"' + a1c('Надпись', 'ТаблицаУведомленияТекст') + '>' + esc(n.text) + '</div></td>' +
-          '<td>' + sourceBadge(n.source, 'ТаблицаУведомленияИсточник') + '</td>' +
-          '<td class="nowrap"' + a1c('Надпись', 'ТаблицаУведомленияДата') + '>' + (n.at.length > 10 ? fmtDateTime(n.at) : fmtDate(n.at)) + '</td>' +
-          '<td class="nowrap"><span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ТаблицаУведомленияГруппаДействие', 'high') + '>' +
+        var cells = {
+          sev: '<td class="tv-sev"><span class="note-dot c-' + n.severity + '" title="' + esc(TONE_TITLES[n.severity]) + '"' + a1c('Картинка', 'ТаблицаУведомленияВажность', 'check') + '>' + icon('dot') + '</span></td>',
+          text: '<td><div class="tv-note-text"' + a1c('Надпись', 'ТаблицаУведомленияТекст') + '>' + esc(n.text) + '</div></td>',
+          source: '<td>' + sourceBadge(n.source, 'ТаблицаУведомленияИсточник') + '</td>',
+          date: '<td class="nowrap"' + a1c('Надпись', 'ТаблицаУведомленияДата') + '>' + (n.at.length > 10 ? fmtDateTime(n.at) : fmtDate(n.at)) + '</td>',
+          action: '<td class="nowrap"><span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ТаблицаУведомленияГруппаДействие', 'high') + '>' +
             button('Перейти', { action: 'noteGo', data: { key: n.key }, title: n.source === 'recruit' ? 'Открыть документ подбора' : 'Открыть стажёра в разделе «Адаптация персонала»', name: 'ТаблицаУведомленияПерейти' }) +
             button('Прочитано', { action: 'noteRead', data: { key: n.key }, title: 'Отметить прочитанным — уведомление уйдёт из списка', name: 'ТаблицаУведомленияПрочитано' }) +
-          '</span></td></tr>';
+          '</span></td>'
+        };
+        return '<tr class="tv-row" data-note-key="' + esc(n.key) + '" title="Двойной клик — перейти">' +
+          visibleCols('notes').map(function (c) { return cells[c.id]; }).join('') + '</tr>';
       }).join('');
     }
     return bar + '<div class="table-box"><table class="grid tv-table tv-notes"' + a1c('ТаблицаФормы', 'ТаблицаУведомления') + '>' +
-      '<colgroup><col class="w-sev"><col><col class="w-src"><col class="w-date"><col class="w-note-act"></colgroup>' +
-      '<thead><tr><th></th><th>Уведомление</th><th>Источник</th><th>Дата</th><th>Действие</th></tr></thead>' +
+      colGroup('notes') +
+      '<thead><tr>' + visibleCols('notes').map(function (c) { return colHeader('notes', c); }).join('') + '</tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
   }
 
@@ -2427,6 +2504,34 @@
         a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '><span>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</span></button>' +
       '</div>';
     el('demoDock').innerHTML = html;
+  }
+
+  /* FT_12, НЕ_ПЕРЕНОСИТЬ: меню «Ещё» (⋮) окна формы — платформенное меню 1С. В прототипе действует только «Изменить форму»:
+   * настройка видимости и заголовков колонок открытой таблицы вкладки «Задачи и уведомления». Остальные пункты — изображение */
+  var PM_ICONS = {
+    star: '<path d="M12 3.8l2.5 5.2 5.6.7-4.1 3.9 1 5.6L12 16.5l-5 2.7 1-5.6-4.1-3.9 5.6-.7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>',
+    chain: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    chevron: '<path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+  };
+  function pmIcon(name) { return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' + (PM_ICONS[name] || '') + '</svg>'; }
+  function formSettingsTable() { return state.topTab === 'tasks' && !activeDoc() ? (state.tv.sub === 'notes' ? 'notes' : 'tasks') : null; }
+  function renderFormMenu() {
+    var host = el('formMenu');
+    if (!state.formMenuOpen) { host.innerHTML = ''; return; }
+    var table = formSettingsTable();
+    function stat(ico, text, key, arrow) {   // пункт-изображение: без действия
+      return '<div class="pm-item pm-static"><span class="pm-ico">' + (ico ? pmIcon(ico) : '') + '</span><span class="grow">' + esc(text) + '</span>' +
+        (key ? '<span class="pm-key">' + esc(key) + '</span>' : '') + (arrow ? '<span class="pm-arrow">' + pmIcon('chevron') + '</span>' : '') + '</div>';
+    }
+    host.innerHTML = '<div class="platform-menu" role="menu"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'МенюЕщеПлатформы') + '>' +
+      stat('star', 'Добавить в избранное', 'Ctrl+D') + stat('chain', 'Получить ссылку...', 'Ctrl+F11') +
+      '<div class="pm-sep"></div>' +
+      '<button type="button" role="menuitem" class="pm-item pm-active" data-action="openFormSettings"' +
+        (table ? ' title="Настроить колонки таблицы «' + (table === 'notes' ? 'Уведомления' : 'Задачи') + '»"' : ' disabled title="Изменить форму в прототипе можно на вкладке «Задачи и уведомления»"') +
+        a1c('НЕ_ПЕРЕНОСИТЬ', 'КомандаИзменитьФорму') + '><span class="pm-ico"></span><span class="grow">Изменить форму</span></button>' +
+      '<div class="pm-sep"></div>' + stat('', 'Правка', '', true) +
+      '<div class="pm-sep"></div>' + stat('', 'Информация для технического специалиста') +
+      '</div>';
   }
 
   function renderToasts() {
@@ -3526,6 +3631,53 @@
     }
   };
 
+  // FT_12: «Изменить форму» — видимость и заголовки колонок открытой таблицы. Наименование и действие убрать нельзя.
+  // Пустой заголовок — стандартный. «Стандартные настройки» — все колонки, стандартные заголовки и порядок строк без сортировки
+  DIALOGS.formSettings = {
+    form: 'ФормаНастройкаКолонок', submit: 'ОК', wide: true,
+    titleFn: function () { return 'Изменить форму: таблица «' + (dlgCtx().table === 'notes' ? 'Уведомления' : 'Задачи') + '»'; },
+    init: function (t, ctx) {
+      var cfg = formSettings(ctx.table).cols;
+      var v = { cols: {}, resetSort: false };
+      colsOf(ctx.table).forEach(function (c) { v.cols[c.id] = { show: !(cfg[c.id] && cfg[c.id].hidden), title: (cfg[c.id] && cfg[c.id].title) || '' }; });
+      return v;
+    },
+    body: function () {
+      var table = dlgCtx().table;
+      var v = state.dialog.values;
+      return '<p class="dlg-text muted"' + a1c('Надпись', 'ДекорацияПояснениеНастройкиКолонок') + '>Снимите флажок, чтобы скрыть колонку; введите заголовок, чтобы переименовать. ' +
+          'Колонки «' + colsOf(table).filter(function (c) { return c.locked; }).map(function (c) { return c.title; }).join('» и «') + '» скрыть нельзя. Настройки — ваши личные.</p>' +
+        '<div class="table-box"><table class="grid cols-table"' + a1c('ТаблицаФормы', 'ТаблицаКолонки') + '>' +
+        '<colgroup><col class="w-show"><col class="w-colname"><col></colgroup>' +
+        '<thead><tr><th>Показывать</th><th>Колонка</th><th>Заголовок</th></tr></thead><tbody>' +
+        colsOf(table).map(function (c) {
+          var x = v.cols[c.id];
+          var std = c.title + (c.doneTitle ? ' / ' + c.doneTitle : '');
+          return '<tr><td><input type="checkbox" data-col-show="' + c.id + '"' + (x.show ? ' checked' : '') + (c.locked ? ' disabled title="Эту колонку убрать нельзя"' : ' title="Показывать колонку"') +
+              ' aria-label="' + esc('Показывать колонку «' + c.title + '»') + '"' + a1c('Флажок', 'ТаблицаКолонкиПоказывать') + '></td>' +
+            '<td' + a1c('Надпись', 'ТаблицаКолонкиКолонка') + '>' + esc(std) + (c.locked ? ' <span class="muted text-s">обязательная</span>' : '') + '</td>' +
+            '<td><input type="text" class="input col-title" data-col-title="' + c.id + '" maxlength="40" value="' + esc(x.title) + '" placeholder="' + esc(std) + '"' +
+              ' aria-label="' + esc('Заголовок колонки «' + c.title + '»') + '"' + a1c('ПолеВвода', 'ТаблицаКолонкиЗаголовок') + '></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    },
+    extraFoot: function () {
+      return button('Стандартные настройки', { action: 'formSettingsReset', title: 'Показать все колонки со стандартными заголовками, снять сортировку', name: 'ФормаНастройкаКолонокКнопкаСтандартные' });
+    },
+    apply: function (t, v) {
+      var st = formSettings(dlgCtx().table);
+      st.cols = {};
+      colsOf(dlgCtx().table).forEach(function (c) {
+        var x = v.cols[c.id];
+        var o = {};
+        if (!x.show && !c.locked) o.hidden = true;
+        if (required(x.title)) o.title = x.title.trim();
+        if (o.hidden || o.title) st.cols[c.id] = o;
+      });
+      if (v.resetSort) st.sort = { key: null, dir: 1 };
+      toast('Настройки формы сохранены');
+    }
+  };
+
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
   var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
 
@@ -3931,6 +4083,27 @@
       renderTasksPage();
     },
     openImportanceSettings: function () { openDialog('importanceSettings', null); },
+    // FT_12, НЕ_ПЕРЕНОСИТЬ: меню «Ещё» окна и «Изменить форму»
+    formMenuToggle: function () { state.formMenuOpen = !state.formMenuOpen; renderFormMenu(); },
+    openFormSettings: function () {
+      var table = formSettingsTable();
+      state.formMenuOpen = false;
+      renderFormMenu();
+      if (table) openDialog('formSettings', null, { table: table });
+    },
+    formSettingsReset: function () {
+      var v = state.dialog.values;
+      Object.keys(v.cols).forEach(function (id) { v.cols[id] = { show: true, title: '' }; });
+      v.resetSort = true;
+      renderDialog();
+    },
+    // FT_12: сортировка по заголовку колонки — одна на таблицу; повторный щелчок меняет направление
+    tvSort: function (btn) {
+      var s = formSettings(btn.getAttribute('data-table')).sort;
+      var key = btn.getAttribute('data-key');
+      if (s.key === key) s.dir = -s.dir; else { s.key = key; s.dir = 1; }
+      renderTasksPage();
+    },
     // FT_11: карточка задачи — перенаправление, ссылка «Предмет»; вкладки окон клиента
     tvCardRedirect: function (btn) { state.openMenu = null; openDialog('tvRedirect', null, { keys: [btn.getAttribute('data-key')] }, { stack: true }); },
     tvOpenSubject: function (btn) { var x = tvTaskByKey(btn.getAttribute('data-key')); if (x) openTaskSubject(x); },
@@ -3956,6 +4129,7 @@
   for (var tvKey in tvActions) actions[tvKey] = tvActions[tvKey];
 
   document.addEventListener('click', function (e) {
+    if (state.formMenuOpen && !e.target.closest('#formMenuHost')) { state.formMenuOpen = false; renderFormMenu(); }   // FT_12
     if (state.openMenu && !e.target.closest('.menu-host')) {
       state.openMenu = null;
       renderMain();
@@ -3988,6 +4162,9 @@
       state.dialog.values.links[Number(e.target.getAttribute('data-idx'))][lf] = e.target.value;
       return;
     }
+    // FT_12: заголовок колонки в «Изменить форму»
+    var colT = e.target.getAttribute('data-col-title');
+    if (colT && state.dialog) { state.dialog.values.cols[colT].title = e.target.value; return; }
     // FT_10: название уровня важности, поиск по задачам и уведомлениям
     var impIdx = e.target.getAttribute('data-imp-idx');
     if (impIdx != null && state.dialog) {
@@ -4035,6 +4212,8 @@
       if (list === 'picked') renderDialog();
       return;
     }
+    // FT_12: видимость колонки в «Изменить форму»
+    if (tgt.hasAttribute('data-col-show') && state.dialog) { state.dialog.values.cols[tgt.getAttribute('data-col-show')].show = tgt.checked; return; }
     // FT_10: отборы и выбор задач на вкладке «Задачи и уведомления»
     var tvAttr = ['data-tv-source', 'data-tv-type', 'data-note-source'].filter(function (a) { return tgt.hasAttribute(a); })[0];
     if (tvAttr) {
@@ -4133,7 +4312,8 @@
       return;
     }
     if (e.key === 'Escape') {
-      if (state.openMenu) { state.openMenu = null; renderMain(); }   // FT_11: сначала — подменю (в т. ч. в подвале карточки задачи)
+      if (state.formMenuOpen) { state.formMenuOpen = false; renderFormMenu(); }   // FT_12: меню «Ещё» окна
+      else if (state.openMenu) { state.openMenu = null; renderMain(); }   // FT_11: сначала — подменю (в т. ч. в подвале карточки задачи)
       else if (state.dialog) closeDialog();
       else if (state.demoMenuOpen || state.demoUserMenuOpen) { state.demoMenuOpen = false; state.demoUserMenuOpen = false; renderDemo(); }
     }
