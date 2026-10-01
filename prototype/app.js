@@ -505,6 +505,21 @@
       text: 'Кандидат на должность «' + r.position + '» принял предложение о работе: ' + t.fullName });
     return t;
   }
+  // Отмена до старта стажировки: причина обязательна — не меньше 3 значащих символов (пробелы не считаются)
+  var CANCEL_REASON_MIN = 3;
+  function cancelReasonError(text) {
+    var meaningful = String(text || '').replace(/\s+/g, '');
+    if (!meaningful) return 'Укажите причину отмены';
+    if (meaningful.length < CANCEL_REASON_MIN) return 'Причина — не меньше ' + CANCEL_REASON_MIN + ' символов';
+    return '';
+  }
+  // Заявка на подбор не меняется; HR об отмене не уведомляется (ASSUMPTION, ТЗ 11.7). В 1С причина — в карточке физического лица
+  function cancelCandidate(t, reason) {
+    t.stage = 'cancelled';
+    t.cancelReason = reason.trim();
+    t.cancelledAt = nowStamp();
+    t.cancelledBy = D.CURRENT_USER_ID;
+  }
   // Переход к найденному из уведомления: вкладка «Адаптация персонала», карточка подсвечивается на пару секунд.
   // После старта стажировки — карточка стажёра; после отмены — оповещение
   var FLASH_MS = 2500;
@@ -4049,6 +4064,22 @@
     }
   };
 
+  // FT_17: отмена стажировки найденного кандидата (до старта). Кнопки «Подтвердить отмену» / «Назад»
+  DIALOGS.pendingCancel = {
+    title: 'Отмена стажировки', form: 'ФормаОтменаСтажировкиКандидата', submit: 'Подтвердить отмену', cancelText: 'Назад', danger: true,
+    init: function () { return { reason: '' }; },
+    body: function (t) {
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияОтменаКандидата') + '>' + esc(t.fullName) + ' (' + esc(t.position) + ', ' + esc(dept(t.departmentId).name) +
+          ') не выйдет на стажировку. Заявка на подбор останется закрытой — для нового подбора нужна новая заявка.</p>' +
+        field('Причина', textarea('reason', 'ПолеПричинаОтменыКандидата'), { required: true, error: state.dialog.errors.reason, forId: 'f_reason', name: 'ПричинаОтменыКандидата' });
+    },
+    validate: function (t, v) { var e = cancelReasonError(v.reason); return e ? { reason: e } : {}; },
+    apply: function (t, v) {
+      cancelCandidate(t, v.reason);
+      toast('Стажировка отменена. Причина сохранена');
+    }
+  };
+
   // FT_15: форма заявки на подбор персонала — заглушка, форму сделаем в FT_16
   DIALOGS.vacancyRequest = {
     form: 'ФормаЗаявкаНаПодборПерсонала', readOnly: true, plainClose: true,
@@ -4141,7 +4172,7 @@
     var noClose = readOnly && def.noCloseButton;
     var inner = d.traineeMode ? traineeTaskButtons(d) : (def.extraFoot ? def.extraFoot(t) : '') +
       (noClose ? '' : button(readOnly ? 'Закрыть' : def.submitFn ? def.submitFn() : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : readOnly && def.plainClose ? '' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') })) +
-      (readOnly ? '' : button('Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' }));
+      (readOnly ? '' : button(def.cancelText || 'Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' }));   // FT_17: «Назад» у отмены кандидата
     if (!inner) return '';
     return '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' + inner + '</div>';
   }
@@ -4450,7 +4481,12 @@
     // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
     pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
     pendingStart: function () { toast('Ещё не реализовано в прототипе'); },
-    pendingCancel: function () { toast('Ещё не реализовано в прототипе'); },
+    pendingCancel: function (btn) {
+      var t = trainee(btn.getAttribute('data-id'));
+      if (!t || !isPendingDecision(t)) return;
+      if (!canDecidePending(t)) { toast(decideLockText(t)); return; }
+      openDialog('pendingCancel', t.id);
+    },
     rcToggleGroup: function (row) {
       var g = row.getAttribute('data-group');
       state.rc.collapsed[g] = !state.rc.collapsed[g];
