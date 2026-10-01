@@ -708,6 +708,23 @@
     'u-sizova':      { levels: defaultLevels(), marks: { 'cl:cl-8': 'lv-1', 'rt-9': 'lv-3' } },
     'u-sudomoykina': { levels: defaultLevels(), marks: { 'rt-11': 'lv-1', 'rt-10': 'lv-2' } }
   };
+  /* ---------- FT_19: наблюдатели — тестовые случаи фильтра «Являюсь наблюдателем» ----------
+   * Кладова — только наблюдатель задач Лебедева и Смирнова (чужие отделы: просмотр без изменений);
+   * Стрыгин — наблюдатель задач Орловой (заместитель руководителя ЦАС — может и изменять).
+   * Выполненные задачи в фильтр не попадают — по одной выполненной у каждого для проверки.
+   */
+  function addObserver(programId, pick, userId) {
+    var list = tasks.filter(function (x) { return x.programId === programId; });
+    pick(list).forEach(function (x) { if (x.observerIds.indexOf(userId) < 0) x.observerIds.push(userId); });
+  }
+  function byName(names) { return function (list) { return list.filter(function (x) { return names.indexOf(x.name) >= 0; }); }; }
+  function byStatus(statuses) {   // первая задача каждого статуса по порядку
+    return function (list) { return statuses.map(function (st) { return list.filter(function (x) { return x.status === st; })[0]; }).filter(Boolean); };
+  }
+  addObserver('pr-lebedev', byName(['Подготовить анализ конкурентов', 'Составить план-график пилотного проекта', 'Изучить методологию управления проектами компании']), 'u-kladova');
+  addObserver('pr-smirnov', byStatus(['review', 'not_started']), 'u-kladova');
+  addObserver('pr-orlova', byStatus(['in_progress', 'not_started', 'done']), 'u-strygin');
+
   /* ---------- FT_16: «Результат выполнения» задачи — критерии, по которым проверяющий принимает задачу ----------
    * Реквизит criteria у задач шаблонов и задач АП (из шаблона копируется в АП). Тестовые значения — по наименованию задачи;
    * у задач, добавленных в АП вручную, не заполнен.
