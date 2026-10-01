@@ -505,6 +505,71 @@
       text: 'Кандидат на должность «' + r.position + '» принял предложение о работе: ' + t.fullName });
     return t;
   }
+  /* ---------- FT_17: старт стажировки — правила (без DOM) ---------- */
+  // Длительность стажировки: календарные месяцы или произвольная дата окончания
+  var DURATION_MODES = [
+    { value: '1m', text: '1 месяц', months: 1, name: 'Месяц1' },
+    { value: '3m', text: '3 месяца', months: 3, name: 'Месяца3' },
+    { value: '6m', text: '6 месяцев', months: 6, name: 'Месяцев6' },
+    { value: 'custom', text: 'Произвольная дата', months: null, name: 'ПроизвольнаяДата' }
+  ];
+  var DURATION_DEFAULT = '3m';
+  // ASSUMPTION (ТЗ 11.5): окончание = старт + N календарных месяцев (нет такого числа — последний день месяца) − 1 день.
+  // 15.10.2026 + 3 мес. → 14.01.2027; 31.01.2027 + 1 мес. → 27.02.2027
+  function addMonthsClamped(iso, n) {
+    var p = iso.split('-').map(Number);
+    var y = p[0], m = p[1] - 1 + n;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    var d = Math.min(p[2], last);
+    return y + '-' + (m < 9 ? '0' : '') + (m + 1) + '-' + (d < 10 ? '0' : '') + d;
+  }
+  function internshipEndDate(startIso, mode) {
+    var dm = byId(DURATION_MODES.map(function (x) { return { id: x.value, months: x.months }; }), mode);
+    if (!startIso || !dm || !dm.months) return null;
+    return addDays(addMonthsClamped(startIso, dm.months), -1);
+  }
+  // Ошибки дат: старт не в прошлом; ASSUMPTION (ТЗ 11.6): окончание строго позже старта
+  function startDateError(startIso) {
+    if (!startIso) return 'Укажите дату старта';
+    if (startIso < D.TODAY) return 'Дата старта не может быть в прошлом';
+    return '';
+  }
+  function endDateError(startIso, endIso) {
+    if (!endIso) return 'Укажите дату окончания';
+    if (startIso && endIso <= startIso) return 'Дата окончания должна быть позже даты старта';
+    return '';
+  }
+  // Подразделение и все вложенные (группы направления)
+  function deptSubtree(deptId) {
+    var ids = [deptId];
+    for (var i = 0; i < ids.length; i++) childDepts(ids[i]).forEach(function (c) { ids.push(c.id); });
+    return ids;
+  }
+  // Кандидаты в руководители стажировки и наставники: сотрудники подразделения стажёра со всеми вложенными группами
+  // + руководители вышестоящих подразделений (ответ заказчика на вопрос фазы 0)
+  function internshipStaff(deptId) {
+    var sub = deptSubtree(deptId);
+    var own = D.users.filter(function (u) { return u.departmentId && sub.indexOf(u.departmentId) >= 0; });
+    var heads = deptChain(deptId).slice(1).map(function (d) { return d.responsibleId; }).filter(Boolean)
+      .map(user).filter(function (u) { return u && own.indexOf(u) < 0; });
+    return own.concat(heads);
+  }
+  // Проверка формы старта; ASSUMPTION (ТЗ 11.3): руководитель стажировки и наставник не совпадают
+  function startInternshipErrors(t, v) {
+    var e = {};
+    var staff = internshipStaff(t.departmentId).map(function (u) { return u.id; });
+    if (!v.headId) e.headId = 'Выберите руководителя стажировки';
+    else if (staff.indexOf(v.headId) < 0) e.headId = 'Сотрудник не из подразделения стажёра';
+    if (!v.mentorId) e.mentorId = 'Выберите наставника';
+    else if (staff.indexOf(v.mentorId) < 0) e.mentorId = 'Сотрудник не из подразделения стажёра';
+    else if (v.mentorId === v.headId) e.mentorId = 'Наставник и руководитель стажировки должны быть разными сотрудниками';
+    var se = startDateError(v.startDate), ee = endDateError(v.startDate, v.endDate);
+    if (se) e.startDate = se;
+    if (ee) e.endDate = ee;
+    return e;
+  }
+
   // Отмена до старта стажировки: причина обязательна — не меньше 3 значащих символов (пробелы не считаются)
   var CANCEL_REASON_MIN = 3;
   function cancelReasonError(text) {
@@ -4064,6 +4129,49 @@
     }
   };
 
+  // FT_17: старт стажировки найденного кандидата. Поля — по ТЗ 4, шаг 3; правила расчёта и проверки — функции выше
+  DIALOGS.pendingStart = {
+    title: 'Старт стажировки', form: 'ФормаСтартСтажировки', submit: 'Подтвердить', wide: true,
+    titleFn: function () { var t = trainee(state.dialog.traineeId); return 'Старт стажировки: ' + t.fullName; },
+    // ASSUMPTION (ТЗ 11.4): руководитель стажировки и наставник по умолчанию не заполнены
+    init: function () { return { headId: '', mentorId: '', startDate: D.TODAY, durationMode: DURATION_DEFAULT, endDate: internshipEndDate(D.TODAY, DURATION_DEFAULT) }; },
+    // Дата старта пересчитывает окончание (кроме «Произвольной даты»); ручная дата окончания включает «Произвольную дату»
+    onChange: function (f, v) {
+      if (f === 'startDate' && v.durationMode !== 'custom') v.endDate = internshipEndDate(v.startDate, v.durationMode) || v.endDate;
+      if (f === 'endDate' && v.durationMode !== 'custom') v.durationMode = 'custom';
+      if (f === 'startDate' || f === 'endDate') { delete state.dialog.errors.startDate; delete state.dialog.errors.endDate; }
+      if (f === 'headId' || f === 'mentorId') delete state.dialog.errors[f];
+    },
+    // «Подтвердить» неактивна, пока даты неверны (окончание не позже старта, старт в прошлом)
+    submitDisabled: function (v) { return !!(startDateError(v.startDate) || endDateError(v.startDate, v.endDate)); },
+    body: function (t) {
+      var v = state.dialog.values;
+      var e = state.dialog.errors;
+      var staff = internshipStaff(t.departmentId);
+      var opts = function (empty) { return [{ value: '', text: empty }].concat(staff.map(function (u) { return { value: u.id, text: u.fullName + ' — ' + u.role + ' (' + dept(u.departmentId).name + ')' }; })); };
+      var r = requisitionOf(t);
+      // Ошибки дат видны сразу, остальные — после «Подтвердить»
+      var se = e.startDate || (v.startDate ? startDateError(v.startDate) : '');
+      var ee = e.endDate || endDateError(v.startDate, v.endDate);
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтартКандидат') + '>' + esc(t.position) + ', ' + esc(dept(t.departmentId).name) +
+          (r ? '. ' + esc(vrTitle(r)) : '') + (t.expectedStartDate ? '. Ожидаемая дата выхода — ' + fmtDate(t.expectedStartDate) : '') + '.</p>' +
+        field('Руководитель стажировки', selectOptions('headId', 'ПолеРуководительСтажировкиСтарт', opts('Не выбран'), ' data-rerender="1"'),
+          { required: true, error: e.headId, forId: 'f_headId', name: 'РуководительСтажировкиСтарт' }) +
+        field('Наставник', selectOptions('mentorId', 'ПолеНаставникСтарт', opts('Не выбран'), ' data-rerender="1"'),
+          { required: true, error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
+        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияСтартСписокСотрудников') + '>В списках — сотрудники подразделения стажёра и руководители вышестоящих подразделений</p>' +
+        field('Дата старта', inputDate('startDate', 'ПолеДатаСтарта', D.TODAY), { required: true, error: se, forId: 'f_startDate', name: 'ДатаСтарта' }) +
+        field('Длительность', toggle('ТумблерДлительностьСтажировки', 'pendingDuration', DURATION_MODES.map(function (m) {
+          return { value: m.value, text: m.text, name: m.name };
+        }), v.durationMode)) +
+        field('Дата окончания', inputDate('endDate', 'ПолеДатаОкончанияСтажировки', v.startDate || D.TODAY), { required: true, error: ee, forId: 'f_endDate', name: 'ДатаОкончанияСтажировки' }) +
+        (v.durationMode === 'custom' ? '' : '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияСтартРасчетОкончания') + '>Окончание рассчитано: дата старта + ' +
+          byId(DURATION_MODES.map(function (x) { return { id: x.value, text: x.text }; }), v.durationMode).text + ' − 1 день. Изменить дату вручную — режим «Произвольная дата»</p>');
+    },
+    validate: function (t, v) { return startInternshipErrors(t, v); },
+    apply: function () { toast('Ещё не реализовано в прототипе'); }   // фаза 5: сохранение, чек-лист, уведомления, предложение создать АП
+  };
+
   // FT_17: отмена стажировки найденного кандидата (до старта). Кнопки «Подтвердить отмену» / «Назад»
   DIALOGS.pendingCancel = {
     title: 'Отмена стажировки', form: 'ФормаОтменаСтажировкиКандидата', submit: 'Подтвердить отмену', cancelText: 'Назад', danger: true,
@@ -4171,7 +4279,8 @@
   function footHtml(d, def, t, readOnly) {
     var noClose = readOnly && def.noCloseButton;
     var inner = d.traineeMode ? traineeTaskButtons(d) : (def.extraFoot ? def.extraFoot(t) : '') +
-      (noClose ? '' : button(readOnly ? 'Закрыть' : def.submitFn ? def.submitFn() : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : readOnly && def.plainClose ? '' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить') })) +
+      (noClose ? '' : button(readOnly ? 'Закрыть' : def.submitFn ? def.submitFn() : def.submit, { cls: def.danger && !readOnly ? 'btn-danger' : readOnly && def.plainClose ? '' : 'btn-primary', action: 'dialogSubmit', name: def.form + 'Кнопка' + (readOnly ? 'Закрыть' : 'Выполнить'),
+        disabled: !readOnly && def.submitDisabled ? def.submitDisabled(d.values) : false })) +   // FT_17: недоступна при неверных данных
       (readOnly ? '' : button(def.cancelText || 'Отмена', { action: 'dialogCancel', name: def.form + 'КнопкаОтмена' }));   // FT_17: «Назад» у отмены кандидата
     if (!inner) return '';
     return '<div class="modal-foot row"' + a1c('КоманднаяПанель', def.form + 'КоманднаяПанель') + '><span class="grow"></span>' + inner + '</div>';
@@ -4480,7 +4589,21 @@
     demoHrFound: function () { demoHrFound(); },
     // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
     pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
-    pendingStart: function () { toast('Ещё не реализовано в прототипе'); },
+    pendingStart: function (btn) {
+      var t = trainee(btn.getAttribute('data-id'));
+      if (!t || !isPendingDecision(t)) return;
+      if (!canDecidePending(t)) { toast(decideLockText(t)); return; }
+      openDialog('pendingStart', t.id);
+    },
+    pendingDuration: function (btn) {
+      var v = state.dialog.values;
+      v.durationMode = btn.getAttribute('data-value');
+      if (v.durationMode !== 'custom') v.endDate = internshipEndDate(v.startDate, v.durationMode) || v.endDate;
+      delete state.dialog.errors.endDate;
+      renderDialog();
+      var on = topModal().querySelector('[data-action="pendingDuration"].on');
+      if (on) on.focus();
+    },
     pendingCancel: function (btn) {
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || !isPendingDecision(t)) return;
@@ -4667,6 +4790,8 @@
     var f = tgt.getAttribute('data-field');
     if (f && state.dialog) {
       state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
+      var odef = DIALOGS[state.dialog.type];
+      if (odef.onChange) { odef.onChange(f, state.dialog.values); renderDialog(); var fe = topModal().querySelector('#f_' + f); if (fe) fe.focus(); return; }   // FT_17
       if (tgt.hasAttribute('data-rerender') || (state.dialog.type === 'checklistItem' && f === 'date') ||
           (state.dialog.type === 'task' && f === 'reviewerId')) {
         if (f === 'template') state.dialog.values.picked = [];

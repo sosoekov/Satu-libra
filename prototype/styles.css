@@ -901,3 +901,5 @@ table.grid.rc-table td { vertical-align: middle; }
 .btn.btn-accent:hover:not(:disabled) { background: var(--c-bg-selected); }
 /* Подсветка карточки при переходе из уведомления (НЕ_ПЕРЕНОСИТЬ) */
 .pending-card.flash { border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-info-border); background: var(--c-bg-selected); }
+/* FT_17: форма «Старт стажировки» — пояснения под полями */
+.dlg-hint { margin: calc(var(--sp-1) * -1) 0 0; }
