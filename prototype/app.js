@@ -421,6 +421,7 @@
     },
     // FT_15: вкладка «Подбор персонала» — свёрнутые группы таблицы заявок и флажок «Показывать закрытые»
     rc: { collapsed: {}, showClosed: false },
+    pendingFlash: null,          // FT_17: подсвеченная карточка найденного кандидата (переход из уведомления), НЕ_ПЕРЕНОСИТЬ
     toasts: []
   };
 
@@ -449,14 +450,41 @@
   function isKshUser() { return demoUser().scope === 'ksh'; }
   // Стажёры, доступные текущему пользователю
   function myTrainees() {
+    return D.trainees.filter(function (t) { return isStarted(t) && seesByScope(t); });   // FT_17: найденные до старта стажировки — отдельно (myPending)
+  }
+  // Видимость стажёра по роли пользователя (FT_9)
+  function seesByScope(t) {
     var u = demoUser();
-    return D.trainees.filter(function (t) {
-      if (u.scope === 'all') return true;
-      if (u.scope === 'dept') return deptChain(t.departmentId).some(function (d) { return d.id === u.dept; });
-      if (u.scope === 'head') return t.headId === u.id;
-      if (u.scope === 'trainee') return t.id === u.id;
-      return false;
-    });
+    if (u.scope === 'all') return true;
+    if (u.scope === 'dept') return deptChain(t.departmentId).some(function (d) { return d.id === u.dept; });
+    if (u.scope === 'head') return t.headId === u.id;
+    if (u.scope === 'trainee') return t.id === u.id;
+    return false;
+  }
+
+  /* ---------------------------------------------------------------------
+   * FT_17: найденные кандидаты — от «Исполнено» HR до старта стажировки (docs/ft17-candidate-to-internship.md).
+   * Та же сущность, что стажёр: этап 'pending_decision' — ожидает решения руководителя, 'cancelled' — отменено (не отображается).
+   * После старта — существующий этап 'found' «Подготовка к выходу» (в ТЗ — статус awaiting_ap, группа «Ожидают АП»).
+   * Правила — отдельными функциями без DOM, для переноса в 1С.
+   * --------------------------------------------------------------------- */
+  var PRE_START_STAGES = ['pending_decision', 'cancelled'];
+  function isStarted(t) { return PRE_START_STAGES.indexOf(t.stage) < 0; }
+  function isPendingDecision(t) { return t.stage === 'pending_decision'; }
+  function requisitionOf(t) { return t.requisitionId ? byId(D.vacancyRequests, t.requisitionId) : null; }
+  function requisitionAuthorId(t) { var r = requisitionOf(t); return r ? r.authorId : null; }
+  // Видят: все, кто видит подразделение по правилам FT_9, и автор заявки на подбор
+  function canSeePending(t) {
+    if (isTraineeUser() || isKshUser()) return false;
+    return requisitionAuthorId(t) === D.CURRENT_USER_ID || seesByScope(t);
+  }
+  // Решение (старт или отмена) принимает автор заявки или заместитель руководителя ЦАС
+  function canDecidePending(t) { return D.CURRENT_USER_ID === requisitionAuthorId(t) || D.CURRENT_USER_ID === D.CAS_HEAD_ID; }
+  function decideLockText(t) { return canDecidePending(t) ? '' : 'Решение принимает автор заявки: ' + userName(requisitionAuthorId(t)); }
+  // Найденные, ожидающие решения, видимые текущему пользователю; порядок — по дате «Исполнено» (сначала давние)
+  function myPending() {
+    return D.trainees.filter(function (t) { return isPendingDecision(t) && canSeePending(t); })
+      .sort(function (a, b) { return a.foundAt.localeCompare(b.foundAt); });
   }
 
   /* ---------------------------------------------------------------------
@@ -557,12 +585,18 @@
   }
 
   function renderTopTabs() {
-    var attention = isTraineeUser() || isKshUser() ? 0 : myTrainees().filter(needsAttention).length;
+    // FT_17: в счётчике — и найденные кандидаты, ожидающие решения
+    var staff = isTraineeUser() || isKshUser() ? 0 : myTrainees().filter(needsAttention).length;
+    var waiting = isTraineeUser() || isKshUser() ? 0 : myPending().length;
+    var attention = staff + waiting;
+    var tabTitle = [staff ? pluralN(staff, W_TRAINEES) + ' ' + (plural(staff, [0, 1, 1]) === 0 ? 'требует' : 'требуют') + ' действия' : '',
+      waiting ? pluralN(waiting, ['кандидат', 'кандидата', 'кандидатов']) + ' ' + (plural(waiting, [0, 1, 1]) === 0 ? 'ожидает' : 'ожидают') + ' решения' : '']
+      .filter(Boolean).join(', ');
     var tabs = [
       { id: 'tasks',      text: 'Задачи и уведомления', name: 'СтраницаЗадачиИУведомления' },
       { id: 'recruiting', text: 'Подбор персонала',     name: 'СтраницаПодборПерсонала' },
       { id: 'adaptation', text: 'Адаптация персонала' + (attention ? ' (' + attention + ')' : ''), name: 'СтраницаАдаптацияПерсонала',
-        title: attention ? pluralN(attention, W_TRAINEES) + ' ' + (plural(attention, [0, 1, 1]) === 0 ? 'требует' : 'требуют') + ' действия' : '' }
+        title: tabTitle }
     ];
     el('topTabs').innerHTML = tabs.map(function (t) {
       return '<button type="button" class="tab' + (state.topTab === t.id ? ' active' : '') + '" data-tab="' + t.id + '"' +
@@ -582,6 +616,9 @@
   var FILTERS = [
     { id: 'attention',    title: 'Требуют внимания',    icon: 'alert',    color: 'danger', name: 'ТребуютВнимания', sepAfter: true,
       match: function (t) { return needsAttention(t); } },
+    // FT_17: найденные кандидаты до решения руководителя — блок карточек над таблицей стажёров, в таблице и дереве их нет
+    { id: 'pending',      title: 'Ожидают решения',     icon: 'user',     color: 'info',           name: 'ОжидаютРешения',
+      match: function () { return false; }, count: function () { return myPending().length; } },
     { id: 'awaitProgram', title: 'Ожидают АП',          icon: 'clock',    color: 'warning',        stages: ['found', 'draft'], name: 'ОжидаютАП' },
     { id: 'approval',     title: 'На согласовании',     icon: 'docCheck', color: 'info',           stages: ['approval'],       name: 'НаСогласовании' },
     { id: 'active',       title: 'Проходят стажировку', icon: 'users',    color: 'success',        name: 'ПроходятСтажировку',
@@ -594,7 +631,7 @@
     return null;
   }
   function filterMatches(f, t) { return f.match ? f.match(t) : f.stages.indexOf(t.stage) >= 0; }
-  function filterValue(f) { return myTrainees().filter(function (t) { return filterMatches(f, t); }).length; }
+  function filterValue(f) { return f.count ? f.count() : myTrainees().filter(function (t) { return filterMatches(f, t); }).length; }
 
   function searchQuery() { return state.search.trim().toLowerCase(); }
   // Подразделение и все его родители, начиная с самого подразделения
@@ -714,7 +751,9 @@
     var parts = [];
     if (searchQuery()) parts.push(link('Сбросить поиск', { action: 'resetSearch', name: 'ГиперссылкаСброситьПоиск' + place }));
     if (state.counterFilter) parts.push(link('Сбросить фильтр', { action: 'clearCounterFilter', name: 'ГиперссылкаСброситьФильтр' + place }));
-    var text = searchQuery() ? 'Никого не нашли' : 'Нет стажёров по фильтру «' + filterById(state.counterFilter).title + '»';
+    var text = searchQuery() ? 'Никого не нашли'
+      : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
+      : 'Нет стажёров по фильтру «' + filterById(state.counterFilter).title + '»';
     return '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаПустойРезультат' + place) + '>' +
       '<span' + a1c('Надпись', 'ДекорацияПустойРезультат' + place) + '>' + esc(text) + '</span>' +
       '<div class="row">' + parts.join('') + '</div></div>';
@@ -922,20 +961,54 @@
         button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить поиск', action: 'resetSearch', name: 'КнопкаЧипПоискаСбросить' }) + '</span>';
     }
 
+    // FT_17: блок «Ожидают решения» — над таблицей без фильтра или с фильтром «Ожидают решения» (тогда таблицы нет)
+    var pendingOnly = state.counterFilter === 'pending';
+    var pending = !state.counterFilter || pendingOnly ? myPending().filter(function (t) { return traineeMatchesSearch(t, searchQuery()); }) : [];
+    var head = pendingOnly ? 'Ожидают решения: ' + pending.length : 'Стажёры: ' + (chips ? list.length + ' из ' + total : list.length);
     return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
+      (pendingOnly ? '' : pendingBlock(pending, false)) +
       '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокСводки') + '>' +
-        '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>Стажёры: ' + (chips ? list.length + ' из ' + total : list.length) + '</div>' +
+        '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>' + head + '</div>' +
         chips + '<span class="grow"></span>' +
         button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
           title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправкаСводка' }) +
       '</div>' +
-      (list.length ?
+      (pendingOnly ? (pending.length ? pendingBlock(pending, true) : emptyFilterState('Сводка')) : list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
         '<thead><tr>' + th('Стажёр') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>'
         : emptyFilterState('Сводка')) +
       '</div>';
+  }
+
+  // FT_17: карточки найденных кандидатов. Пустой блок не выводится. В 1С — таблица формы «ТаблицаОжидаютРешения»
+  // с командами «Старт стажировки» / «Отменить» (кнопок в строке таблицы нет — см. 1c-mapping.md)
+  function pendingBlock(list, noTitle) {
+    if (!list.length) return '';
+    return '<div class="col gap-2 pending-block"' + a1c('ГруппаВертикальная', 'ГруппаОжидаютРешения') + '>' +
+      (noTitle ? '' : '<div class="row gap-2 pending-title"' + a1c('ГруппаГоризонтальная', 'ГруппаОжидаютРешенияЗаголовок') + '>' +
+        '<span class="h-block"' + a1c('Надпись', 'ДекорацияОжидаютРешенияЗаголовок') + '>Ожидают решения</span>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияОжидаютРешенияКоличество') + '>' + list.length + '</span>' +
+        '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияОжидаютРешенияПояснение') + '>— HR завершил подбор, нужно начать стажировку или отменить</span></div>') +
+      '<div class="row wrap pending-cards"' + a1c('ТаблицаФормы', 'ТаблицаОжидаютРешения', 'check') + '>' + list.map(pendingCard).join('') + '</div></div>';
+  }
+  function pendingCard(t) {
+    var r = requisitionOf(t);
+    var lock = decideLockText(t);
+    var d = dept(t.departmentId);
+    return '<div class="col gap-1 pending-card' + (state.pendingFlash === t.id ? ' flash' : '') + '" data-pending="' + t.id + '"' +
+        a1c('ГруппаВертикальная', 'ТаблицаОжидаютРешенияКарточка', 'check') + '>' +
+      '<div class="pending-name"' + a1c('Надпись', 'ТаблицаОжидаютРешенияФИО') + '>' + esc(t.fullName) + '</div>' +
+      '<div class="muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДолжность') + '>' + esc(t.position) + '</div>' +
+      '<div class="ellipsis" title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаОжидаютРешенияПодразделение') + '>' + esc(d.name) + '</div>' +
+      (r ? '<div>' + link(vrTitle(r), { action: 'pendingOpenRequest', data: { id: t.id }, cls: 'text-s', title: 'Открыть заявку на подбор', name: 'ТаблицаОжидаютРешенияЗаявка' }) + '</div>' : '') +
+      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДаты') + '>Подбор завершён ' + fmtDate(t.foundAt.slice(0, 10)) +
+        (t.expectedStartDate ? ' · ожидаемая дата выхода ' + fmtDate(t.expectedStartDate) : '') + '</div>' +
+      '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОжидаютРешенияДействия', 'high') + '>' +
+        button('Старт стажировки', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Назначить руководителя стажировки и наставника, задать даты', name: 'ТаблицаОжидаютРешенияСтарт' }) +
+        button('Отменить', { action: 'pendingCancel', data: { id: t.id }, disabled: !!lock, title: lock || 'Человек не выйдет на стажировку — указать причину', name: 'ТаблицаОжидаютРешенияОтменить' }) +
+      '</div></div>';
   }
 
 
@@ -1799,10 +1872,12 @@
   }
   // Автор пункта чек-листа — HR-менеджер стажёра; у пунктов самого HR-менеджера — руководитель стажировки
   function checklistAuthor(t, c) { return c.responsibleId === t.hrId ? t.headId : t.hrId; }
-  // Подразделение автора: у стажёра — его подразделение, у сотрудника — подразделение, за которое он отвечает
+  // Подразделение автора: у стажёра — его подразделение, у сотрудника — его подразделение (FT_17), иначе — где он ответственный
   function authorDept(id) {
     var tr = trainee(id);
     if (tr) return dept(tr.departmentId).name;
+    var u = user(id);
+    if (u && u.departmentId) return dept(u.departmentId).name;
     var d = D.departments.filter(function (x) { return x.responsibleId === id; })[0];
     return d ? d.name : '';
   }
@@ -3173,6 +3248,8 @@
   function cloneSteps(steps) { return steps.map(function (x) { var y = {}; for (var k in x) y[k] = x[k]; return y; }); }
   // Подразделение сотрудника для колонки «Сотрудники»: где он ответственный; иначе — роль
   function userPlace(id) {
+    var u = user(id);
+    if (u && u.departmentId) return dept(u.departmentId).name;   // FT_17: подразделение сотрудника
     var d = D.departments.filter(function (x) { return x.responsibleId === id; })[0];
     return d ? d.name : (user(id) || {}).role || '';
   }
@@ -4299,6 +4376,10 @@
     },
     // FT_15: вкладка «Подбор персонала»
     rcStub: function () { toast(RC_STUB); },
+    // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
+    pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
+    pendingStart: function () { toast('Ещё не реализовано в прототипе'); },
+    pendingCancel: function () { toast('Ещё не реализовано в прототипе'); },
     rcToggleGroup: function (row) {
       var g = row.getAttribute('data-group');
       state.rc.collapsed[g] = !state.rc.collapsed[g];
