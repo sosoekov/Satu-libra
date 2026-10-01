@@ -22,45 +22,94 @@
   /* ---------- Справочник.Подразделения ----------
    * responsibleId — ответственный за подразделение (FT_6); если не задан, берётся у вышестоящего подразделения.
    */
-  // FT_8: структура ЦАС и ответственные — по данным заказчика
+  // FT_8: структура ЦАС и ответственные — по данным заказчика. FT_17: полная структура предприятия (группы — четвёртый уровень);
+  // ответственные за «Отдел корпоративных проектов» и «Отдел отчетности, НСИ и бизнес-процессов» — по списку сотрудников заказчика
   var departments = [
     { id: 'd-cas',    name: 'ЦАС',                                               parentId: null,     responsibleId: 'u-strygin' },
+    { id: 'd-admin',  name: 'Администрация',                                     parentId: 'd-cas' },
     { id: 'd-corp',   name: 'Отдел корпоративного сопровождения',                parentId: 'd-cas',  responsibleId: 'u-kladova' },
     { id: 'd-doc',    name: 'Направление по автоматизации Документооборота',     parentId: 'd-corp', responsibleId: 'u-podyniglazov' },
+    { id: 'd-doc-big',  name: 'Группа крупных внедрений по цифровизации бизнес-процессов', parentId: 'd-doc' },
+    { id: 'd-doc-arch', name: 'Группа развития направлений "Архив" и "НСИ"',     parentId: 'd-doc' },
+    { id: 'd-doc-mid',  name: 'Группа средних внедрений 1СДО',                   parentId: 'd-doc' },
     { id: 'd-uss',    name: 'Направление по внедрению, сопровождению и развитию учетных систем управления', parentId: 'd-corp', responsibleId: 'u-sizova' },
-    { id: 'd-cproj',  name: 'Отдел корпоративных проектов',                      parentId: 'd-cas',  responsibleId: 'u-gavrilkina' },
+    { id: 'd-uss-zup',  name: 'Проекты по ЗУП и транспорту',                     parentId: 'd-uss' },
+    { id: 'd-uss-erp',  name: 'Проекты по сопровождению и развитию ERP систем',  parentId: 'd-uss' },
+    { id: 'd-cproj',  name: 'Отдел корпоративных проектов',                      parentId: 'd-cas',  responsibleId: 'u-moskvicheva-na' },
     { id: 'd-oper',   name: 'Направление оперативного учета',                    parentId: 'd-cproj', responsibleId: 'u-maznichenko' },
     { id: 'd-prod',   name: 'Направление производственного учета, учета себестоимости и затрат', parentId: 'd-cproj', responsibleId: 'u-tsumankov' },
-    { id: 'd-report', name: 'Отдел отчетности, НСИ и бизнес-процессов',          parentId: 'd-cas',  responsibleId: 'u-glebov' },
+    { id: 'd-cdev',   name: 'Направление разработки в корп. секторе',            parentId: 'd-cproj' },
+    { id: 'd-reg',    name: 'Направление регламентированного учета',             parentId: 'd-cproj' },
+    { id: 'd-cmgmt',  name: 'Направление управления и администрирования',        parentId: 'd-cproj' },
+    { id: 'd-fin',    name: 'Направление финансового учета',                    parentId: 'd-cproj', responsibleId: 'u-konstantinov' },
+    { id: 'd-report', name: 'Отдел отчетности, НСИ и бизнес-процессов',          parentId: 'd-cas',  responsibleId: 'u-konopatkina' },
+    { id: 'd-rmeth',  name: 'Направление методологии стандартизации учетных процессов и аналитической отчетности', parentId: 'd-report' },
+    { id: 'd-rdev',   name: 'Направление разработки',                           parentId: 'd-report' },
     { id: 'd-gov',    name: 'Отдел по работе с государственным сектором',        parentId: 'd-cas',  responsibleId: 'u-vorfolomeeva' },
     { id: 'd-gadm',   name: 'Направление администрирования проектов',            parentId: 'd-gov',  responsibleId: 'u-kustavinova' },
+    { id: 'd-gadm-east', name: 'Группа администраторов проектов Восток',         parentId: 'd-gadm' },
+    { id: 'd-gadm-west', name: 'Группа администраторов проектов Запад',          parentId: 'd-gadm' },
     { id: 'd-gacc',   name: 'Направление бухгалтерского учета Гос. учреждений',  parentId: 'd-gov',  responsibleId: 'u-mazurova' },
     { id: 'd-gpay',   name: 'Направление зарплаты и кадров Гос. учреждений',     parentId: 'd-gov',  responsibleId: 'u-gorbunova' },
-    { id: 'd-sub',    name: 'Отдел по работе с субподрядчиками',                 parentId: 'd-cas',  responsibleId: 'u-dryamin' },
-    { id: 'd-fed',    name: 'Отдел по работе с федеральными проектами',          parentId: 'd-cas' }
+    { id: 'd-gdev',   name: 'Направление разработки в Гос. секторе',             parentId: 'd-gov' },
+    { id: 'd-gpm',    name: 'Направление управления Гос. проектами',             parentId: 'd-gov' },
+    { id: 'd-gpm-east', name: 'Группа Руководителей проектов Восток',            parentId: 'd-gpm',  responsibleId: 'u-kononenko' },
+    { id: 'd-gpm-west', name: 'Группа Руководителей проектов Запад',             parentId: 'd-gpm' },
+    { id: 'd-fed',    name: 'Отдел по работе с федеральными проектами',          parentId: 'd-cas' },
+    { id: 'd-farch',  name: 'Направление архитектуры и интеграций',              parentId: 'd-fed' },
+    { id: 'd-facc',   name: 'Направление бухгалтерского учета федеральных проектов', parentId: 'd-fed' },
+    { id: 'd-fpay',   name: 'Направление зарплаты и кадров федеральных проектов', parentId: 'd-fed' },
+    { id: 'd-fdev',   name: 'Направление разработки и прикладного ПО',           parentId: 'd-fed' },
+    { id: 'd-ffhd',   name: 'Направление разработки ФХД',                        parentId: 'd-fed' },
+    { id: 'd-fpm',    name: 'Направление управления проектами',                  parentId: 'd-fed' },
+    { id: 'd-exp',    name: 'Отдел экспертизы и внутренних проектов',            parentId: 'd-cas' },
+    { id: 'd-pmo',    name: 'Отдел Проектный офис',                              parentId: 'd-cas' },
+    // Нет в структуре заказчика (FT_17) — оставлен для заявки ЗП-000043 (FT_15); вопрос заказчику
+    { id: 'd-sub',    name: 'Отдел по работе с субподрядчиками',                 parentId: 'd-cas',  responsibleId: 'u-dryamin' }
   ];
 
   /* ---------- Справочник.Пользователи / ФизическиеЛица ---------- */
   var users = [
-    { id: 'u-strygin',      fullName: 'Стрыгин Константин Михайлович',   role: 'Заместитель руководителя ЦАС' },
-    { id: 'u-kladova',      fullName: 'Кладова Яна Сергеевна',           role: 'Руководитель отдела' },     // FT_9: руководитель Отдела корпоративного сопровождения
-    { id: 'u-litvinova',    fullName: 'Литвинова Надежда Николаевна',    role: 'Сотрудник' },               // FT_9: больше не руководитель отдела
-    { id: 'u-podyniglazov', fullName: 'Подыниглазов Артем Алексеевич',   role: 'Руководитель направления' },
-    { id: 'u-sizova',       fullName: 'Сизова Анна Владиславовна',       role: 'Руководитель направления' },
-    { id: 'u-gavrilkina',   fullName: 'Гаврилкина Татьяна Александровна', role: 'Руководитель отдела' },
-    { id: 'u-maznichenko',  fullName: 'Мазниченко Екатерина Александровна', role: 'Руководитель направления' },
-    { id: 'u-tsumankov',    fullName: 'Цуманков Николай Александрович',  role: 'Руководитель направления' },
-    { id: 'u-glebov',       fullName: 'Глебов Дмитрий Сергеевич',        role: 'Руководитель отдела' },
-    { id: 'u-vorfolomeeva', fullName: 'Ворфоломеева Наталья Юрьевна',    role: 'Руководитель отдела' },
-    { id: 'u-kustavinova',  fullName: 'Куставинова Ксения Дмитриевна',   role: 'Руководитель направления' },
-    { id: 'u-mazurova',     fullName: 'Мазурова Ольга Васильевна',       role: 'Руководитель направления' },
-    { id: 'u-gorbunova',    fullName: 'Горбунова Анна Юрьевна',          role: 'Руководитель направления' },
-    { id: 'u-dryamin',      fullName: 'Дрямин Фёдор Викторович',         role: 'Руководитель отдела' },
-    { id: 'u-sudomoykina',  fullName: 'Судомойкина Анна Николаевна',     role: 'HR-менеджер' },
-    { id: 'u-kondurova',    fullName: 'Кондурова Алла Ивановна',         role: 'HR-менеджер' },
-    { id: 'u-andreeva',     fullName: 'Андреева Елизавета Ивановна',     role: 'HR-менеджер' },
-    { id: 'u-samsonova',    fullName: 'Самсонова Дарья Николаевна',      role: 'HR-менеджер' },
-    { id: 'u-baeva',        fullName: 'Баева Диана Владиславовна',       role: 'КШ' }
+    { id: 'u-strygin',      fullName: 'Стрыгин Константин Михайлович',   role: 'Заместитель руководителя ЦАС', departmentId: 'd-cas' },
+    { id: 'u-kladova',      fullName: 'Кладова Яна Сергеевна',           role: 'Руководитель отдела', departmentId: 'd-corp' },     // FT_9: руководитель Отдела корпоративного сопровождения
+    { id: 'u-podyniglazov', fullName: 'Подыниглазов Артем Алексеевич',   role: 'Руководитель направления', departmentId: 'd-doc' },
+    { id: 'u-sizova',       fullName: 'Сизова Анна Владиславовна',       role: 'Руководитель направления', departmentId: 'd-uss' },
+    { id: 'u-gavrilkina',   fullName: 'Гаврилкина Татьяна Александровна', role: 'Сотрудник', departmentId: 'd-cproj' },
+    { id: 'u-maznichenko',  fullName: 'Мазниченко Екатерина Александровна', role: 'Руководитель направления', departmentId: 'd-oper' },
+    { id: 'u-tsumankov',    fullName: 'Цуманков Николай Александрович',  role: 'Руководитель направления', departmentId: 'd-prod' },
+    { id: 'u-glebov',       fullName: 'Глебов Дмитрий Сергеевич',        role: 'Сотрудник', departmentId: 'd-report' },
+    { id: 'u-vorfolomeeva', fullName: 'Ворфоломеева Наталья Юрьевна',    role: 'Руководитель отдела', departmentId: 'd-gov' },
+    { id: 'u-kustavinova',  fullName: 'Куставинова Ксения Дмитриевна',   role: 'Руководитель направления', departmentId: 'd-gadm' },
+    { id: 'u-mazurova',     fullName: 'Мазурова Ольга Васильевна',       role: 'Руководитель направления', departmentId: 'd-gacc' },
+    { id: 'u-gorbunova',    fullName: 'Горбунова Анна Юрьевна',          role: 'Руководитель направления', departmentId: 'd-gpay' },
+    { id: 'u-dryamin',      fullName: 'Дрямин Фёдор Викторович',         role: 'Руководитель отдела', departmentId: 'd-sub' },
+    { id: 'u-sudomoykina',  fullName: 'Судомойкина Анна Николаевна',     role: 'HR-менеджер', departmentId: null },
+    { id: 'u-kondurova',    fullName: 'Кондурова Алла Ивановна',         role: 'HR-менеджер', departmentId: null },
+    { id: 'u-andreeva',     fullName: 'Андреева Елизавета Ивановна',     role: 'HR-менеджер', departmentId: null },
+    { id: 'u-samsonova',    fullName: 'Самсонова Дарья Николаевна',      role: 'HR-менеджер', departmentId: null },
+    { id: 'u-baeva',        fullName: 'Баева Диана Владиславовна',       role: 'КШ', departmentId: null },
+    // FT_17: сотрудники по списку заказчика (должность — в role)
+    { id: 'u-veselov-ae', fullName: 'Веселов Андрей Евгеньевич', role: 'Системный аналитик', departmentId: 'd-doc-mid' },
+    { id: 'u-veselov-sv', fullName: 'Веселов Сергей Владимирович', role: 'Руководитель проектов', departmentId: 'd-fpm' },
+    { id: 'u-grigoriev-ay', fullName: 'Григорьев Антон Юрьевич', role: 'Системный аналитик', departmentId: 'd-fin' },
+    { id: 'u-gromova', fullName: 'Громова Анастасия Юрьевна', role: 'Системный аналитик', departmentId: 'd-gpay' },
+    { id: 'u-dabaeva', fullName: 'Дабаева Баира Цыреннордобовна', role: 'Администратор проектов', departmentId: 'd-gadm-east' },
+    { id: 'u-darvin', fullName: 'Дарвин Денис Владиславович', role: 'Системный аналитик', departmentId: 'd-reg' },
+    { id: 'u-ibragimova', fullName: 'Ибрагимова Диана Борисовна', role: 'Системный аналитик', departmentId: 'd-prod' },
+    { id: 'u-ivanov-vy', fullName: 'Иванов Владислав Юрьевич', role: 'Системный аналитик', departmentId: 'd-rmeth' },
+    { id: 'u-ivanova-ln', fullName: 'Иванова Лариса Николаевна', role: 'Системный аналитик', departmentId: 'd-gpay' },
+    { id: 'u-konkalevskaya', fullName: 'Конкалевская Екатерина Игоревна', role: 'Системный аналитик', departmentId: 'd-doc-mid' },
+    { id: 'u-kononenko', fullName: 'Кононенко Екатерина Игоревна', role: 'Руководитель группы', departmentId: 'd-gpm-east' },
+    { id: 'u-konopatkina', fullName: 'Конопаткина Анастасия Сергеевна', role: 'Руководитель отдела', departmentId: 'd-report' },
+    { id: 'u-konstantinov', fullName: 'Константинов Александр Сергеевич', role: 'Руководитель направления', departmentId: 'd-fin' },
+    { id: 'u-litvinova', fullName: 'Литвинова Надежда Николаевна', role: 'Системный аналитик', departmentId: 'd-uss-erp' },
+    { id: 'u-likhacheva', fullName: 'Лихачёва Виктория Николаевна', role: 'Технический писатель', departmentId: 'd-fpm' },
+    { id: 'u-lobanov', fullName: 'Лобанов Станислав Иванович', role: 'Инженер-программист', departmentId: 'd-doc-mid' },
+    { id: 'u-moskvicheva-na', fullName: 'Москвичева Нина Артуровна', role: 'Руководитель отдела корпоративных проектов', departmentId: 'd-cproj' },
+    { id: 'u-moskvicheva-ts', fullName: 'Москвичева Татьяна Сергеевна', role: 'Системный аналитик', departmentId: 'd-exp' },
+    { id: 'u-mokhnachev', fullName: 'Мохначев Артем Александрович', role: 'Инженер-программист', departmentId: 'd-uss-erp' },
+    { id: 'u-naledina', fullName: 'Наледина Ирина Анатольевна', role: 'Системный аналитик', departmentId: 'd-gacc' },
+    { id: 'u-nam', fullName: 'Нам Артём Игоревич', role: 'Инженер-программист', departmentId: 'd-ffhd' }
   ];
   var HR_IDS = ['u-sudomoykina', 'u-kondurova', 'u-andreeva', 'u-samsonova'];   // HR-менеджеры (FT_8: у стажёра — свой, hrId)
   var CAS_HEAD_ID = 'u-strygin';  // заместитель руководителя ЦАС — шаг «Утверждение» маршрута согласования АП (FT_8, FT_9)
@@ -599,7 +648,8 @@
   ].map(function (x) { x.status = x.status || 'open'; return x; });
   var recruitNotes = [
     { id: 'rn-1', userId: 'u-strygin',     severity: 'warning', text: 'Заявка на подбор аналитика по отчетности — осталось 2 дня на согласование', at: '2026-07-25T09:10' },
-    { id: 'rn-2', userId: 'u-strygin',     severity: 'info',    text: 'Кандидат на должность программиста принял предложение о работе',       at: '2026-07-24T16:40' },
+    // FT_17: уведомление получает автор заявки ЗП-000040 (Сизова); candidateId — найденный кандидат, «Перейти» открывает его карточку
+    { id: 'rn-2', userId: 'u-sizova',      severity: 'info',    text: 'Кандидат на должность программиста принял предложение о работе',       at: '2026-07-24T16:40', candidateId: 't-found-1' },
     { id: 'rn-3', userId: 'u-kladova',     severity: 'warning', text: 'Заявка на подбор специалиста по документообороту — осталось 2 дня на согласование', at: '2026-07-25T08:30' },
     { id: 'rn-4', userId: 'u-sizova',      severity: 'info',    text: 'Кандидат на должность программиста приглашён на собеседование 30.07.26', at: '2026-07-24T11:05' },
     { id: 'rn-5', userId: 'u-sudomoykina', severity: 'danger',  text: 'Заявка на подбор аналитика ERP — срок закрытия вакансии прошёл',        at: '2026-07-23T10:00' }
@@ -630,7 +680,8 @@
     { id: 'vr-36', num: 'ЗП-000036', date: '2026-07-01', state: 'progress', position: 'Системный аналитик',            deptId: 'd-oper',   authorId: 'u-kladova',      qty: 1, candidates: 1, found: 1, deadline: '2026-08-10', unplanned: true },
     { id: 'vr-37', num: 'ЗП-000037', date: '2026-07-07', state: 'progress', position: 'Бизнес-аналитик',               deptId: 'd-report', authorId: 'u-glebov',       qty: 1, candidates: 2, found: 0, deadline: '2026-08-31', unplanned: true },
     { id: 'vr-38', num: 'ЗП-000038', date: '2026-07-10', state: 'progress', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 3, found: 0, deadline: '2026-07-20' },
-    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'progress', position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 2, found: 0, deadline: '2026-09-15' },
+    // FT_17: подбор по заявке завершён (HR нажал «Исполнено») — найденный кандидат ждёт решения руководителя на вкладке «Адаптация персонала»
+    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'closed',   position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 1, deadline: '2026-09-15', closedAt: '2026-07-24' },
     // Новая
     { id: 'vr-45', num: 'ЗП-000045', date: '2026-07-24', state: 'new',      position: 'Специалист по кадрам',          deptId: 'd-gpay',   authorId: 'u-gorbunova',    qty: 1, candidates: 0, found: 0, deadline: '2026-10-01', unplanned: true },
     { id: 'vr-46', num: 'ЗП-000046', date: '2026-07-24', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-15' },
@@ -687,6 +738,22 @@
   };
   templates.forEach(function (tp) { tp.tasks.forEach(function (x) { x.criteria = CRITERIA[x.name] || ''; }); });
   tasks.forEach(function (x) { x.criteria = CRITERIA[x.name] || ''; });
+
+  /* ---------- FT_17: найденные кандидаты — стажёры до решения руководителя ----------
+   * Та же сущность, что стажёр; этапы до старта стажировки: 'pending_decision' (ожидает решения) и 'cancelled' (отменено, не отображается).
+   * requisitionId — заявка на подбор (vacancyRequests), foundAt — когда HR нажал «Исполнено», expectedStartDate — ожидаемая дата выхода (необязательно),
+   * hrId — HR-менеджер, завершивший подбор. Руководитель стажировки, наставник и даты задаются при старте; чек-листа и АП до старта нет.
+   * При отмене: cancelReason, cancelledAt, cancelledBy. ФИО кандидатов — тестовые.
+   */
+  function foundPerson(o) {
+    return { id: o.id, fullName: o.fullName, position: o.position, positionFamily: o.positionFamily || null, qualificationLevel: null,
+      departmentId: o.departmentId, requisitionId: o.requisitionId, foundAt: o.foundAt, expectedStartDate: o.expectedStartDate || null,
+      hrId: o.hrId, mentorId: null, headId: null, startDate: null, endDate: null, durationMode: null, checklistCreated: false,
+      stage: 'pending_decision', rejectionComment: null, draftSince: null, stageDates: {}, closedAt: null, closeKind: null,
+      cancelReason: null, cancelledAt: null, cancelledBy: null };
+  }
+  trainees.push(foundPerson({ id: 't-found-1', fullName: 'Ковалёв Даниил Сергеевич', position: 'Программист',
+    departmentId: 'd-uss', requisitionId: 'vr-40', foundAt: '2026-07-24T16:40', expectedStartDate: '2026-08-10', hrId: 'u-sudomoykina' }));
 
   // Уведомления о событиях, адресованные пользователю (например, стажёру — результат проверки задачи). Пополняются в app.js
   var userNotes = [];

@@ -887,3 +887,21 @@ table.grid.rc-table td { vertical-align: middle; }
 .exec-comment::placeholder, .exec-date::placeholder { color: var(--c-text-secondary); }
 .input.exec-date { width: 200px; }
 .task-exec .tf-field { flex: 0 0 auto; }
+
+/* ================= FT_17: найденные кандидаты — блок «Ожидают решения» ================= */
+.pending-block { gap: var(--sp-2); }
+.pending-title .h-block { font-size: var(--fs-m); }
+.pending-cards { gap: var(--sp-3); align-items: stretch; }
+.pending-card { flex: 1 1 300px; max-width: 420px; min-width: 0; border: 1px solid var(--c-border); border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4); background: var(--c-bg); transition: box-shadow 200ms, border-color 200ms; }
+.pending-name { font-size: var(--fs-l); }
+.pending-actions { margin-top: var(--sp-2); }
+/* Основная команда карточки: в блоке может быть несколько карточек, а основная кнопка на экране — одна, поэтому акцент контуром */
+.btn.btn-accent { border-color: var(--c-primary); color: var(--c-primary); }
+.btn.btn-accent:hover:not(:disabled) { background: var(--c-bg-selected); }
+/* Подсветка карточки при переходе из уведомления (НЕ_ПЕРЕНОСИТЬ) */
+.pending-card.flash { border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-info-border); background: var(--c-bg-selected); }
+/* FT_17: форма «Старт стажировки» — пояснения под полями */
+.dlg-hint { margin: calc(var(--sp-1) * -1) 0 0; }
+/* FT_17: способы создания АП в форме «Стажировка оформлена» */
+.btn.ap-mode { height: auto; padding: var(--sp-2) var(--sp-3); justify-content: flex-start; text-align: left; white-space: normal; }
