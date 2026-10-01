@@ -903,3 +903,5 @@ table.grid.rc-table td { vertical-align: middle; }
 .pending-card.flash { border-color: var(--c-primary); box-shadow: 0 0 0 3px var(--c-info-border); background: var(--c-bg-selected); }
 /* FT_17: форма «Старт стажировки» — пояснения под полями */
 .dlg-hint { margin: calc(var(--sp-1) * -1) 0 0; }
+/* FT_17: способы создания АП в форме «Стажировка оформлена» */
+.btn.ap-mode { height: auto; padding: var(--sp-2) var(--sp-3); justify-content: flex-start; text-align: left; white-space: normal; }

@@ -570,6 +570,28 @@
     return e;
   }
 
+  // Подтверждение старта: данные стажировки, этап «Подготовка к выходу» (в ТЗ — «Ожидает АП»), стандартный чек-лист, уведомления назначенным
+  function startInternship(t, v) {
+    t.headId = v.headId;
+    t.mentorId = v.mentorId;
+    t.startDate = v.startDate;
+    t.endDate = v.endDate;
+    t.durationMode = v.durationMode;
+    t.stage = 'found';
+    t.stageDates = { found: D.TODAY };
+    D.checklist = D.checklist.filter(function (c) { return c.traineeId !== t.id; });
+    createStandardChecklist(t);
+    t.checklistCreated = true;
+    notifyAssigned(t);
+  }
+  // Уведомления «Адаптация» руководителю стажировки и наставнику; ASSUMPTION (ТЗ 11.8): совпадающему с текущим пользователем — не создаётся
+  function notifyAssigned(t) {
+    var period = 'стажировка с ' + fmtDate(t.startDate) + ' по ' + fmtDate(t.endDate);
+    [[t.headId, 'руководителем стажировки'], [t.mentorId, 'наставником']].forEach(function (x) {
+      if (x[0] && x[0] !== D.CURRENT_USER_ID) pushUserNote(x[0], 'info', 'Вы назначены ' + x[1] + ' стажёра ' + t.fullName + ': ' + period, t.id);
+    });
+  }
+
   // Отмена до старта стажировки: причина обязательна — не меньше 3 значащих символов (пробелы не считаются)
   var CANCEL_REASON_MIN = 3;
   function cancelReasonError(text) {
@@ -1677,7 +1699,7 @@
         '<div' + a1c('Надпись', 'ДекорацияСоздание' + name) + '>' + esc(title) + '</div>' +
         '<div class="muted grow"' + a1c('Надпись', 'ДекорацияСоздание' + name + 'Пояснение') + '>' + esc(text) + '</div>' +
         (extra || '') +
-        '<div>' + button(btnText, { action: 'openDialog', data: { dialog: dialog }, name: 'КнопкаСоздание' + name }) + '</div>' +
+        '<div>' + button(btnText, { action: 'startAp', data: { mode: AP_MODE_BY_DIALOG[dialog], dialog: dialog }, name: 'КнопкаСоздание' + name }) + '</div>' +
         '</div>';
     }
     return '<div class="col gap-4"' + a1c('ГруппаВертикальная', 'ГруппаАПНеСоздана') + '>' +
@@ -1694,6 +1716,31 @@
         option('Скопировать у другого стажёра', 'Возьмите АП коллеги на похожей должности', '', 'Выбрать стажёра', 'createCopy', 'Копированием') +
         option('С нуля', 'Пустая программа, задачи добавите сами', '', 'Создать пустую АП', 'createEmpty', 'СНуля') +
       '</div></div>';
+  }
+
+  // FT_17: общий вход в создание АП — вкладка «Адаптационная программа» и форма «Стажировка оформлена».
+  // Способ выбран заранее, внутри форм создания способ повторно не выбирается
+  var AP_MODES = [
+    { mode: 'template', dialog: 'createFromTemplate', text: 'На основании шаблона', hint: 'Задачи и сроки подставятся из шаблона должности', name: 'ПоШаблону' },
+    { mode: 'copy',     dialog: 'createCopy',         text: 'Копированием чужой АП', hint: 'Возьмите АП коллеги на похожей должности', name: 'Копированием' },
+    { mode: 'empty',    dialog: 'createEmpty',        text: 'С нуля вручную',        hint: 'Пустая программа, задачи добавите сами', name: 'СНуля' }
+  ];
+  var AP_MODE_BY_DIALOG = { createFromTemplate: 'template', createCopy: 'copy', createEmpty: 'empty' };
+  // opts.showCard — открыть карточку стажёра на странице АП под формой создания (вход из формы «Стажировка оформлена»)
+  function startApCreation(internId, mode, opts) {
+    var t = trainee(internId);
+    var m = AP_MODES.filter(function (x) { return x.mode === mode; })[0];
+    if (!t || !m || programOf(t) || !t.startDate) return false;
+    if (opts && opts.showCard) {
+      if (activeDoc()) switchShell(null);
+      state.topTab = 'adaptation';
+      state.counterFilter = null;
+      state.search = '';
+      selectTrainee(t.id);
+      state.traineeTab = 'program';
+    }
+    openDialog(m.dialog, t.id);
+    return true;
   }
 
   // Создание АП любым из трёх способов (7.5.5)
@@ -3880,6 +3927,20 @@
     }
   };
 
+  // Стандартный чек-лист подготовки к выходу из шаблона (не зависит от должности). FT_17: и при старте стажировки
+  function createStandardChecklist(t) {
+    var hasProgram = !!programOf(t);
+    D.checklistTemplate.forEach(function (c, i) {
+      var item = {
+        id: 'cl-tpl-' + Date.now() + '-' + i, traineeId: t.id, name: c.name, responsibleRole: c.responsibleRole,
+        responsibleId: roleDefaultUser(t, c.responsibleRole), offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
+        linkedDocType: c.linkedDocType, linkedDocNumber: null
+      };
+      if (c.linkedDocType === 'program' && hasProgram) markChecklistDone(item, true);
+      D.checklist.push(item);
+    });
+  }
+
   DIALOGS.checklistFill = {
     title: 'Заполнить по шаблону', form: 'ФормаЗаполнитьЧекЛист', submit: 'Заполнить по шаблону', danger: true,
     body: function (t) {
@@ -3889,16 +3950,7 @@
     },
     apply: function (t) {
       D.checklist = D.checklist.filter(function (c) { return c.traineeId !== t.id; });
-      var hasProgram = !!programOf(t);
-      D.checklistTemplate.forEach(function (c, i) {
-        var item = {
-          id: 'cl-tpl-' + Date.now() + '-' + i, traineeId: t.id, name: c.name, responsibleRole: c.responsibleRole,
-          responsibleId: roleDefaultUser(t, c.responsibleRole), offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
-          linkedDocType: c.linkedDocType, linkedDocNumber: null
-        };
-        if (c.linkedDocType === 'program' && hasProgram) markChecklistDone(item, true);
-        D.checklist.push(item);
-      });
+      createStandardChecklist(t);
       toast('Чек-лист заполнен по шаблону');
     }
   };
@@ -4169,7 +4221,35 @@
           byId(DURATION_MODES.map(function (x) { return { id: x.value, text: x.text }; }), v.durationMode).text + ' − 1 день. Изменить дату вручную — режим «Произвольная дата»</p>');
     },
     validate: function (t, v) { return startInternshipErrors(t, v); },
-    apply: function () { toast('Ещё не реализовано в прототипе'); }   // фаза 5: сохранение, чек-лист, уведомления, предложение создать АП
+    apply: function (t, v) { startInternship(t, v); },
+    afterApply: function (t) { openDialog('internshipStarted', t.id); }
+  };
+
+  // FT_17: «Стажировка оформлена» (ТЗ 4, шаг 5). Сохранение стажировки от выбора не зависит; крестик и Esc — то же, что «Позже».
+  // «Создать АП» → три способа; способ открывает существующую форму создания АП (startApCreation)
+  DIALOGS.internshipStarted = {
+    title: 'Стажировка оформлена', form: 'ФормаСтажировкаОформлена', readOnly: true, noCloseButton: true,
+    init: function () { return { step: 'ask' }; },
+    body: function (t) {
+      var v = state.dialog.values;
+      var summary = '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаИтог') + '>' + esc(t.fullName) + ': стажировка с ' + fmtDate(t.startDate) + ' по ' + fmtDate(t.endDate) +
+        '. Руководитель стажировки — ' + esc(userName(t.headId)) + ', наставник — ' + esc(userName(t.mentorId)) + '.</p>';
+      if (v.step === 'choose') {
+        return summary + '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСпособСозданияАП') + '>Выберите способ создания АП:</p>' +
+          '<div class="col gap-2 ap-modes"' + a1c('ГруппаВертикальная', 'ГруппаСпособыСозданияАП') + '>' + AP_MODES.map(function (m) {
+            return '<button type="button" class="btn ap-mode" data-action="startedApMode" data-mode="' + m.mode + '"' + a1c('Кнопка', 'КнопкаСоздатьАП' + m.name) + '>' +
+              '<span class="col gap-0"><span>' + esc(m.text) + '</span><span class="muted text-s">' + esc(m.hint) + '</span></span></button>';
+          }).join('') + '</div>';
+      }
+      return summary +
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияЧекЛистСоздан') + '>Для стажёра будет создан стандартный чек-лист подготовки к выходу. Пункты можно будет изменить или добавить.</p>' +
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросСоздатьАП') + '>Создать адаптационную программу (АП) сейчас?</p>';
+    },
+    extraFoot: function () {
+      return state.dialog.values.step === 'choose'
+        ? button('Назад', { action: 'startedBack', name: 'ФормаСтажировкаОформленаКнопкаНазад' }) + button('Позже', { action: 'dialogCancel', name: 'ФормаСтажировкаОформленаКнопкаПозже' })
+        : button('Создать АП', { cls: 'btn-primary', action: 'startedCreateAp', name: 'ФормаСтажировкаОформленаКнопкаСоздатьАП' }) + button('Позже', { action: 'dialogCancel', name: 'ФормаСтажировкаОформленаКнопкаПозже' });
+    }
   };
 
   // FT_17: отмена стажировки найденного кандидата (до старта). Кнопки «Подтвердить отмену» / «Назад»
@@ -4250,6 +4330,7 @@
     def.apply(t, d.values);
     state.dialog = state.dialogStack.pop() || null;
     render();
+    if (def.afterApply) def.afterApply(t, d.values);   // FT_17: следующая форма после сохранения («Стажировка оформлена»)
   }
 
   // FT_10: «Выполнено» стажёра у задачи с проверяющим — «На проверке» (у проверяющего появляется задача «Проверить»), без проверяющего — «Выполнена»
@@ -4594,6 +4675,14 @@
       if (!t || !isPendingDecision(t)) return;
       if (!canDecidePending(t)) { toast(decideLockText(t)); return; }
       openDialog('pendingStart', t.id);
+    },
+    startAp: function (btn) { startApCreation(state.selectedTraineeId, btn.getAttribute('data-mode')); },
+    startedCreateAp: function () { state.dialog.values.step = 'choose'; renderDialog(); var b = topModal().querySelector('[data-action="startedApMode"]'); if (b) b.focus(); },
+    startedBack: function () { state.dialog.values.step = 'ask'; renderDialog(); },
+    startedApMode: function (btn) {
+      var id = state.dialog.traineeId;
+      closeDialog();
+      startApCreation(id, btn.getAttribute('data-mode'), { showCard: true });
     },
     pendingDuration: function (btn) {
       var v = state.dialog.values;
