@@ -525,7 +525,7 @@ body.markup-1c table[data-1c]::before {
 .summary-row:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; }
 .fio-link { white-space: normal; }
 .summary-table td:first-child { min-width: 150px; }
-.summary-table td:nth-child(3) { min-width: 136px; }  /* FT_16: «Требует действия» — третья колонка (без «Подразделения») */
+.summary-table td.col-action { min-width: 136px; }  /* FT_18: «Требует действия» — по классу (колонка «Подразделение» есть только без иерархии) */
 .action-icon { display: inline-flex; flex: 0 0 16px; padding-top: 1px; }
 .action-more { padding-left: 20px; }
 .task-meter { flex-wrap: nowrap; }
@@ -905,3 +905,13 @@ table.grid.rc-table td { vertical-align: middle; }
 .dlg-hint { margin: calc(var(--sp-1) * -1) 0 0; }
 /* FT_17: способы создания АП в форме «Стажировка оформлена» */
 .btn.ap-mode { height: auto; padding: var(--sp-2) var(--sp-3); justify-content: flex-start; text-align: left; white-space: normal; }
+
+/* ================= FT_18: дерево подразделений — отбор, переключатель «Отображать в иерархии» ================= */
+.tree-dept { cursor: pointer; }
+.tree-dept .tree-arrow[data-action] { cursor: pointer; border-radius: 4px; }
+.tree-dept .tree-arrow[data-action]:hover { background: var(--c-neutral-bg); }
+.hier-toggle { border: none; background: none; padding: 0 var(--sp-1); cursor: pointer; color: var(--c-text); white-space: nowrap; }
+.sw { display: inline-flex; border: 1px solid var(--c-border); border-radius: var(--radius-s); overflow: hidden; font-size: var(--fs-s); line-height: 1; }
+.sw-cell { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 18px; color: var(--c-text-secondary); background: var(--c-bg); }
+.sw.on .sw-yes { background: var(--c-bg-selected); color: var(--c-primary); }
+.sw:not(.on) .sw-no { background: var(--c-neutral-bg); color: var(--c-text); }
