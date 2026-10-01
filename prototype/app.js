@@ -390,6 +390,8 @@
     summaryCurrent: null,        // текущая строка сводной таблицы (одиночный клик, ↑ ↓)
     summaryFocus: false,         // вернуть фокус текущей строке после перерисовки
     summaryCollapsed: {},        // FT_16: свёрнутые группы подразделений сводной таблицы: {deptId: true}
+    deptFilter: null,            // FT_18: отбор по подразделению из дерева слева (с вложенными); вместе с фильтром по статусу
+    summaryHierarchy: true,      // FT_18: «Отображать в иерархии» — группировка таблицы стажёров по подразделениям
     analyticsOpen: false,        // блок «Аналитика по адаптационной программе» развёрнут — общий для всех стажёров до перезагрузки
     openMenu: null,              // открытое подменю
     dialog: null,                // открытый диалог (верхний)
@@ -625,6 +627,7 @@
     state.selectedTraineeId = null;
     if (state.counterFilter !== 'pending') state.counterFilter = null;   // карточку не скрывают другие фильтры и поиск
     state.search = '';
+    state.deptFilter = null;   // FT_18
     state.pendingFlash = t.id;
     render();
     var card = document.querySelector('.pending-card[data-pending="' + t.id + '"]');
@@ -802,15 +805,20 @@
     return !state.counterFilter || filterMatches(filterById(state.counterFilter), t);
   }
   // Стажёры с учётом фильтра по карточке и поиска — общий источник для дерева, списка и сводной таблицы
-  function visibleTrainees() {
+  // ignoreDept — без отбора по подразделению (для дерева слева: в нём выбирают подразделение)
+  function visibleTrainees(ignoreDept) {
     var q = searchQuery();
-    return myTrainees().filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q); });
+    return myTrainees().filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q) && (ignoreDept || traineeMatchesDept(t)); });
+  }
+  // FT_18: стажёр в выбранном подразделении или во вложенном
+  function traineeMatchesDept(t) {
+    return !state.deptFilter || deptChain(t.departmentId).some(function (d) { return d.id === state.deptFilter; });
   }
 
   // Дерево подразделений с учётом фильтров: [{dept, children, trainees, count}]
-  function buildTree() {
+  function buildTree(list) {
     var q = searchQuery();
-    var list = visibleTrainees();
+    list = list || visibleTrainees(true);
     function node(d) {
       var children = childDepts(d.id).map(node).filter(Boolean);
       var own = list.filter(function (t) { return t.departmentId === d.id; });
@@ -830,12 +838,6 @@
   // Значок главного уведомления в дереве (фаза 7, раздел 2.4): только иконка, тип — самого важного уведомления
   var TONE_ICONS = { danger: 'alert', warning: 'warn', info: 'info' };
   var TONE_TITLES = { danger: 'Критично', warning: 'Требует внимания', info: 'Информация' };
-  // Дерево показывает только danger и warning (фаза 9, раздел 2.4); сводная — все уведомления
-  function treeNotification(t) { return getNotifications(t).filter(isAttention)[0] || null; }
-  function treeRowTitle(t) {
-    var n = treeNotification(t);
-    return 'Этап: ' + stageMeta(t.stage).title + (n ? '. ' + n.text : '');
-  }
 
   function renderLeft() {
     var zone = el('leftZone');
@@ -901,47 +903,38 @@
     var parts = [];
     if (searchQuery()) parts.push(link('Сбросить поиск', { action: 'resetSearch', name: 'ГиперссылкаСброситьПоиск' + place }));
     if (state.counterFilter) parts.push(link('Сбросить фильтр', { action: 'clearCounterFilter', name: 'ГиперссылкаСброситьФильтр' + place }));
+    if (state.deptFilter && place !== 'Дерево') parts.push(link('Показать все подразделения', { action: 'clearDeptFilter', name: 'ГиперссылкаСброситьПодразделение' + place }));   // FT_18
     var text = searchQuery() ? 'Никого не нашли'
       : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
-      : 'Нет стажёров по фильтру «' + filterById(state.counterFilter).title + '»';
+      : state.counterFilter ? 'Нет стажёров по фильтру «' + filterById(state.counterFilter).title + '»' + (state.deptFilter && place !== 'Дерево' ? ' в подразделении «' + dept(state.deptFilter).name + '»' : '')
+      : 'Нет стажёров в подразделении «' + dept(state.deptFilter).name + '»';   // FT_18
     return '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаПустойРезультат' + place) + '>' +
       '<span' + a1c('Надпись', 'ДекорацияПустойРезультат' + place) + '>' + esc(text) + '</span>' +
       '<div class="row">' + parts.join('') + '</div></div>';
   }
 
+  // FT_18: в дереве только структура подразделений. Щелчок по строке — отбор стажёров подразделения (с вложенными),
+  // повторный — снять отбор; стрелка — свернуть / развернуть ветку. Число — стажёры по текущему фильтру и поиску
   function renderTree() {
     var nodes = buildTree();
     if (!nodes.length) return '<div class="tree">' + emptyFilterState('Дерево') + '</div>';
     var out = [];
     (function walk(list, level) {
       list.forEach(function (n) {
-        var hasKids = n.children.length + n.trainees.length > 0;
+        var hasKids = n.children.length > 0;
         var open = isExpanded(n.dept);
+        var on = state.deptFilter === n.dept.id;
         // Три колонки без заголовков (фаза 9, 7.2): наименование (отступ уровня, стрелка) | статус 20px | количество 32px
-        out.push('<div class="tree-row tree-dept" role="treeitem" tabindex="0" aria-expanded="' + open + '"' +
-          ' data-action="toggleDept" data-id="' + n.dept.id + '"' + (hasKids ? ' title="' + (open ? 'Свернуть' : 'Развернуть') + '"' : '') + '>' +
+        out.push('<div class="tree-row tree-dept' + (on ? ' selected' : '') + '" role="treeitem" tabindex="0" aria-selected="' + on + '"' + (hasKids ? ' aria-expanded="' + open + '"' : '') +
+          ' data-action="deptFilter" data-id="' + n.dept.id + '" title="' + esc(on ? 'Снять отбор по подразделению' : 'Показать стажёров: ' + n.dept.name) + '">' +
           '<span class="tree-col-name" style="padding-left:' + (8 + level * 14) + 'px">' +
-            '<span class="tree-arrow">' + (hasKids ? icon(open ? 'chevronDown' : 'chevronRight') : '') + '</span>' +
+            '<span class="tree-arrow"' + (hasKids ? ' data-action="toggleDept" data-id="' + n.dept.id + '" title="' + (open ? 'Свернуть' : 'Развернуть') + '"' : '') + '>' +
+              (hasKids ? icon(open ? 'chevronDown' : 'chevronRight') : '') + '</span>' +
             '<span class="tree-name bold" title="' + esc(n.dept.name) + '"' + a1c('Надпись', 'ДеревоПодразделенийНаименование') + '>' + esc(n.dept.name) + '</span>' +
           '</span>' +
           '<span class="tree-col-status"></span>' +
           '<span class="tree-col-count muted"' + a1c('Надпись', 'ДеревоПодразделенийКоличество') + '>' + n.count + '</span></div>');
-        if (open) {
-          walk(n.children, level + 1);
-          n.trainees.forEach(function (t) {
-            var n = treeNotification(t);
-            out.push('<div class="tree-row tree-trainee' + (state.selectedTraineeId === t.id ? ' selected' : '') + '" role="treeitem" tabindex="0"' +
-              ' data-action="selectTrainee" data-id="' + t.id + '" title="' + esc(treeRowTitle(t)) + '">' +
-              '<span class="tree-col-name" style="padding-left:' + (8 + (level + 1) * 14) + 'px">' +
-                '<span class="tree-arrow"></span>' +
-                '<span class="tree-name"' + a1c('Надпись', 'ДеревоПодразделенийСтажер', 'check') + '>' + esc(t.fullName) + '</span>' +
-              '</span>' +
-              '<span class="tree-col-status">' +
-                (n ? '<span class="tree-marker c-' + n.severity + '" aria-label="' + esc(TONE_TITLES[n.severity] + ': ' + n.text) + '"' +
-                  a1c('Картинка', 'ДеревоПодразделенийЗначок') + '>' + icon(TONE_ICONS[n.severity]) + '</span>' : '') + '</span>' +
-              '<span class="tree-col-count">' + (state.selectedTraineeId === t.id ? '<span class="tree-chevron">' + icon('chevronRight') + '</span>' : '') + '</span></div>');
-          });
-        }
+        if (open) walk(n.children, level + 1);
       });
     })(nodes, 0);
     return '<div class="tree" role="tree"' + a1c('ДеревоФормы', 'ДеревоПодразделений') + '>' + out.join('') + '</div>';
@@ -1060,10 +1053,12 @@
         text + (on ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
     }
 
-    // FT_16: строки сгруппированы по подразделениям в иерархии, как дерево слева; сортировка — внутри групп, пустые подразделения не выводятся
-    var shown = [];
-    var groups = [];
-    (function walk(nodes, level) {
+    // FT_16: строки сгруппированы по подразделениям в иерархии, как дерево слева; сортировка — внутри групп, пустые подразделения не выводятся.
+    // FT_18: «Отображать в иерархии» выключен — плоский список с колонкой «Подразделение», сортировка по всему списку
+    var flat = !state.summaryHierarchy;
+    var shown = flat ? list : [];
+    var groups = flat ? [{ trainees: list }] : [];
+    if (!flat) (function walk(nodes, level) {
       nodes.forEach(function (n) {
         if (!n.count) return;
         var open = searchQuery() ? true : !state.summaryCollapsed[n.dept.id];
@@ -1074,15 +1069,16 @@
         if (own.length) groups.push({ trainees: own, level: level + 1 });
         shown = shown.concat(own);
       });
-    })(list.length ? buildTree() : [], 0);
+    })(list.length ? buildTree(list) : [], 0);
     if (state.summaryCurrent && !shown.some(function (t) { return t.id === state.summaryCurrent; })) state.summaryCurrent = null;
     function traineeRow(t) {
       return '<tr class="summary-row' + (state.summaryCurrent === t.id ? ' selected' : '') + '" tabindex="' + (state.summaryCurrent === t.id || (!state.summaryCurrent && t === shown[0]) ? '0' : '-1') + '"' +
         ' data-action="summaryRow" data-id="' + t.id + '" title="Двойной клик или Enter — открыть карточку стажёра">' +
         '<td>' + link(t.fullName, { cls: 'fio-link', action: 'selectTrainee', data: { id: t.id }, title: 'Открыть карточку стажёра', name: 'ТаблицаСтажеровФИО' }).replace("data-1c-name=\"ТаблицаСтажеровФИО\"", "data-1c-name=\"ТаблицаСтажеровФИО\" data-1c-risk=\"check\"") +
           '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(formatPosition(t)) + '</div></td>' +
+        (flat ? '<td><div title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаСтажеровПодразделение') + '>' + esc(dept(t.departmentId).name) + '</div></td>' : '') +
         '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
-        '<td>' + actionCell(t) + '</td>' +
+        '<td class="col-action">' + actionCell(t) + '</td>' +
         '<td>' + tasksCell(t) + '</td>' +
         '<td>' + dateCell(t) + '</td>' +
         '</tr>';
@@ -1105,6 +1101,11 @@
         esc(filterById(state.counterFilter).title) + '</span>' +
         button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Сбросить фильтр', action: 'clearCounterFilter', name: 'КнопкаЧипФильтраСбросить' }) + '</span>';
     }
+    if (state.deptFilter) {   // FT_18: отбор по подразделению из дерева
+      chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипПодразделения') + '><span title="' + esc(deptPath({ departmentId: state.deptFilter })) + '"' + a1c('Надпись', 'ДекорацияЧипПодразделения') + '>' +
+        'Подразделение: ' + esc(dept(state.deptFilter).name) + '</span>' +
+        button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', title: 'Показать все подразделения', action: 'clearDeptFilter', name: 'КнопкаЧипПодразделенияСбросить' }) + '</span>';
+    }
     if (searchQuery()) {
       chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипПоиска') + '><span' + a1c('Надпись', 'ДекорацияЧипПоиска') + '>' +
         'Поиск: «' + esc(state.search.trim()) + '»</span>' +
@@ -1113,23 +1114,33 @@
 
     // FT_17: блок «Ожидают решения» — над таблицей без фильтра или с фильтром «Ожидают решения» (тогда таблицы нет)
     var pendingOnly = state.counterFilter === 'pending';
-    var pending = !state.counterFilter || pendingOnly ? myPending().filter(function (t) { return traineeMatchesSearch(t, searchQuery()); }) : [];
+    var pending = !state.counterFilter || pendingOnly ? myPending().filter(function (t) { return traineeMatchesSearch(t, searchQuery()) && traineeMatchesDept(t); }) : [];
     var head = pendingOnly ? 'Ожидают решения: ' + pending.length : 'Стажёры: ' + (chips ? list.length + ' из ' + total : list.length);
     return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
       (pendingOnly ? '' : pendingBlock(pending, false)) +
       '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокСводки') + '>' +
         '<div class="h-block"' + a1c('Надпись', 'ДекорацияЗаголовокСводки') + '>' + head + '</div>' +
         chips + '<span class="grow"></span>' +
+        (pendingOnly ? '' : hierarchyToggle()) +
         button('', { cls: 'btn-icon' + (state.helpOpen ? ' pressed' : ''), icon: 'help', action: 'toggleHelp',
           title: state.helpOpen ? 'Скрыть справку' : 'Показать справку', name: 'КнопкаСправкаСводка' }) +
       '</div>' +
       (pendingOnly ? (pending.length ? pendingBlock(pending, true) : emptyFilterState('Сводка')) : list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
-        '<thead><tr>' + th('Стажёр') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
+        '<thead><tr>' + th('Стажёр') + (flat ? th('Подразделение') : '') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>'
         : emptyFilterState('Сводка')) +
       '</div>';
+  }
+  // FT_18: «Отображать в иерархии» — флажок вида «Выключатель» (✓ / ✕), по умолчанию включён; запоминается до перезагрузки страницы
+  function hierarchyToggle() {
+    var on = state.summaryHierarchy;
+    return '<button type="button" class="hier-toggle row gap-2" role="switch" aria-checked="' + on + '" data-action="toggleHierarchy"' +
+      ' title="' + (on ? 'Стажёры сгруппированы по подразделениям. Выключить — список с колонкой «Подразделение»' : 'Включить группировку стажёров по подразделениям') + '"' +
+      a1c('Флажок', 'ОтображатьВИерархии', 'check') + '>' +
+      '<span class="sw' + (on ? ' on' : '') + '" aria-hidden="true"><span class="sw-cell sw-yes">✓</span><span class="sw-cell sw-no">✕</span></span>' +
+      '<span>Отображать в иерархии</span></button>';
   }
 
   // FT_17: карточки найденных кандидатов. Пустой блок не выводится. В 1С — таблица формы «ТаблицаОжидаютРешения»
@@ -1737,6 +1748,7 @@
       state.topTab = 'adaptation';
       state.counterFilter = null;
       state.search = '';
+      state.deptFilter = null;   // FT_18
       selectTrainee(t.id);
       state.traineeTab = 'program';
     }
@@ -4420,6 +4432,18 @@
     clearCounterFilter: function () { state.counterFilter = null; render(); },
     resetSearch: function () { state.search = ''; render(); },
     toggleHideEmpty: function () { state.hideEmpty = !state.hideEmpty; state.openMenu = null; renderLeft(); },
+    // FT_18: отбор по подразделению из дерева; при открытой карточке стажёра — назад к списку
+    deptFilter: function (row) {
+      var id = row.getAttribute('data-id');
+      state.deptFilter = state.deptFilter === id ? null : id;
+      state.selectedTraineeId = null;
+      state.summaryCurrent = null;
+      render();
+      var r = el('leftZone').querySelector('.tree-dept[data-id="' + id + '"]');
+      if (r) r.focus();
+    },
+    clearDeptFilter: function () { state.deptFilter = null; render(); },
+    toggleHierarchy: function () { state.summaryHierarchy = !state.summaryHierarchy; state.summaryCurrent = null; renderCenter(); },
     toggleDept: function (row) {
       if (searchQuery()) return; // при поиске ветки раскрыты
       var id = row.getAttribute('data-id');
@@ -4628,7 +4652,7 @@
       D.CURRENT_USER_ID = btn.getAttribute('data-user');
       state.demoUserMenuOpen = false;
       // FT_9: видимость по пользователю — сбросить фильтр, поиск и выбор стажёра, которого новый пользователь не видит
-      state.counterFilter = null; state.search = ''; state.openMenu = null; state.selectedTasks = {};
+      state.counterFilter = null; state.search = ''; state.openMenu = null; state.selectedTasks = {}; state.deptFilter = null;   // FT_18
       state.tv.selected = {}; state.tv.level = null; state.tv.filter = 'all';   // FT_10: важность и выбор — свои у каждого пользователя; FT_11: и выполненные
       if (state.selectedTraineeId && myTrainees().map(function (t) { return t.id; }).indexOf(state.selectedTraineeId) < 0) state.selectedTraineeId = null;
       if (isTraineeUser()) { state.selectedTraineeId = D.CURRENT_USER_ID; state.traineeTab = 'program'; }
@@ -5002,6 +5026,18 @@
       }
     }
     if (e.key === 'Enter' && t.hasAttribute && t.hasAttribute('data-vr')) { e.preventDefault(); openRequest(byId(D.vacancyRequests, t.getAttribute('data-vr'))); return; }   // FT_15
+    // FT_18: дерево подразделений — → развернуть, ← свернуть ветку
+    if (t.classList && t.classList.contains('tree-dept') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !searchQuery()) {
+      var did = t.getAttribute('data-id');
+      if (t.querySelector('.tree-arrow[data-action]') && (e.key === 'ArrowLeft') !== !!state.collapsed[did]) {
+        e.preventDefault();
+        state.collapsed[did] = e.key === 'ArrowLeft';
+        renderLeft();
+        var back = el('leftZone').querySelector('.tree-dept[data-id="' + did + '"]');
+        if (back) back.focus();
+      }
+      return;
+    }
     if ((e.key === 'Enter' || e.key === ' ') && t.hasAttribute && t.hasAttribute('data-action') &&
         t.tagName !== 'BUTTON' && t.tagName !== 'INPUT') {
       e.preventDefault();
@@ -5050,6 +5086,14 @@
   // НЕ_ПЕРЕНОСИТЬ: уведомления стажёра с полями раздела 2.1 фазы 9 и перерисовка после правки DATA из консоли
   window.getNotifications = function (id) { return getNotifications(trainee(id)); };
   window.rerender = function () { render(); };
+  window.selectedTraineeDemo = function () { return state.selectedTraineeId; };   // НЕ_ПЕРЕНОСИТЬ (FT_18): выбранный стажёр — для тестов
+  // НЕ_ПЕРЕНОСИТЬ (FT_18): открыть карточку стажёра из тестов — стажёров в дереве больше нет
+  window.openTraineeDemo = function (id) {
+    if (activeDoc()) switchShell(null);
+    state.topTab = 'adaptation';
+    state.openMenu = null;
+    selectTrainee(id);
+  };
 
   // НЕ_ПЕРЕНОСИТЬ: элементы без атрибутов соответствия 1С (раздел 7.9)
   window.check1c = function () {
