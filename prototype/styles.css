@@ -915,3 +915,26 @@ table.grid.rc-table td { vertical-align: middle; }
 .sw-cell { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 18px; color: var(--c-text-secondary); background: var(--c-bg); }
 .sw.on .sw-yes { background: var(--c-bg-selected); color: var(--c-primary); }
 .sw:not(.on) .sw-no { background: var(--c-neutral-bg); color: var(--c-text); }
+
+/* ---------- FT_20: чек-листы — задачи; выбор из библиотеки ссылок ---------- */
+.cl-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px;
+  border: 1px solid var(--c-text-secondary); border-radius: 3px; background: var(--c-bg); color: var(--c-bg);
+}
+.cl-mark svg { width: 12px; height: 12px; }
+.cl-mark.on { background: var(--c-primary); border-color: var(--c-primary); }
+.cl-mark.auto { background: var(--c-neutral-bg); border-color: var(--c-border); }
+.checklist-table .cl-row { cursor: default; }
+.checklist-table .cl-row:focus-visible { outline: 2px solid var(--c-primary); outline-offset: -2px; }
+.cl-action .split { width: 130px; }
+.cl-action .split .split-main { flex: 1 1 auto; justify-content: center; }
+.combo { display: flex; width: 100%; }
+.combo-box { width: 100%; cursor: text; }
+.combo-box.invalid { border-color: var(--c-danger); }
+.combo-input { cursor: text; }
+.combo-list { position: fixed; z-index: 120; max-height: 300px; overflow: auto; box-shadow: 0 4px 16px rgba(0, 0, 0, .15); }
+.combo-list .combo-group { padding: 6px var(--sp-3) 2px; font-size: 12px; color: var(--c-text-secondary); }
+.combo-list .combo-item { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding: 4px var(--sp-3) 4px var(--sp-5); min-width: 0; max-width: 100%; }
+.combo-list .combo-item:focus-visible { background: var(--c-bg-selected); outline: none; }
+.combo-list .combo-create { flex-direction: row; padding-left: var(--sp-3); color: var(--c-primary); }
+.combo-list .combo-empty { padding: 6px var(--sp-3); }
