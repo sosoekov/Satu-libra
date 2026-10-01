@@ -2015,7 +2015,9 @@
     { id: 'approve',  text: 'Согласовать',  tone: 'danger',  name: 'Согласовать' },
     { id: 'execute',  text: 'Выполнить',    tone: 'success', name: 'Выполнить' },
     { id: 'acquaint', text: 'Ознакомиться', tone: 'info',    name: 'Ознакомиться' },
-    { id: 'review',   text: 'Проверить',    tone: 'warning', name: 'Проверить' }
+    { id: 'review',   text: 'Проверить',    tone: 'warning', name: 'Проверить' },
+    // FT_19: задача, где пользователь — наблюдатель (только фильтр «Являюсь наблюдателем»; в отборе «По типу задачи» не выводится)
+    { id: 'observe',  text: 'Наблюдать',    tone: 'neutral', name: 'Наблюдать', observe: true }
   ];
   // Команды типа задачи: основная кнопка выполняет main, меню ▾ — items [команда, текст, имя 1С] (ответ заказчика по FT_10)
   var TV_COMMANDS = {
@@ -2115,6 +2117,37 @@
       subject: x.name, context: 'Адаптационная программа · ' + blockMeta(x.block).title, deadline: x.deadline, authorId: t.headId,
       createdAt: (program.approval && program.approval.finishedAt) || t.stageDates.active || '', description: x.description || '' });
   }
+  // FT_19: задача АП, где пользователь — наблюдатель. Только просмотр; изменять может, если у него есть права на стажёра (canManageTraineeTasks)
+  function observedTask(t, program, x) {
+    return traineeTask(t, { key: 'ob:' + x.id, kind: 'ob', type: 'observe', ref: x, page: 'program',
+      subject: x.name, context: 'Наблюдение · стажёр ' + t.fullName, deadline: x.deadline, authorId: t.headId,
+      createdAt: (program.approval && program.approval.finishedAt) || t.stageDates.active || '', description: x.description || '' });
+  }
+  // Невыполненные задачи АП, где текущий пользователь в наблюдателях (кроме закрытых стажировок)
+  function myObservedTasks() {
+    var me = D.CURRENT_USER_ID;
+    var list = [];
+    D.trainees.forEach(function (t) {
+      if (!isStarted(t) || isClosed(t)) return;
+      var program = programOf(t);
+      if (!program) return;
+      tasksOf(program).forEach(function (x) {
+        if (x.status !== 'done' && (x.observerIds || []).indexOf(me) >= 0) list.push(observedTask(t, program, x));
+      });
+    });
+    return list;
+  }
+  // Права на задачи АП стажёра (как на вкладке АП): видит стажёра по правилам FT_9 или его руководитель стажировки, наставник, HR-менеджер
+  function canManageTraineeTasks(t) {
+    var me = D.CURRENT_USER_ID;
+    if (isTraineeUser() || isKshUser()) return false;
+    return seesByScope(t) || t.headId === me || t.mentorId === me || t.hrId === me;
+  }
+  var OBSERVER_ONLY_TEXT = 'Вы наблюдатель задачи — только просмотр. Изменяют задачу руководитель стажировки, наставник и HR-менеджер стажёра';
+  function openObservedTask(x) {
+    var t = trainee(x.traineeId);
+    openDialog('task', t.id, { taskId: x.ref.id, observerOnly: !canManageTraineeTasks(t) });
+  }
   function approvalsOf(program) { return (program.approvalArchive || []).concat(program.approval ? [program.approval] : []); }
 
   // Задачи текущего пользователя, которые нужно выполнить
@@ -2181,7 +2214,7 @@
     return list;
   }
   function tvTaskByKey(key) {
-    var list = key.indexOf('done:') === 0 ? myDoneTasks() : myTasks();
+    var list = key.indexOf('done:') === 0 ? myDoneTasks() : key.indexOf('ob:') === 0 ? myObservedTasks() : myTasks();
     for (var i = 0; i < list.length; i++) if (list[i].key === key) return list[i];
     return null;
   }
@@ -2314,7 +2347,7 @@
     { id: 'due',    title: 'Срок', w: 'w-due', name: 'Срок' },
     { id: 'author', title: 'Автор', w: 'w-author', name: 'Автор' },
     { id: 'adept',  title: 'Подразделение автора', w: 'w-adept', name: 'ПодразделениеАвтора' },
-    { id: 'action', title: 'Действие', doneTitle: 'Результат', w: 'w-act', locked: true, name: 'Действие' }
+    { id: 'action', title: 'Действие', doneTitle: 'Результат', obsTitle: 'Статус', w: 'w-act', locked: true, name: 'Действие' }   // FT_19: у наблюдателя — статус задачи
   ];
   var NOTE_COLS = [
     { id: 'sev',    title: 'Важность', w: 'w-sev', noHeader: true, name: 'Важность' },
@@ -2343,7 +2376,7 @@
   }
   function colTitle(table, c, doneMode) {
     var cfg = formSettings(table).cols[c.id];
-    return cfg && cfg.title ? cfg.title : doneMode && c.doneTitle ? c.doneTitle : c.title;
+    return cfg && cfg.title ? cfg.title : doneMode && c.doneTitle ? c.doneTitle : state.tv.filter === 'observed' && c.obsTitle ? c.obsTitle : c.title;
   }
   function colGroup(table, lead) {
     return '<colgroup>' + (lead || '') + visibleCols(table).map(function (c) { return '<col' + (c.w ? ' class="' + c.w + '"' : '') + '>'; }).join('') + '</colgroup>';
@@ -2383,12 +2416,13 @@
     var selStart = key ? active.selectionStart : 0, selEnd = key ? active.selectionEnd : 0;
     var open = myTasks();
     var done = myDoneTasks();
-    var all = state.tv.filter === 'done' ? done : open;   // FT_11: фильтр «Выполненные» показывает выполненные задачи
+    var observed = myObservedTasks();   // FT_19
+    var all = state.tv.filter === 'done' ? done : state.tv.filter === 'observed' ? observed : open;   // FT_11: фильтр «Выполненные» показывает выполненные задачи
     var notes = myNotes();
     // Выбор — только среди невыполненных задач, которые ещё есть в списке
     var keys = open.map(function (x) { return x.key; });
     Object.keys(state.tv.selected).forEach(function (k) { if (keys.indexOf(k) < 0) delete state.tv.selected[k]; });
-    el('tasksLeft').innerHTML = state.tv.sub === 'notes' ? renderNotesLeft(notes) : renderTasksLeft(open, done, all);
+    el('tasksLeft').innerHTML = state.tv.sub === 'notes' ? renderNotesLeft(notes) : renderTasksLeft(open, done, all, observed);
     el('tasksCenter').innerHTML = '<div class="col gap-2 tv-center">' +
       '<div class="tabs tv-tabs"' + a1c('Страницы', 'СтраницыЗадачиУведомления') + '>' +
         [{ id: 'tasks', text: 'Задачи', name: 'СтраницаМоиЗадачи' }, { id: 'notes', text: 'Уведомления' + (notes.length ? ' ' + notes.length : ''), name: 'СтраницаУведомления' }].map(function (x) {
@@ -2425,8 +2459,9 @@
   function countBy(list, fn) { return list.filter(fn).length; }
 
   var TV_DONE_FILTER = { id: 'done', title: 'Выполненные', icon: 'check', color: 'c-success', name: 'Выполненные' };
+  var TV_OBSERVED_FILTER = { id: 'observed', title: 'Являюсь наблюдателем', icon: 'users', color: 'muted', name: 'ЯвляюсьНаблюдателем' };   // FT_19
   // open — невыполненные задачи (счётчики фильтров), view — текущий список (счётчики флажков и важности)
-  function renderTasksLeft(open, done, view) {
+  function renderTasksLeft(open, done, view, observed) {
     var all = open;
     var imp = importanceOf();
     return '<div class="left-inner tv-left"' + a1c('ГруппаВертикальная', 'ГруппаОтборыЗадач') + '>' +
@@ -2435,6 +2470,7 @@
       '<div class="filter-list">' + TV_FILTERS.map(function (f) {
         return tvFilterRow(f, countBy(all, function (x) { return tvFilterMatch(x, f.id); }), state.tv.filter === f.id, 'tvFilter', 'ГруппаОтборЗадач');
       }).join('') + '<div class="filter-sep"></div>' +
+        tvFilterRow(TV_OBSERVED_FILTER, observed.length, state.tv.filter === 'observed', 'tvFilter', 'ГруппаОтборЗадач') +   // FT_19: над «Выполненными»
         tvFilterRow(TV_DONE_FILTER, done.length, state.tv.filter === 'done', 'tvFilter', 'ГруппаОтборЗадач') + '</div>' +
       '<div class="filter-sep"></div>' +
       tvSection('По источнику', 'ДекорацияПоИсточнику') +
@@ -2442,7 +2478,7 @@
         return tvCheckRow('data-tv-source', s.id, s.text, countBy(view, function (x) { return x.source === s.id; }), !state.tv.sourcesOff[s.id], 'ФлажокИсточник' + s.name);
       }).join('') + '</div>' +
       tvSection('По типу задачи', 'ДекорацияПоТипуЗадачи') +
-      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОтборПоТипу') + '>' + TV_TYPES.map(function (tp) {
+      '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаОтборПоТипу') + '>' + TV_TYPES.filter(function (tp) { return !tp.observe; }).map(function (tp) {
         return tvCheckRow('data-tv-type', tp.id, tp.text, countBy(view, function (x) { return x.type === tp.id; }), !state.tv.typesOff[tp.id], 'ФлажокТип' + tp.name);
       }).join('') + '</div>' +
       tvSection('По важности', 'ДекорацияПоВажности',
@@ -2490,18 +2526,21 @@
     review: ['warning', 'На проверке'] };   // задача своей АП, отправленная стажёром на проверку
   function renderTaskList(all) {
     var doneMode = state.tv.filter === 'done';   // FT_11: выполненные — только просмотр, без выбора и групп
+    var obsMode = state.tv.filter === 'observed';   // FT_19: наблюдение — только просмотр, без выбора; группы по сроку
+    var roMode = doneMode || obsMode;
+    var roTitle = doneMode ? 'Недоступно для выполненных задач' : 'Недоступно для задач, где вы наблюдатель';
     var list = tvVisibleTasks(all);
-    var sel = doneMode ? [] : tvSelected(all);
+    var sel = roMode ? [] : tvSelected(all);
     var imp = importanceOf();
     var redirectable = sel.filter(tvCanRedirect);
     var bar = '<div class="row wrap command-bar command-bar-flat tv-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельМоиЗадачи') + '>' +
       button('Перенаправить задачу', { icon: 'arrowFill', action: 'tvRedirect', disabled: !redirectable.length, name: 'КнопкаПеренаправитьЗадачу',
-        title: doneMode ? 'Недоступно для выполненных задач' : !sel.length ? 'Отметьте задачи флажками' : !redirectable.length ? 'Задачи своей адаптационной программы стажёр выполняет сам' : 'Передать выбранные задачи другому сотруднику' }) +
+        title: roMode ? roTitle : !sel.length ? 'Отметьте задачи флажками' : !redirectable.length ? 'Задачи своей адаптационной программы стажёр выполняет сам' : 'Передать выбранные задачи другому сотруднику' }) +
       submenu('tvImportance', 'ПодменюУстановитьВажность', imp.levels.map(function (l, i) {
         return '<button type="button" data-action="tvSetLevel" data-id="' + l.id + '"' + a1c('Кнопка', 'КомандаУстановитьВажность' + (i + 1), 'check') + '>' +
           '<span class="row gap-2">' + impFlag(i, '', 'КомандаУстановитьВажность' + (i + 1) + 'Флажок') + esc(l.name) + '</span></button>';
       }).concat(['<div class="menu-sep"></div>', menuItem('Снять важность', 'tvSetLevel', { id: '' }, 'КомандаСнятьВажность')]),
-        { text: 'Установить важность ▾', icon: 'flag', disabled: !sel.length, title: doneMode ? 'Недоступно для выполненных задач' : sel.length ? '' : 'Отметьте задачи флажками' }) +
+        { text: 'Установить важность ▾', icon: 'flag', disabled: !sel.length, title: roMode ? roTitle : sel.length ? '' : 'Отметьте задачи флажками' }) +
       button('', { cls: 'btn-icon', icon: 'refresh', action: 'tvRefresh', title: 'Обновить список', name: 'КнопкаОбновитьЗадачи' }) +
       (sel.length ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбраноМоихЗадач') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияВыбраноМоихЗадач') + '>Выбрано: ' + sel.length + '</span>' +
@@ -2515,8 +2554,8 @@
     var span = visibleCols('tasks').length + 1;   // FT_12: колонки по настройке формы + флажок выбора
     var body;
     if (!all.length) {
-      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('Надпись', doneMode ? 'ДекорацияВыполненныхЗадачНет' : 'ДекорацияЗадачНет') + '>' +
-        (doneMode ? 'Выполненных задач нет' : 'Задач нет') + '</div></td></tr>';
+      body = '<tr><td colspan="' + span + '"><div class="empty"' + a1c('Надпись', doneMode ? 'ДекорацияВыполненныхЗадачНет' : obsMode ? 'ДекорацияЗадачНаблюденияНет' : 'ДекорацияЗадачНет') + '>' +
+        (doneMode ? 'Выполненных задач нет' : obsMode ? 'Задач, где вы наблюдатель, нет' : 'Задач нет') + '</div></td></tr>';
     } else if (doneMode && list.length) {
       body = list.map(tvTaskRow).join('');
     } else if (!list.length) {
@@ -2535,7 +2574,7 @@
           (open ? rows.map(tvTaskRow).join('') : '');
       }).join('');
     }
-    var keys = doneMode ? [] : list.map(function (x) { return x.key; });
+    var keys = roMode ? [] : list.map(function (x) { return x.key; });
     var selVisible = keys.filter(function (k) { return state.tv.selected[k]; }).length;
     return bar + '<div class="table-box"><table class="grid tv-table"' + a1c('ТаблицаФормы', 'ТаблицаМоиЗадачи') + '>' +
       colGroup('tasks', '<col class="w-check">') +
@@ -2605,11 +2644,17 @@
       due: tvDueCell(x),
       author: '<td><div class="clamp2" title="' + esc(personById(x.authorId)) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиАвтор') + '>' + esc(personById(x.authorId)) + '</div></td>',
       adept: '<td><div class="clamp2' + (dept_ ? '' : ' muted') + '" title="' + esc(dept_ || 'Подразделение не указано') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиПодразделениеАвтора') + '>' + esc(dept_ || '—') + '</div></td>',
-      action: '<td>' + (x.done ? tvResultCell(x) : tvActionCell(x)) + '</td>'
+      action: '<td>' + (x.done ? tvResultCell(x) : x.kind === 'ob' ? tvObservedStatus(x) : tvActionCell(x)) + '</td>'
     };
     return '<tr class="tv-row' + (selected ? ' selected' : '') + '" data-tv-key="' + esc(x.key) + '" title="Двойной клик — открыть карточку задачи">' +
-      '<td>' + (x.done ? '' : '<input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '>') + '</td>' +
+      '<td>' + (x.done || x.kind === 'ob' ? '' : '<input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '>') + '</td>' +
       visibleCols('tasks').map(function (c) { return cells[c.id]; }).join('') + '</tr>';
+  }
+
+  // FT_19: статус задачи АП у наблюдателя (вместо команд выполнения)
+  function tvObservedStatus(x) {
+    var m = STATUS_META[viewStatus(x.ref)];
+    return badge(m.tone, m.text, 'ТаблицаМоиЗадачиСтатусНаблюдения');
   }
 
   function renderNotesList(all) {
@@ -3330,7 +3375,8 @@
         ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблона') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаШаблона') + '>' +
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
         : state.dialog.traineeMode ? ''
-        : dlgRO() ? '<div class="note note-info"><span class="tone-info">' + icon('info') + '</span><span>' + esc(editLock(t)) + '</span></div>'
+        : dlgRO() ? '<div class="note note-info"' + (state.dialog.observerOnly ? a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНаблюдатель') : '') + '><span class="tone-info">' + icon('info') + '</span><span' +
+          (state.dialog.observerOnly ? a1c('Надпись', 'ДекорацияЗадачаНаблюдатель') : '') + '>' + esc(state.dialog.observerOnly ? OBSERVER_ONLY_TEXT : editLock(t)) + '</span></div>'
         : state.dialog.corpLock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаКорпБлока') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаКорпБлока') + '>' +
           esc('Задача корпоративного блока: изменить можно только наблюдателей. ' + CORP_LOCK_TEXT + '.') + '</span></div>' : '';
       // Блок (FT_8): в корпоративный блок задача попадает только из шаблона — у новой задачи и у задачи спец. блока варианта «Корпоративный» нет
@@ -4319,6 +4365,7 @@
       readOnly: type === 'task' && (!!ctx.templateId || (!!lock && !!ctx.taskId)) };
     // FT_9: стажёр открывает свои задачи только для просмотра; менять может лишь статус кнопками «Взять в работу» / «Выполнено»
     if (type === 'task' && isTraineeUser()) { state.dialog.readOnly = true; state.dialog.traineeMode = true; }
+    if (type === 'task' && ctx.observerOnly) { state.dialog.readOnly = true; state.dialog.observerOnly = true; }   // FT_19: только наблюдатель
     state.dialog.corpLock = type === 'task' && !state.dialog.readOnly && !!ctx.taskId && corpLocked(taskById(ctx.taskId));   // FT_8, п. 4
     state.dialog.values = def.init ? def.init(t, ctx) : {};
     render();
@@ -4993,7 +5040,11 @@
     }
     // FT_10: строка задачи или уведомления — открыть объект-источник
     var tvrow = e.target.closest('tr[data-tv-key]');
-    if (tvrow && !e.target.closest('input, button')) { openDialog('tvTask', null, { key: tvrow.getAttribute('data-tv-key') }); return; }   // FT_11: карточка задачи
+    if (tvrow && !e.target.closest('input, button')) {
+      var tvKey = tvrow.getAttribute('data-tv-key');
+      if (tvKey.indexOf('ob:') === 0) { var ox = tvTaskByKey(tvKey); if (ox) openObservedTask(ox); return; }   // FT_19: карточка задачи АП
+      openDialog('tvTask', null, { key: tvKey }); return;   // FT_11: карточка задачи
+    }
     var nrow = e.target.closest('tr[data-note-key]');
     if (nrow && !e.target.closest('input, button')) { var nx = noteByKey(nrow.getAttribute('data-note-key')); if (nx) openNoteSource(nx); return; }
     var srow = e.target.closest('tr.summary-row');
