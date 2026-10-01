@@ -486,6 +486,54 @@
     return D.trainees.filter(function (t) { return isPendingDecision(t) && canSeePending(t); })
       .sort(function (a, b) { return a.foundAt.localeCompare(b.foundAt); });
   }
+  // Событие «HR нажал «Исполнено» на задаче по подбору»: найденный появляется в «Ожидают решения», автору заявки — уведомление «Подбор».
+  // Заявка закрывается, когда найдено требуемое количество.
+  // ASSUMPTION: появление на вкладке не зависит от «Прочитано» в уведомлении (ТЗ, 11.1)
+  function registerFoundCandidate(r, person) {
+    var t = {
+      id: person.id, fullName: person.fullName, position: r.position, positionFamily: null, qualificationLevel: null,
+      departmentId: r.deptId, requisitionId: r.id, foundAt: nowStamp(), expectedStartDate: person.expectedStartDate || null, hrId: person.hrId,
+      mentorId: null, headId: null, startDate: null, endDate: null, durationMode: null, checklistCreated: false,
+      stage: 'pending_decision', rejectionComment: null, draftSince: null, stageDates: {}, closedAt: null, closeKind: null,
+      cancelReason: null, cancelledAt: null, cancelledBy: null
+    };
+    D.trainees.push(t);
+    r.found += 1;
+    if (r.candidates > 0) r.candidates -= 1;
+    if (r.found >= r.qty) { r.state = 'closed'; r.closedAt = D.TODAY; }
+    D.recruitNotes.push({ id: 'rn-' + t.id, userId: r.authorId, severity: 'info', at: t.foundAt, candidateId: t.id,
+      text: 'Кандидат на должность «' + r.position + '» принял предложение о работе: ' + t.fullName });
+    return t;
+  }
+  // Переход к найденному из уведомления: вкладка «Адаптация персонала», карточка подсвечивается на пару секунд.
+  // После старта стажировки — карточка стажёра; после отмены — оповещение
+  var FLASH_MS = 2500;
+  function goToCandidate(id) {
+    var t = trainee(id);
+    if (!t) return;
+    if (t.stage === 'cancelled') { toast('Стажировка кандидата ' + t.fullName + ' отменена'); return; }
+    if (isStarted(t)) {
+      if (!canOpenTrainee(t)) { toast('Откроется карточка стажёра ' + t.fullName); return; }
+      openTraineeFrom(t.id, null);
+      return;
+    }
+    if (!canSeePending(t)) { toast('Кандидат ' + t.fullName + ' ожидает решения автора заявки'); return; }
+    if (activeDoc()) switchShell(null);
+    state.topTab = 'adaptation';
+    state.selectedTraineeId = null;
+    if (state.counterFilter !== 'pending') state.counterFilter = null;   // карточку не скрывают другие фильтры и поиск
+    state.search = '';
+    state.pendingFlash = t.id;
+    render();
+    var card = document.querySelector('.pending-card[data-pending="' + t.id + '"]');
+    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center' });
+    setTimeout(function () {
+      if (state.pendingFlash !== t.id) return;
+      state.pendingFlash = null;
+      var c = document.querySelector('.pending-card[data-pending="' + t.id + '"]');
+      if (c) c.classList.remove('flash');
+    }, FLASH_MS);
+  }
 
   /* ---------------------------------------------------------------------
    * FT_11: вкладки окон клиента (НЕ_ПЕРЕНОСИТЬ — рисует платформа). Ссылка «Предмет» в карточке задачи открывает
@@ -2077,7 +2125,7 @@
     var from = addDays(D.TODAY, -EVENT_DAYS);
     var list = [];
     D.recruitNotes.forEach(function (n) {
-      if (n.userId === me) list.push({ key: n.id, kind: 'rn', source: 'recruit', severity: n.severity, text: n.text, at: n.at });
+      if (n.userId === me) list.push({ key: n.id, kind: 'rn', source: 'recruit', severity: n.severity, text: n.text, at: n.at, candidateId: n.candidateId || null });
     });
     D.userNotes.forEach(function (n) {
       if (n.userId === me) list.push({ key: n.id, kind: 'un', source: 'adaptation', severity: n.severity, text: n.text, at: n.at, traineeId: n.traineeId, taskId: n.taskId });
@@ -2449,7 +2497,7 @@
           source: '<td>' + sourceBadge(n.source, 'ТаблицаУведомленияИсточник') + '</td>',
           date: '<td class="nowrap"' + a1c('Надпись', 'ТаблицаУведомленияДата') + '>' + (n.at.length > 10 ? fmtDateTime(n.at) : fmtDate(n.at)) + '</td>',
           action: '<td class="nowrap"><span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ТаблицаУведомленияГруппаДействие', 'high') + '>' +
-            button('Перейти', { action: 'noteGo', data: { key: n.key }, title: n.source === 'recruit' ? 'Открыть документ подбора' : 'Открыть стажёра в разделе «Адаптация персонала»', name: 'ТаблицаУведомленияПерейти' }) +
+            button('Перейти', { action: 'noteGo', data: { key: n.key }, title: n.candidateId ? 'Открыть найденного кандидата в разделе «Адаптация персонала»' : n.source === 'recruit' ? 'Открыть документ подбора' : 'Открыть стажёра в разделе «Адаптация персонала»', name: 'ТаблицаУведомленияПерейти' }) +
             button('Прочитано', { action: 'noteRead', data: { key: n.key }, title: 'Отметить прочитанным — уведомление уйдёт из списка', name: 'ТаблицаУведомленияПрочитано' }) +
           '</span></td>'
         };
@@ -2555,7 +2603,7 @@
     openDocTab(t.id, x.page);
   }
   function openNoteSource(n) {
-    if (n.source === 'recruit') { toast('Откроется документ подбора персонала'); return; }
+    if (n.source === 'recruit') { if (n.candidateId) goToCandidate(n.candidateId); else toast('Откроется документ подбора персонала'); return; }   // FT_17
     var t = trainee(n.traineeId);
     if (!canOpenTrainee(t, n.kind)) { toast('Откроется карточка стажёра ' + t.fullName); return; }
     if (n.taskId && taskById(n.taskId)) openTraineeFrom(t.id, 'program', function () { openDialog('task', t.id, { taskId: n.taskId }); });
@@ -2710,6 +2758,25 @@
   }
 
   // НЕ_ПЕРЕНОСИТЬ: демо-переключатели пользователя (FT_8, п. 4) и этапа выбранного стажёра
+  // FT_17, НЕ_ПЕРЕНОСИТЬ: «Демо: HR нашёл кандидата». Заявка — следующая в работе («Согласована» / «Выполняется»), сначала заявки
+  // текущего пользователя; ФИО — по кругу из тестового списка, HR — по кругу из HR-менеджеров
+  var DEMO_CANDIDATES = ['Сорокина Алина Викторовна', 'Медведев Артур Олегович', 'Зайцева Полина Игоревна', 'Белоусов Никита Андреевич',
+    'Тихонова Вероника Павловна', 'Фролов Егор Денисович', 'Комарова Ульяна Сергеевна', 'Гусев Тимофей Ильич'];
+  var demoFoundSeq = 0;
+  function demoHrFound() {
+    var inWork = D.vacancyRequests.filter(vrInWork);
+    if (!inWork.length) { toast('Демо: нет заявок в работе'); return; }
+    var mine = inWork.filter(function (r) { return r.authorId === D.CURRENT_USER_ID; });
+    var pool = mine.length ? mine : inWork;
+    var r = pool[demoFoundSeq % pool.length];
+    var n = demoFoundSeq++;
+    var t = registerFoundCandidate(r, { id: 't-found-demo-' + n, fullName: DEMO_CANDIDATES[n % DEMO_CANDIDATES.length],
+      hrId: D.HR_IDS[n % D.HR_IDS.length], expectedStartDate: n % 2 ? null : addDays(D.TODAY, 14) });
+    state.demoMenuOpen = false; state.demoUserMenuOpen = false;
+    render();
+    toast('Демо: HR завершил подбор по заявке № ' + r.num + ' — ' + t.fullName + ' ожидает решения. Уведомление — ' +
+      (r.authorId === D.CURRENT_USER_ID ? 'вам' : 'автору заявки ' + userName(r.authorId)));
+  }
   function renderDemo() {
     var t = state.selectedTraineeId ? trainee(state.selectedTraineeId) : null;
     var me = demoUser();
@@ -2737,6 +2804,9 @@
         (t ? ' title="Сменить этап: ' + esc(t.fullName) + '"' : ' disabled title="Выберите стажёра, чтобы сменить этап"') +
         a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаЭтап') + '><span>Демо: этап ' + (t ? '«' + esc(stageMeta(t.stage).title) + '» ' : '') + '▾</span></button>' +
       '</div>';
+    // FT_17: имитация «Исполнено» HR по заявке на подбор
+    html += '<button type="button" class="btn demo-btn" data-action="demoHrFound" title="Имитация: HR нажал «Исполнено» на задаче по подбору — кандидат появится в «Ожидают решения», автору заявки придёт уведомление"' +
+      a1c('НЕ_ПЕРЕНОСИТЬ', 'ДемоКнопкаHRНашелКандидата') + '><span>Демо: HR нашёл кандидата</span></button>';
     el('demoDock').innerHTML = html;
   }
 
@@ -4376,6 +4446,7 @@
     },
     // FT_15: вкладка «Подбор персонала»
     rcStub: function () { toast(RC_STUB); },
+    demoHrFound: function () { demoHrFound(); },
     // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
     pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
     pendingStart: function () { toast('Ещё не реализовано в прототипе'); },
