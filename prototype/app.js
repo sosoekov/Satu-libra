@@ -862,7 +862,8 @@
       else visible = true;
       return visible ? { dept: d, children: children, trainees: own, count: count } : null;
     }
-    return childDepts(null).map(node).filter(Boolean);
+    // FT_23: службы вне ЦАС (ФЭС, СУП, КШ) — только у HR-менеджеров
+    return childDepts(null).filter(function (d) { return d.id === 'd-cas' || isHR(); }).map(node).filter(Boolean);
   }
   function isExpanded(d) { return searchQuery() ? true : !state.collapsed[d.id]; }
 
@@ -939,7 +940,8 @@
     var text = searchQuery() ? 'Никого не нашли'
       : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
       : state.counterFilter ? 'Нет стажеров по фильтру «' + filterById(state.counterFilter).title + '»' + (state.deptFilter && place !== 'Дерево' ? ' в подразделении «' + dept(state.deptFilter).name + '»' : '')
-      : 'Нет стажеров в подразделении «' + dept(state.deptFilter).name + '»';   // FT_18
+      : state.deptFilter ? 'Нет стажеров в подразделении «' + dept(state.deptFilter).name + '»'   // FT_18
+      : 'Нет стажеров';   // FT_23: у пользователя не осталось видимых стажеров (например, руководитель передал стажировку)
     return '<div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаПустойРезультат' + place) + '>' +
       '<span' + a1c('Надпись', 'ДекорацияПустойРезультат' + place) + '>' + esc(text) + '</span>' +
       '<div class="row">' + parts.join('') + '</div></div>';
@@ -1244,7 +1246,7 @@
   }
 
   // FT_17: карточки найденных кандидатов. Пустой блок не выводится. В 1С — таблица формы «ТаблицаОжидаютРешения»
-  // с командами «Старт стажировки» / «Отменить» (кнопок в строке таблицы нет — см. 1c-mapping.md)
+  // с командами «Подтвердить выход» (FT_23, было «Старт стажировки») / «Отменить» (кнопок в строке таблицы нет — см. 1c-mapping.md)
   function pendingBlock(list, noTitle) {
     if (!list.length) return '';
     return '<div class="col gap-2 pending-block"' + a1c('ГруппаВертикальная', 'ГруппаОжидаютРешения') + '>' +
@@ -1268,7 +1270,7 @@
       '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДаты') + '>Подбор завершен ' + fmtDate(t.foundAt.slice(0, 10)) +
         (t.expectedStartDate ? ' · ожидаемая дата выхода ' + fmtDate(t.expectedStartDate) : '') + '</div>' +
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОжидаютРешенияДействия', 'high') + '>' +
-        button('Старт стажировки', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Назначить руководителя стажировки и наставника, задать даты', name: 'ТаблицаОжидаютРешенияСтарт' }) +
+        button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Подтвердить выход стажера: даты стажировки, руководитель и наставник', name: 'ТаблицаОжидаютРешенияСтарт' }) +
         button('Отменить', { action: 'pendingCancel', data: { id: t.id }, disabled: !!lock, title: lock || 'Человек не выйдет на стажировку — указать причину', name: 'ТаблицаОжидаютРешенияОтменить' }) +
       '</div></div>';
   }
@@ -3447,7 +3449,7 @@
         if (v.userId !== D.CURRENT_USER_ID) pushUserNote(v.userId, 'info', 'Вы назначены ' + (role === 'mentor' ? 'наставником' : 'руководителем стажировки') + ' стажера ' + t.fullName, t.id);   // FT_21
         // Невыполненные пункты чек-листа переходят к новому ответственному
         checklistOf(t).forEach(function (c) {
-          if (!c.done && c.responsibleRole === role) c.responsibleId = v.userId;
+          if (!c.done && c.responsibleRole === role && !c.responsibleManual) c.responsibleId = v.userId;   // FT_23: назначенный вручную — не меняется
         });
         var program = programOf(t);
         if (program) addHistory(program, old ? personName(role) + ' изменен: ' + userName(old) + ' → ' + userName(v.userId) : personName(role) + ' назначен: ' + userName(v.userId));
@@ -3783,6 +3785,29 @@
    */
   var ITEM_STATUS_OPTIONS = [{ value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' },
     { value: 'review', text: 'На проверке' }, { value: 'done', text: 'Выполнена' }];
+  // FT_23: проверяющий скрыт — «На проверке» только у пункта, который уже на проверке
+  function itemStatusOptions(c) { return ITEM_STATUS_OPTIONS.filter(function (o) { return o.value !== 'review' || itemStatus(c) === 'review'; }); }
+  // FT_23: исполнитель — сотрудник подразделения того, кто меняет, и подчиненных подразделений.
+  // ASSUMPTION: у пользователя без подразделения (HR-менеджеры) — все сотрудники. Текущий исполнитель вне списка остается выбранным
+  var EXECUTOR_HINT = 'Сотрудники вашего подразделения и подчиненных подразделений';
+  function executorOptions(cur) {
+    var me = user(D.CURRENT_USER_ID);
+    var sub = me && me.departmentId ? deptSubtree(me.departmentId) : null;
+    var list = D.users.filter(function (u) { return !sub || (u.departmentId && sub.indexOf(u.departmentId) >= 0); })
+      .map(function (u) { return { value: u.id, text: u.fullName + ' — ' + u.role }; });
+    if (cur && !list.some(function (o) { return o.value === cur; })) list.unshift({ value: cur, text: personById(cur) + (user(cur) ? ' — ' + user(cur).role : '') });
+    return [{ value: '', text: 'Не назначен' }].concat(list);
+  }
+  // Смена исполнителя пункта: работа начинается заново, новому исполнителю — уведомление; назначенный вручную не меняется при смене
+  // руководителя или наставника стажировки (responsibleManual)
+  function setItemExecutor(t, c, uid) {
+    var old = c.responsibleId;
+    c.responsibleId = uid;
+    c.responsibleManual = true;
+    if (itemStatus(c) === 'in_progress') setItemStatus(c, 'not_started');
+    logTask(c, 'executor', null, (old ? personById(old) : 'не назначен') + ' → ' + (uid ? personById(uid) : 'не назначен'));
+    if (uid && uid !== D.CURRENT_USER_ID && user(uid)) pushUserNote(uid, 'info', 'Вам назначена задача чек-листа «' + c.name + '» стажера ' + t.fullName, t.id, c.id);
+  }
   function itemExecBody(c) {
     var doneNow = c.done || itemStatus(c) === 'review';
     return '<div class="col gap-3 task-exec"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаВыполнение') + '>' +
@@ -3798,7 +3823,7 @@
     titleFn: function () { return ITEM_KINDS[dlgCtx().kind].card; },
     init: function (t, ctx) {
       var c = itemById(ctx.kind, ctx.itemId);
-      return { name: c.name, status: itemStatus(c), reviewerId: c.reviewerId || '', deadline: itemDate(ctx.kind, c) || '',
+      return { name: c.name, status: itemStatus(c), reviewerId: c.reviewerId || '', executorId: c.responsibleId || '', deadline: itemDate(ctx.kind, c) || '',
         observers: (c.observerIds || []).slice(), description: c.description || '', links: linkRows(c.links), tab: 'task' };
     },
     body: function (t) {
@@ -3816,21 +3841,23 @@
       var auto = c.linkedDocType === 'program';
       var noBase = ctx.kind === 'cl' && !t.startDate;
       var base = ctx.kind === 'cl' ? 'Срок считается от даты выхода' + (t.startDate ? ' ' + fmtDate(t.startDate) : '') : 'Срок считается от даты окончания стажировки ' + fmtDate(t.endDate);
-      var reviewerId = dlgValue('reviewerId');
+      var executorId = dlgValue('executorId');
       var deadline = noBase
         ? '<input type="text" class="input" id="f_deadline" disabled value="" placeholder="После назначения даты выхода"' + a1c('ПолеВвода', 'ПолеСрокВыполнения') + '>'
         : inputDate('deadline', 'ПолеСрокВыполнения');
       return tabs + note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
         '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНазваниеСтатус') + '>' +
           tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
-          tfField('Статус', selectOptions('status', 'ПолеСтатус', ITEM_STATUS_OPTIONS, auto && !dlgRO() ? ' disabled title="' + esc(AUTO_ITEM_TEXT) + '"' : ''),
+          tfField('Статус', selectOptions('status', 'ПолеСтатус', itemStatusOptions(c), auto && !dlgRO() ? ' disabled title="' + esc(AUTO_ITEM_TEXT) + '"' : ''),
             { forId: 'f_status', error: e.status, name: 'Статус' }) +
         '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПроверяющийСрок') + '>' +
-          tfField('Проверяющий', '<div class="row gap-2">' + selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен')) +
-              button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
-                title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' }) + '</div>',
-            { forId: 'f_reviewerId', cls: 'tf-wide' }) +
+        // FT_23: у задачи чек-листа видимо поле «Исполнитель» (ответственный пункта), «Проверяющий» скрыт (в 1С — Видимость = Ложь)
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаИсполнительСрок') + '>' +
+          tfField('Исполнитель', '<div class="row gap-2">' + selectOptions('executorId', 'ПолеИсполнитель', executorOptions(dlgValue('executorId')),
+                dlgRO() ? '' : ' title="' + esc(EXECUTOR_HINT) + '"') +
+              button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openExecutorCard', disabled: !executorId,
+                title: executorId ? 'Открыть карточку сотрудника: ' + personById(executorId) : 'Исполнитель не назначен', name: 'КнопкаОткрытьКарточкуИсполнителя' }) + '</div>',
+            { forId: 'f_executorId', cls: 'tf-wide' }) +
           tfField('Срок выполнения', deadline + '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокОтДаты') + '>' + esc(base) + '</div>',
             { required: !noBase, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
         '</div>' +
@@ -3858,7 +3885,8 @@
       var c = itemById(ctx.kind, ctx.itemId);
       var base = ctx.kind === 'cl' ? t.startDate : t.endDate;
       c.name = v.name.trim();
-      c.reviewerId = v.reviewerId || null;
+      // FT_23: поле «Проверяющий» скрыто — карточка проверяющего не меняет
+      if ((v.executorId || null) !== (c.responsibleId || null)) setItemExecutor(t, c, v.executorId || null);   // FT_23
       c.observerIds = v.observers.slice();
       c.description = (v.description || '').trim();
       c.links = linksFromRows(v.links);
@@ -4537,18 +4565,19 @@
     o.links = ((tpl && tpl.links) || []).map(function (id) { return { linkId: id, comment: '' }; });
     return o;
   }
-  function roleDefaultUser(t, role) { return (role === 'head' ? t.headId : role === 'hr' ? t.hrId : t.mentorId) || null; }   // FT_21: может быть не назначен
+  function roleDefaultUser(t, role) { return D.ROLE_USERS[role] || (role === 'head' ? t.headId : role === 'hr' ? t.hrId : t.mentorId) || null; }   // FT_23: роли служб   // FT_21: может быть не назначен
 
   DIALOGS.checklistItem = {
     title: 'Добавить пункт', form: 'ФормаПунктЧекЛиста', submit: 'Добавить пункт',
     init: function (t) { return { name: '', role: 'head', userId: t.headId || '', date: addDays(t.startDate, -1) }; },
+    onChange: function (f, v) { if (f === 'role') v.userId = roleDefaultUser(trainee(state.dialog.traineeId), v.role) || ''; },   // FT_23: сотрудник роли
     body: function (t) {
       var e = state.dialog.errors;
       var v = state.dialog.values;
       var hint = v.date ? '<div class="muted text-s">' + offsetText(diffDays(t.startDate, v.date)) + ' (выход ' + fmtDate(t.startDate) + ')</div>' : '';
       return field('Пункт', inputText('name', 'ПолеНаименованиеПункта'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПункта' }) +
-        field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', [
-          { value: 'head', text: D.ROLE_TITLES.head }, { value: 'hr', text: D.ROLE_TITLES.hr }, { value: 'mentor', text: D.ROLE_TITLES.mentor }], ' data-rerender="1"'), { forId: 'f_role' }) +
+        field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', ['head', 'hr', 'mentor', 'fin', 'personnel', 'ksh'].map(function (r) {
+          return { value: r, text: D.ROLE_TITLES[r] }; }), ' data-rerender="1"'), { forId: 'f_role' }) +
         field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions('Не назначен')), { forId: 'f_userId' }) +
         field('Срок', inputDate('date', 'ПолеСрокПункта') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
     },
@@ -4853,8 +4882,8 @@
 
   // FT_17: старт стажировки найденного кандидата. Поля — по ТЗ 4, шаг 3; правила расчета и проверки — функции выше
   DIALOGS.pendingStart = {
-    title: 'Старт стажировки', form: 'ФормаСтартСтажировки', submit: 'Подтвердить', wide: true,
-    titleFn: function () { var t = trainee(state.dialog.traineeId); return 'Старт стажировки: ' + t.fullName; },
+    title: 'Подтверждение выхода', form: 'ФормаСтартСтажировки', submit: 'Подтвердить', wide: true,
+    titleFn: function () { var t = trainee(state.dialog.traineeId); return 'Подтверждение выхода: ' + t.fullName; },   // FT_23: было «Старт стажировки»
     // ASSUMPTION (ТЗ 11.4): руководитель стажировки и наставник по умолчанию не заполнены
     init: function () { return { headId: '', mentorId: '', startDate: D.TODAY, durationMode: DURATION_DEFAULT, endDate: internshipEndDate(D.TODAY, DURATION_DEFAULT) }; },
     // Дата старта пересчитывает окончание (кроме «Произвольной даты»); ручная дата окончания включает «Произвольную дату»
@@ -4892,7 +4921,10 @@
           byId(DURATION_MODES.map(function (x) { return { id: x.value, text: x.text }; }), v.durationMode).text + ' − 1 день. Изменить дату вручную — режим «Произвольная дата»</p>');
     },
     validate: function (t, v) { return startInternshipErrors(t, v); },
-    apply: function (t, v) { startInternship(t, v); },
+    apply: function (t, v) {
+      startInternship(t, v);
+      if (canOpenTrainee(t)) selectTrainee(t.id);   // FT_23: под окном «Стажировка оформлена» — карточка стажера, при любом выборе в окне
+    },
     afterApply: function (t) { openDialog('internshipStarted', t.id); }
   };
 
@@ -5021,7 +5053,7 @@
   // FT_10: «Выполнено» стажера у задачи с проверяющим — «На проверке» (у проверяющего появляется задача «Проверить»), без проверяющего — «Выполнена»
   // FT_14: история выполнения задачи АП — x.log [{at, by, ev, comment}]
   var LOG_EVENTS = { work: 'Взята в работу', done: 'Выполнена', review: 'Выполнена, отправлена на проверку', checked: 'Проверена',
-    'return': 'Возвращена на доработку', status: 'Изменен статус' };
+    'return': 'Возвращена на доработку', status: 'Изменен статус', executor: 'Изменен исполнитель' };
   function logTask(x, ev, comment, extra) {
     (x.log = x.log || []).push({ at: nowStamp(), by: D.CURRENT_USER_ID, ev: ev, comment: required(comment) ? comment.trim() : null, text: extra || null });
   }
@@ -5100,10 +5132,11 @@
     counterFilter: function (btn) {
       var id = btn.getAttribute('data-id');
       state.counterFilter = state.counterFilter === id ? null : id;
+      state.selectedTraineeId = null;   // FT_23: смена фильтра слева — к списку стажеров
       render();
     },
-    clearCounterFilter: function () { state.counterFilter = null; render(); },
-    resetSearch: function () { state.search = ''; render(); },
+    clearCounterFilter: function () { state.counterFilter = null; state.selectedTraineeId = null; render(); },
+    resetSearch: function () { state.search = ''; state.selectedTraineeId = null; render(); },
     toggleHideEmpty: function () { state.hideEmpty = !state.hideEmpty; state.openMenu = null; renderLeft(); },
     // FT_18: отбор по подразделению из дерева; при открытой карточке стажера — назад к списку
     deptFilter: function (row) {
@@ -5352,6 +5385,9 @@
       renderDialog();
     },
     openLinkUrl: function (btn) { toast('Ссылка откроется в браузере: ' + btn.getAttribute('data-url')); },
+    openExecutorCard: function () {   // FT_23
+      if (state.dialog.values.executorId) toast('Откроется карточка сотрудника: ' + personById(state.dialog.values.executorId));
+    },
     openReviewerCard: function () {
       if (state.dialog.values.reviewerId) toast('Откроется карточка сотрудника: ' + userName(state.dialog.values.reviewerId));
     },
@@ -5646,6 +5682,7 @@
     if (e.target.getAttribute('data-input') === 'noteSearch') { state.tv.noteSearch = e.target.value; renderTasksPage(); return; }
     if (e.target.getAttribute('data-input') === 'search') {
       state.search = e.target.value;
+      state.selectedTraineeId = null;   // FT_23: поиск слева — к списку стажеров
       renderLeft();
       renderCenter();
     }
@@ -5885,6 +5922,7 @@
   // НЕ_ПЕРЕНОСИТЬ (FT_18): открыть карточку стажера из тестов — стажеров в дереве больше нет
   // НЕ_ПЕРЕНОСИТЬ: FT_22 — права текущего пользователя на шаблон АП (для тестов)
   window.canEditTemplateDemo = function (id) { return canEditTemplate(byId(D.templates, id)); };
+  window.myTasksDemo = function () { return myTasks().map(function (x) { return x.key; }); };   // НЕ_ПЕРЕНОСИТЬ: FT_23 — ключи задач текущего пользователя
   window.openTraineeDemo = function (id) {
     if (activeDoc()) switchShell(null);
     state.topTab = 'adaptation';
