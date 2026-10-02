@@ -134,10 +134,20 @@
   // Фаза 11, 4.2: positionFamily — 'analyst' | 'programmer' | 'erp_analyst' | null; qualificationLevel — строка или null
   // Допустимые уровни: analyst — А1–А7 (кириллица), programmer — П1–П7, erp_analyst — AERP1–AERP5 (латиница)
   var QUALIFICATION_LEVELS = {
-    analyst: ['А1', 'А2', 'А3', 'А4', 'А5', 'А6', 'А7'],
-    programmer: ['П1', 'П2', 'П3', 'П4', 'П5', 'П6', 'П7'],
+    analyst: ['А1', 'А2', 'А3', 'А4', 'А5', 'А6', 'А7', 'А8'],   // FT_25: восемь уровней по данным заказчика
+    programmer: ['П1', 'П2', 'П3', 'П4', 'П5', 'П6', 'П7', 'П8'],
     erp_analyst: ['AERP1', 'AERP2', 'AERP3', 'AERP4', 'AERP5']
   };
+  // FT_25: наименования квалификационных уровней (по данным заказчика)
+  var QUALIFICATION_NAMES = {
+    'А1': 'Системный аналитик ученик', 'А2': 'Младший системный аналитик', 'А3': 'Системный аналитик III категории',
+    'А4': 'Системный аналитик II категории', 'А5': 'Системный аналитик I категории', 'А6': 'Старший системный аналитик',
+    'А7': 'Ведущий системный аналитик', 'А8': 'Методолог/бизнес архитектор',
+    'П1': 'Программист ученик', 'П2': 'Младший программист', 'П3': 'Программист III категории', 'П4': 'Программист II категории',
+    'П5': 'Программист I категории', 'П6': 'Старший программист', 'П7': 'Ведущий программист', 'П8': 'Системный архитектор'
+  };
+  // FT_25: семейство должности для шаблона АП (у других должностей уровней нет)
+  var POSITION_FAMILIES = { 'Аналитик': 'analyst', 'Программист': 'programmer' };
   var trainees = [
     {
       id: 't-ivanov', fullName: 'Иванов Петр Сергеевич', position: 'Аналитик', positionFamily: 'analyst', qualificationLevel: 'А2',
@@ -900,6 +910,8 @@
     LAG_THRESHOLD: LAG_THRESHOLD,
     CLOSE_AVAILABLE_DAYS: CLOSE_AVAILABLE_DAYS,
     QUALIFICATION_LEVELS: QUALIFICATION_LEVELS,
+    QUALIFICATION_NAMES: QUALIFICATION_NAMES,
+    POSITION_FAMILIES: POSITION_FAMILIES,
     HR_IDS: HR_IDS,
     CAS_HEAD_ID: CAS_HEAD_ID,
     defaultRoute: defaultRoute,
