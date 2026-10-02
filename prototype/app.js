@@ -4366,7 +4366,7 @@
       button('Ниже', { action: 'tplMove', data: { id: tp.id, dir: 1 }, disabled: !one || sel[0] === tp.tasks.length - 1, title: one ? 'Переместить ниже' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаНиже' }) +
       button('Удалить', { action: 'tplDelete', data: { id: tp.id }, disabled: !sel.length, title: sel.length ? '' : 'Отметьте задачи флажками', name: 'КнопкаУдалитьЗадачиШаблона' }) +
       '<span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадач') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span>' +
-      '</div>' : '<div class="row"><span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадач') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span></div>';
+      '</div>' : '<div class="row"><span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадачПросмотр') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span></div>';
     var rows = tp.tasks.map(function (x, i) {
       var on = !!(state.tplSel[tp.id] || {})[i];
       return '<tr class="task-row tpl-row' + (on ? ' selected' : '') + '" data-tpl-doc="' + tp.id + '" data-tpl-index="' + i + '" title="Двойной клик — открыть задачу шаблона">' +
@@ -4500,8 +4500,7 @@
     var note = '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаПросмотрАПТолькоПросмотр') + '>' +
       '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаПросмотрАПТолькоПросмотр') + '>' + icon('lock') + '</span>' +
       '<span class="muted"' + a1c('Надпись', 'ДекорацияПросмотрАПТолькоПросмотр') + '>Только просмотр: АП, которую можно скопировать. Сроки показаны от даты выхода этого стажера</span></div>';
-    if (!program) return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаПросмотрАП') + '>' + head + '<div class="empty"' + a1c('Надпись', 'ДекорацияПросмотрАПНет') + '>АП не создана</div></div>';
-    var list = tasksOf(program);
+    var list = program ? tasksOf(program) : [];   // в списке копирования — только стажеры с АП
     var body = BLOCKS.map(function (bl) {
       var rows = list.filter(function (x) { return x.block === bl.id; });
       if (!rows.length) return '';
