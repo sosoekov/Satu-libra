@@ -938,3 +938,6 @@ table.grid.rc-table td { vertical-align: middle; }
 .combo-list .combo-item:focus-visible { background: var(--c-bg-selected); outline: none; }
 .combo-list .combo-create { flex-direction: row; padding-left: var(--sp-3); color: var(--c-primary); }
 .combo-list .combo-empty { padding: 6px var(--sp-3); }
+
+/* ---------- FT_21: «Стажировка оформлена» ---------- */
+.dlg-text.started-gap { margin-top: var(--sp-3); }

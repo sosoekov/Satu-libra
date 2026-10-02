@@ -179,6 +179,10 @@
 
     // Красные: не создана АП, просрочены пункты чек-листов, закрытие меньше чем через неделю
     if (s === 'found' && !program) list.push({ id: 'no_program', severity: 'danger', text: 'Не создана АП' });
+    // FT_21: руководитель или наставник стажировки не назначены
+    var noStaff = [!t.headId ? 'руководитель' : '', !t.mentorId ? 'наставник' : ''].filter(Boolean);
+    if (noStaff.length && isStarted(t)) list.push({ id: 'no_staff', severity: 'warning', text: 'Не ' + (noStaff.length > 1 ? 'назначены ' : 'назначен ') + noStaff.join(' и ') + ' стажировки',
+      hint: ASSIGN_STAFF_TEXT });
     var clOver = checklistOf(t).filter(checklistOverdue).length;
     if (clOver > 0) {
       list.push({ id: 'prep_overdue', severity: 'danger',
@@ -561,11 +565,10 @@
   function startInternshipErrors(t, v) {
     var e = {};
     var staff = internshipStaff(t.departmentId).map(function (u) { return u.id; });
-    if (!v.headId) e.headId = 'Выберите руководителя стажировки';
-    else if (staff.indexOf(v.headId) < 0) e.headId = 'Сотрудник не из подразделения стажера';
-    if (!v.mentorId) e.mentorId = 'Выберите наставника';
-    else if (staff.indexOf(v.mentorId) < 0) e.mentorId = 'Сотрудник не из подразделения стажера';
-    else if (v.mentorId === v.headId) e.mentorId = 'Наставник и руководитель стажировки должны быть разными сотрудниками';
+    // FT_21: руководитель стажировки и наставник необязательны — их назначают позже руководители (canAssignStaff)
+    if (v.headId && staff.indexOf(v.headId) < 0) e.headId = 'Сотрудник не из подразделения стажера';
+    if (v.mentorId && staff.indexOf(v.mentorId) < 0) e.mentorId = 'Сотрудник не из подразделения стажера';
+    else if (v.mentorId && v.mentorId === v.headId) e.mentorId = 'Наставник и руководитель стажировки должны быть разными сотрудниками';
     var se = startDateError(v.startDate), ee = endDateError(v.startDate, v.endDate);
     if (se) e.startDate = se;
     if (ee) e.endDate = ee;
@@ -574,8 +577,8 @@
 
   // Подтверждение старта: данные стажировки, этап «Подготовка к выходу» (в ТЗ — «Ожидает АП»), стандартный чек-лист, уведомления назначенным
   function startInternship(t, v) {
-    t.headId = v.headId;
-    t.mentorId = v.mentorId;
+    t.headId = v.headId || null;
+    t.mentorId = v.mentorId || null;
     t.startDate = v.startDate;
     t.endDate = v.endDate;
     t.durationMode = v.durationMode;
@@ -1201,14 +1204,23 @@
       '</div>';
   }
 
+  // FT_21: назначать и менять руководителя и наставника стажировки может руководитель подразделения стажера и все вышестоящие руководители
+  function canAssignStaff(t) {
+    return !isClosed(t) && !isTraineeUser() && deptChain(t.departmentId).some(function (d) { return d.responsibleId === D.CURRENT_USER_ID; });
+  }
+  var ASSIGN_STAFF_TEXT = 'Назначает руководитель подразделения стажера или вышестоящий руководитель';
   function personLink(t, role) {
     var id = role === 'mentor' ? t.mentorId : t.headId;
     var u = user(id);
     var name = role === 'mentor' ? 'ГиперссылкаНаставник' : 'ГиперссылкаРуководительСтажировки';
-    if (isClosed(t) || isTraineeUser()) return '<span' + a1c('Надпись', name) + '>' + esc(u.fullName) + '</span>';   // FT_9: у стажера — без ссылок
-    return link(u.fullName, {
+    var text = u ? u.fullName : 'Не назначен';
+    var verb = u ? 'Сменить ' : 'Назначить ';
+    if (!canAssignStaff(t)) {   // FT_9: у стажера — без ссылок; FT_21: без прав — надпись
+      return '<span' + (u ? '' : ' class="muted"') + (u || isTraineeUser() || isClosed(t) ? '' : ' title="' + esc(ASSIGN_STAFF_TEXT) + '"') + a1c('Надпись', name) + '>' + esc(text) + '</span>';
+    }
+    return link(text, {
       action: 'openDialog', data: { dialog: role === 'mentor' ? 'changeMentor' : 'changeHead' },
-      title: role === 'mentor' ? 'Сменить наставника' : 'Сменить руководителя стажировки', name: name
+      title: verb + (role === 'mentor' ? 'наставника' : 'руководителя стажировки'), name: name
     });
   }
 
@@ -1307,7 +1319,8 @@
     var s = t.stage;
     if (s === 'closed') return list;
     if (!programOf(t) && t.startDate) list.push({ text: 'Создать АП', main: true, action: 'createProgram', name: 'КнопкаСоздатьАП' });   // FT_13: без даты выхода — нельзя
-    if (programOf(t) && canSendToApproval(t)) list.push({ text: 'Отправить на согласование', main: true, action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование' });
+    if (programOf(t) && canSendToApproval(t)) list.push({ text: 'Отправить на согласование', main: true, action: 'openDialog', data: { dialog: 'sendToApproval' }, name: 'КнопкаОтправитьНаСогласование',
+      disabled: !t.headId, title: t.headId ? '' : NO_HEAD_TEXT });
     if (closeSoon(t)) list.push({ text: 'Начать закрытие стажировки', main: true, action: 'openDialog', data: { dialog: 'startClosing' }, name: 'КнопкаНачатьЗакрытиеСтажировки' });
     // FT_8, п. 5: лист согласования — на согласовании и после возврата на доработку (только просмотр прошлого маршрута)
     if (s === 'approval' || (s === 'draft' && programOf(t) && programOf(t).approval)) list.push({ text: 'Открыть лист согласования', action: 'openApprovalSheet', name: 'КнопкаОткрытьЛистСогласования' });
@@ -1349,7 +1362,7 @@
       '<div class="row analytics-top"' + a1c('ГруппаГоризонтальная', 'ГруппаАналитикаСтрокаЗаголовка') + '>' + head +
         '<span class="grow"></span>' +
         (acts.length ? '<div class="row analytics-actions"' + a1c('ГруппаГоризонтальная', 'ГруппаДействияАналитики') + '>' +
-          acts.map(function (x) { return button(x.text, { cls: (x.primary ? 'btn-primary' : '') + (x.cls ? ' ' + x.cls : ''), action: x.action, data: x.data, name: x.name }); }).join('') +
+          acts.map(function (x) { return button(x.text, { cls: (x.primary ? 'btn-primary' : '') + (x.cls ? ' ' + x.cls : ''), action: x.action, data: x.data, name: x.name, disabled: x.disabled, title: x.title }); }).join('') +
         '</div>' : '') +
       '</div>' +
       (open ? '<div class="col gap-0 analytics-list"' + a1c('ГруппаВертикальная', 'ГруппаСписокАналитики') + '>' + list.map(row).join('') + '</div>' : '') +
@@ -1584,6 +1597,8 @@
   }
   // FT_8, п. 3: «Отправить на согласование» — только АП, которая еще ни разу не отправлялась, или возвращенная на доработку (этап «Черновик АП»)
   function canSendToApproval(t) { return t.stage === 'draft'; }
+  // FT_21: без руководителя стажировки маршрут не начать — первый шаг у него
+  var NO_HEAD_TEXT = 'Сначала назначьте руководителя стажировки — он первый согласует АП';
 
   // Таблица задач (8.4, 5.3–5.4): всегда сгруппирована по блокам
   function renderTaskTable(t, all) {
@@ -1944,7 +1959,8 @@
 
   // Ответственный (фаза 11, 7.2): только ФИО; если выполнил другой человек — второй строкой серым «Выполнил: ФИО»
   function whoCell(doneBy, responsibleId, done, prefix, byName) {
-    return '<td><div class="ellipsis" title="' + esc(byName(responsibleId)) + '"' + a1c('Надпись', prefix + 'Ответственный') + '>' + esc(byName(responsibleId)) + '</div>' +
+    var who = responsibleId ? byName(responsibleId) : 'Не назначен';   // FT_21: руководитель или наставник стажировки еще не назначен
+    return '<td><div class="ellipsis' + (responsibleId ? '' : ' muted') + '" title="' + esc(who) + '"' + a1c('Надпись', prefix + 'Ответственный') + '>' + esc(who) + '</div>' +
       (done && doneBy && doneBy !== responsibleId ? '<div class="muted text-s ellipsis" title="' + esc('Выполнил: ' + byName(doneBy)) + '"' + a1c('Надпись', prefix + 'Выполнил') + '>Выполнил: ' + esc(byName(doneBy)) + '</div>' : '') + '</td>';
   }
   // Срок (фаза 11, 7.2): дата; второй строкой — смещение, у невыполненного просроченного — «просрочено на N дн.» (дата и текст danger)
@@ -1996,6 +2012,7 @@
     var lock = itemLock(kind, t);
     if (lock) return lock;
     if (c.linkedDocType === 'program') return AUTO_ITEM_TEXT;
+    if (!c.responsibleId) return 'Ответственный не назначен: ' + (c.responsibleRole === 'mentor' ? 'наставник' : 'руководитель') + ' стажировки еще не назначен';   // FT_21
     if (c.responsibleId !== D.CURRENT_USER_ID) return 'Выполнить задачу может только ответственный: ' + personById(c.responsibleId);
     return null;
   }
@@ -3202,7 +3219,8 @@
       (state.dialog.readOnly ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' + esc(dlgValue(name)) + '</textarea>';
   }
   function selectUser(name, oneC) {
-    return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + a1c('ПолеВвода', oneC) + '>' +
+    return '<select class="select grow" id="f_' + name + '" data-field="' + name + '"' + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>' +
+      (dlgValue(name) ? '' : '<option value="" selected>Не выбран</option>') +   // FT_21: роль еще не назначена
       D.users.map(function (u) {
         return '<option value="' + u.id + '"' + (dlgValue(name) === u.id ? ' selected' : '') + '>' + esc(u.fullName + ' — ' + u.role) + '</option>';
       }).join('') + '</select>';
@@ -3311,24 +3329,31 @@
 
   function personDialog(role) {
     var key = role === 'mentor' ? 'mentorId' : 'headId';
-    var title = role === 'mentor' ? 'Сменить наставника' : 'Сменить руководителя стажировки';
+    var what = role === 'mentor' ? 'наставника' : 'руководителя стажировки';
     return {
-      title: title, form: role === 'mentor' ? 'ФормаСменитьНаставника' : 'ФормаСменитьРуководителя', submit: 'Сохранить',
-      init: function (t) { return { userId: t[key] }; },
+      form: role === 'mentor' ? 'ФормаСменитьНаставника' : 'ФормаСменитьРуководителя', submit: 'Сохранить',
+      titleFn: function () { return (trainee(state.dialog.traineeId)[key] ? 'Сменить ' : 'Назначить ') + what; },   // FT_21: не назначен — «Назначить»
+      init: function (t) { return { userId: t[key] || '' }; },
       body: function (t) {
-        return field(personName(role), selectUser('userId', 'ПолеСотрудник'), { required: true, forId: 'f_userId' });
+        return field(personName(role), selectUser('userId', 'ПолеСотрудник'), { required: true, error: state.dialog.errors.userId, forId: 'f_userId', name: 'Сотрудник' });
+      },
+      validate: function (t, v) {
+        if (!v.userId) return { userId: 'Выберите сотрудника' };
+        var other = role === 'mentor' ? t.headId : t.mentorId;
+        return v.userId === other ? { userId: 'Наставник и руководитель стажировки должны быть разными сотрудниками' } : {};
       },
       apply: function (t, v) {
         var old = t[key];
         if (old === v.userId) return;
         t[key] = v.userId;
+        if (v.userId !== D.CURRENT_USER_ID) pushUserNote(v.userId, 'info', 'Вы назначены ' + (role === 'mentor' ? 'наставником' : 'руководителем стажировки') + ' стажера ' + t.fullName, t.id);   // FT_21
         // Невыполненные пункты чек-листа переходят к новому ответственному
         checklistOf(t).forEach(function (c) {
           if (!c.done && c.responsibleRole === role) c.responsibleId = v.userId;
         });
         var program = programOf(t);
-        if (program) addHistory(program, personName(role) + ' изменен: ' + userName(old) + ' → ' + userName(v.userId));
-        toast(personName(role) + ' изменен: ' + userName(v.userId));
+        if (program) addHistory(program, old ? personName(role) + ' изменен: ' + userName(old) + ' → ' + userName(v.userId) : personName(role) + ' назначен: ' + userName(v.userId));
+        toast(personName(role) + (old ? ' изменен: ' : ' назначен: ') + userName(v.userId));
       }
     };
   }
@@ -4204,11 +4229,11 @@
     o.links = ((tpl && tpl.links) || []).map(function (id) { return { linkId: id, comment: '' }; });
     return o;
   }
-  function roleDefaultUser(t, role) { return role === 'head' ? t.headId : role === 'hr' ? t.hrId : t.mentorId; }
+  function roleDefaultUser(t, role) { return (role === 'head' ? t.headId : role === 'hr' ? t.hrId : t.mentorId) || null; }   // FT_21: может быть не назначен
 
   DIALOGS.checklistItem = {
     title: 'Добавить пункт', form: 'ФормаПунктЧекЛиста', submit: 'Добавить пункт',
-    init: function (t) { return { name: '', role: 'head', userId: t.headId, date: addDays(t.startDate, -1) }; },
+    init: function (t) { return { name: '', role: 'head', userId: t.headId || '', date: addDays(t.startDate, -1) }; },
     body: function (t) {
       var e = state.dialog.errors;
       var v = state.dialog.values;
@@ -4216,7 +4241,7 @@
       return field('Пункт', inputText('name', 'ПолеНаименованиеПункта'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПункта' }) +
         field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', [
           { value: 'head', text: D.ROLE_TITLES.head }, { value: 'hr', text: D.ROLE_TITLES.hr }, { value: 'mentor', text: D.ROLE_TITLES.mentor }], ' data-rerender="1"'), { forId: 'f_role' }) +
-        field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions()), { forId: 'f_userId' }) +
+        field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions('Не назначен')), { forId: 'f_userId' }) +
         field('Срок', inputDate('date', 'ПолеСрокПункта') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
     },
     validate: function (t, v) {
@@ -4227,7 +4252,7 @@
     },
     apply: function (t, v) {
       D.checklist.push(newItemFields({
-        id: 'cl-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: v.userId,
+        id: 'cl-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: v.userId || null,
         offsetDays: diffDays(t.startDate, v.date), done: false, doneBy: null, doneAt: null, linkedDocType: null, linkedDocNumber: null
       }));
       toast('Пункт добавлен');
@@ -4545,10 +4570,11 @@
       return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтартКандидат') + '>' + esc(t.position) + ', ' + esc(dept(t.departmentId).name) +
           (r ? '. ' + esc(vrTitle(r)) : '') + (t.expectedStartDate ? '. Ожидаемая дата выхода — ' + fmtDate(t.expectedStartDate) : '') + '.</p>' +
         field('Руководитель стажировки', selectOptions('headId', 'ПолеРуководительСтажировкиСтарт', opts('Не выбран'), ' data-rerender="1"'),
-          { required: true, error: e.headId, forId: 'f_headId', name: 'РуководительСтажировкиСтарт' }) +
+          { error: e.headId, forId: 'f_headId', name: 'РуководительСтажировкиСтарт' }) +
         field('Наставник', selectOptions('mentorId', 'ПолеНаставникСтарт', opts('Не выбран'), ' data-rerender="1"'),
-          { required: true, error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
-        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияСтартСписокСотрудников') + '>В списках — сотрудники подразделения стажера и руководители вышестоящих подразделений</p>' +
+          { error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
+        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияСтартСписокСотрудников') + '>В списках — сотрудники подразделения стажера и руководители вышестоящих подразделений. ' +
+          'Можно не заполнять: назначить позже может руководитель подразделения стажера или вышестоящий руководитель</p>' +
         field('Дата старта', inputDate('startDate', 'ПолеДатаСтарта', D.TODAY), { required: true, error: se, forId: 'f_startDate', name: 'ДатаСтарта' }) +
         field('Длительность', toggle('ТумблерДлительностьСтажировки', 'pendingDuration', DURATION_MODES.map(function (m) {
           return { value: m.value, text: m.text, name: m.name };
@@ -4569,8 +4595,13 @@
     init: function () { return { step: 'ask' }; },
     body: function (t) {
       var v = state.dialog.values;
-      var summary = '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаИтог') + '>' + esc(t.fullName) + ': стажировка с ' + fmtDate(t.startDate) + ' по ' + fmtDate(t.endDate) +
-        '. Руководитель стажировки — ' + esc(userName(t.headId)) + ', наставник — ' + esc(userName(t.mentorId)) + '.</p>';
+      // FT_21: оформление по макету — ФИО, срок и подписи ролей полужирные; не назначенные — «Не назначен»
+      var who = function (id) { return id ? esc(userName(id)) : '<span class="muted">Не назначен</span>'; };
+      var summary = '<div class="col gap-0"' + a1c('ГруппаВертикальная', 'ГруппаСтажировкаОформленаИтог') + '>' +
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаФИО') + '>' + esc(t.fullName) + '</p>' +
+        '<p class="dlg-text started-gap"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаСрок') + '>Стажировка <b>с ' + fmtDate(t.startDate) + ' по ' + fmtDate(t.endDate) + '</b></p>' +
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаРуководитель') + '><b>Руководитель стажировки:</b> ' + who(t.headId) + '</p>' +
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтажировкаОформленаНаставник') + '><b>Наставник стажировки:</b> ' + who(t.mentorId) + '</p></div>';
       if (v.step === 'choose') {
         return summary + '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСпособСозданияАП') + '>Выберите способ создания АП:</p>' +
           '<div class="col gap-2 ap-modes"' + a1c('ГруппаВертикальная', 'ГруппаСпособыСозданияАП') + '>' + AP_MODES.map(function (m) {
@@ -4580,7 +4611,7 @@
       }
       return summary +
         '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияЧекЛистСоздан') + '>Для стажера будет создан стандартный чек-лист подготовки к выходу. Пункты можно будет изменить или добавить.</p>' +
-        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросСоздатьАП') + '>Создать адаптационную программу (АП) сейчас?</p>';
+        '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросСоздатьАП') + '><b>Создать адаптационную программу (АП) сейчас?</b></p>';
     },
     extraFoot: function () {
       return state.dialog.values.step === 'choose'
@@ -4635,6 +4666,7 @@
     if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
     if (t && checklistLock(t) && ['checklistItem', 'checklistFill'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
     if (t && closureLock(t) && ['closureItem', 'close'].indexOf(type) >= 0) { toast(closureLock(t)); return; }
+    if (t && type === 'sendToApproval' && !t.headId) { toast(NO_HEAD_TEXT); return; }   // FT_21
     if (type === 'task' && lock && !ctx.taskId && !ctx.templateId) { toast(lock); return; }
     state.openMenu = null;
     if (opts && opts.stack && state.dialog) state.dialogStack.push(state.dialog);
