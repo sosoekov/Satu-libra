@@ -423,14 +423,53 @@
   buildFromTemplate('pr-sidorov', 'tpl-base', '2026-08-05', []);
 
   /* ---------- ТЧ ЧекЛистПодготовки ---------- */
+  /* ---------- FT_20: справочник «Библиотека ссылок» ----------
+   * linkGroups: id, name — группы справочника. linkLibrary: id, name (Название), groupId (Группа), url (Ссылка).
+   * Адреса хранятся без схемы — в прототипе нет внешних адресов. В задачах АП, задачах шаблонов и пунктах чек-листов
+   * ссылки для ознакомления — [{linkId, comment}]. Регламенты, кодекс и курсы перенесены из ссылок задач (FT_2).
+   */
+  var linkGroups = [
+    { id: 'lg-portal', name: 'Корпоративный портал' },
+    { id: 'lg-docs',   name: 'Регламенты и документы' },
+    { id: 'lg-learn',  name: 'Обучение' },
+    { id: 'lg-ext',    name: 'Внешние системы' }
+  ];
+  var linkLibrary = [
+    { id: 'lnk-1',  name: 'Корпоративный портал ЦАС',               groupId: 'lg-portal', url: 'portal.cas.local' },
+    { id: 'lnk-2',  name: 'Структура предприятия',                  groupId: 'lg-portal', url: 'portal.cas.local/structure' },
+    { id: 'lnk-3',  name: 'Телефонный справочник',                  groupId: 'lg-portal', url: 'portal.cas.local/phones' },
+    { id: 'lnk-4',  name: 'Регламенты на портале',                  groupId: 'lg-docs',   url: 'portal.cas.local/docs/reglamenty' },
+    { id: 'lnk-5',  name: 'Корпоративный кодекс',                   groupId: 'lg-docs',   url: 'portal.cas.local/docs/kodeks' },
+    { id: 'lnk-6',  name: 'Инструкция по охране труда',             groupId: 'lg-docs',   url: 'portal.cas.local/docs/ohrana-truda' },
+    { id: 'lnk-7',  name: 'Политика информационной безопасности',   groupId: 'lg-docs',   url: 'portal.cas.local/docs/ib-policy' },
+    { id: 'lnk-8',  name: 'Памятка стажёра',                        groupId: 'lg-docs',   url: 'portal.cas.local/docs/pamyatka-stazhera' },
+    { id: 'lnk-9',  name: 'База знаний ЦАС',                        groupId: 'lg-learn',  url: 'wiki.cas.local' },
+    { id: 'lnk-10', name: 'Forus Team',                             groupId: 'lg-ext',    url: 'forus.e-queo.online' },
+    { id: 'lnk-11', name: 'Bitrix24: заявки на трудоустройство',    groupId: 'lg-ext',    url: 'bitrix.cas.local/hr/requests' },
+    { id: 'lnk-12', name: 'Сервис заявок 0911',                     groupId: 'lg-ext',    url: '0911.cas.local' },
+    { id: 'lnk-13', name: 'СИТ: заявки',                            groupId: 'lg-ext',    url: 'sit.cas.local' }
+  ];
+  function libLinks(ids) { return (ids || []).map(function (id) { return { linkId: id, comment: '' }; }); }
+
+  /* ---------- ТЧ ЧекЛистПодготовки ----------
+   * FT_20: пункт чек-листа — задача: status (как у задачи АП), description, links, reviewerId, observerIds, log.
+   * Проверяющий и наблюдатели по умолчанию пустые. done / inWork — производные от status.
+   */
   var checklistTemplate = [
-    { name: 'Создать заявку на трудоустройство в Bitrix',       responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix' },
-    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911' },
-    { name: 'Создать заявку на создание учётной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911' },
-    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, linkedDocType: null },
-    { name: 'Подготовить технику',                              responsibleRole: 'head',   offsetDays: -3, linkedDocType: null },
-    { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program' },
-    { name: 'Подготовить ПО и доступ к ресурсам, порталам',     responsibleRole: 'head',   offsetDays: -1, linkedDocType: null }
+    { name: 'Создать заявку на трудоустройство в Bitrix',       responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix',
+      description: 'Заявка на трудоустройство стажёра создаётся в Bitrix24 по форме отдела кадров.', links: ['lnk-11'] },
+    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
+      description: 'Заявка на выпуск пропуска создаётся в сервисе заявок 0911.', links: ['lnk-12'] },
+    { name: 'Создать заявку на создание учётной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
+      description: 'Заявка на создание учётной записи создаётся в сервисе заявок 0911.', links: ['lnk-12'] },
+    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, linkedDocType: null,
+      description: 'Стол и кресло рядом с наставником, доступ в помещение.', links: [] },
+    { name: 'Подготовить технику',                              responsibleRole: 'head',   offsetDays: -3, linkedDocType: null,
+      description: 'Ноутбук, монитор, гарнитура.', links: ['lnk-12'] },
+    { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program',
+      description: 'Отмечается автоматически, когда для стажёра создана адаптационная программа.', links: [] },
+    { name: 'Подготовить ПО и доступ к ресурсам, порталам',     responsibleRole: 'head',   offsetDays: -1, linkedDocType: null,
+      description: 'Учётные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] }
   ];
   var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажёр', ksh: 'КШ' };
 
@@ -440,11 +479,11 @@
    * Роль «Стажёр» — сам стажёр: responsibleId = id стажёра. Создаётся при переходе в «Закрытие» (buildClosureChecklist).
    */
   var closureChecklistTemplate = [
-    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'head',    offsetDays: -7, optional: false, linkedDocType: 'forus' },
-    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'trainee', offsetDays: -7, optional: false, linkedDocType: 'forus' },
+    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'head',    offsetDays: -7, optional: false, linkedDocType: 'forus', links: ['lnk-10'] },
+    { name: 'Заполнить отчёт и матрицы в Forus Team',                                    responsibleRole: 'trainee', offsetDays: -7, optional: false, linkedDocType: 'forus', links: ['lnk-10'] },
     { name: 'Провести мероприятие по закрытию стажировки',                              responsibleRole: 'hr',      offsetDays: -3, optional: false, linkedDocType: null },
-    { name: 'Оставить заявку о закрытии стажировки в СИТ',                              responsibleRole: 'hr',      offsetDays: 0,  optional: false, linkedDocType: 'sit' },
-    { name: 'Оставить заявки на открытие доступа к дополнительным материалам',          responsibleRole: 'head',    offsetDays: 0,  optional: true,  linkedDocType: null },
+    { name: 'Оставить заявку о закрытии стажировки в СИТ',                              responsibleRole: 'hr',      offsetDays: 0,  optional: false, linkedDocType: 'sit', links: ['lnk-13'] },
+    { name: 'Оставить заявки на открытие доступа к дополнительным материалам',          responsibleRole: 'head',    offsetDays: 0,  optional: true,  linkedDocType: null, links: ['lnk-12'] },
     { name: 'Подготовить список сотрудников, закрывших стажировку, и отправить его в КШ', responsibleRole: 'hr',     offsetDays: 3,  optional: false, linkedDocType: null },
     { name: 'Подготовить документы для оформления ДМС',                                 responsibleRole: 'ksh',     offsetDays: 5,  optional: false, linkedDocType: null }
   ];
@@ -454,7 +493,8 @@
       var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId :
         c.responsibleRole === 'ksh' ? KSH_ID : c.responsibleRole === 'trainee' ? tr.id : tr.mentorId;
       return { id: 'cc-' + (closureSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole, responsibleId: responsibleId,
-        offsetDays: c.offsetDays, optional: c.optional, done: false, doneBy: null, doneAt: null, linkedDocType: c.linkedDocType };
+        offsetDays: c.offsetDays, optional: c.optional, done: false, doneBy: null, doneAt: null, linkedDocType: c.linkedDocType,
+        status: 'not_started', description: c.description || '', links: libLinks(c.links), reviewerId: null, observerIds: [], log: [] };
     });
   }
   var closureChecklist = [];
@@ -478,7 +518,8 @@
       var item = {
         id: 'cl-' + (clSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: responsibleId, offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
-        linkedDocType: c.linkedDocType, linkedDocNumber: null
+        linkedDocType: c.linkedDocType, linkedDocNumber: null,
+        status: 'not_started', description: c.description || '', links: libLinks(c.links), reviewerId: null, observerIds: [], log: []
       };
       var d = checklistDone[tr.id] && checklistDone[tr.id][i];
       if (d) {
@@ -488,6 +529,7 @@
         item.doneAt = addDays(tr.startDate, c.offsetDays - 1);
         if (c.linkedDocType === 'request0911') item.linkedDocNumber = '0911-000' + (docSeq++);
       }
+      if (item.done) item.status = 'done';
       checklist.push(item);
     });
   });
@@ -530,10 +572,20 @@
   });
 
   /* ---------- Тип задачи, обязательность и ссылки для ознакомления (FT_2) ----------
-   * type: 'task' | 'course' | 'meeting' | 'test'; required: Булево; links: [{url, comment}].
+   * type: 'task' | 'course' | 'meeting' | 'test'; required: Булево; links: [{linkId, comment}] (FT_20: ссылка — элемент библиотеки ссылок).
    * Для тестовых данных подставляются по наименованию задачи. Ссылки хранятся без схемы — в прототипе нет внешних адресов.
    */
-  var linkSeq = 400;
+  var courseSeq = 400;
+  // FT_20: курс — элемент библиотеки ссылок (группа «Обучение»), один на название курса
+  function courseLink(name) {
+    var title = name.replace(/^Пройти /, '');
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    var found = linkLibrary.filter(function (l) { return l.name === title; })[0];
+    if (found) return found.id;
+    var id = 'lnk-c' + courseSeq;
+    linkLibrary.push({ id: id, name: title, groupId: 'lg-learn', url: 'forus.e-queo.online/' + (courseSeq++) + '/course' });
+    return id;
+  }
   function taskExtras(name, block) {
     var n = name.toLowerCase();
     var type = /курс|обучение/.test(n) ? 'course'
@@ -542,9 +594,9 @@
     var required = (block === 'corp' && /охране труда|информационной безопасности|аттестаци|регламент|кодекс/.test(n)) ||
       /итогов/.test(n);
     var links = [];
-    if (type === 'course') links.push({ url: 'forus.e-queo.online/' + (linkSeq++) + '/course', comment: 'Ссылка на курс' });
-    if (/регламент/.test(n)) links.push({ url: 'portal.cas.local/docs/reglamenty', comment: 'Регламенты на портале' });
-    if (/кодекс/.test(n)) links.push({ url: 'portal.cas.local/docs/kodeks', comment: 'Корпоративный кодекс' });
+    if (type === 'course') links.push({ linkId: courseLink(name), comment: 'Ссылка на курс' });
+    if (/регламент/.test(n)) links.push({ linkId: 'lnk-4', comment: '' });
+    if (/кодекс/.test(n)) links.push({ linkId: 'lnk-5', comment: '' });
     return { type: type, required: required, links: links };
   }
   trainees.filter(function (tr) { return tr.id === 't-popova'; }).forEach(function (tr) {
@@ -552,6 +604,7 @@
     items[0].done = true; items[0].doneBy = tr.headId; items[0].doneAt = '2026-07-22';
     items[1].done = true; items[1].doneBy = tr.id;     items[1].doneAt = '2026-07-23';
     items[2].done = true; items[2].doneBy = tr.hrId;     items[2].doneAt = '2026-07-24';
+    items.forEach(function (c) { if (c.done) c.status = 'done'; });
     Array.prototype.push.apply(closureChecklist, items);
   });
 
@@ -802,6 +855,8 @@
     programs: programs,
     tasks: tasks,
     checklist: checklist,
+    linkGroups: linkGroups,
+    linkLibrary: linkLibrary,
     checklistTemplate: checklistTemplate,
     KSH_ID: KSH_ID,
     closureChecklist: closureChecklist,
