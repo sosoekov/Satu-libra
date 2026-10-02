@@ -976,3 +976,9 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   width: 28px; height: 28px; border-radius: 50%; background: var(--c-tab-active); color: var(--c-bg); font-weight: var(--fw-bold); font-size: var(--fs-l);
 }
+
+/* ---------- FT_25: шаблон АП — группы по блоку, плашки типа, срок в днях, доп. проверяющий ---------- */
+.tpl-table .w-days { width: 90px; }
+.tpl-table .w-extra { width: 18%; }
+.tpl-table .w-type { width: 110px; }
+.tpl-term-row .tf-check { margin-top: 30px; }

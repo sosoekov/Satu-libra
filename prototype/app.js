@@ -382,7 +382,8 @@
 
   var state = {
     colWidths: {},
-    tplSel: {},                  // FT_22: выбранные задачи шаблона: {шаблон: {номер задачи: true}}               // FT_21: ширина колонок таблиц, измененная пользователем: {таблица: {колонка: px}} (в 1С — настройки формы)
+    tplSel: {},
+    tplCollapsed: {},            // FT_25: свернутые блоки шаблона: {шаблон: {блок: true}}                  // FT_22: выбранные задачи шаблона: {шаблон: {номер задачи: true}}               // FT_21: ширина колонок таблиц, измененная пользователем: {таблица: {колонка: px}} (в 1С — настройки формы)
     topTab: 'adaptation',        // 'tasks' | 'recruiting' | 'adaptation'
     selectedTraineeId: null,     // выбранный стажер
     traineeTab: null,            // 'program' | 'prepare'
@@ -1898,7 +1899,7 @@
   function newTask(program, s) {
     return {
       id: 'task-new-' + (newTaskSeq++), programId: program.id, block: s.block, name: s.name, description: s.description || '', criteria: s.criteria || '',
-      status: s.status || 'not_started', deadline: s.deadline, reviewerId: s.reviewerId || null,
+      status: s.status || 'not_started', deadline: s.deadline, reviewerId: s.reviewerId || null, extraReviewer: s.extraReviewer || '',
       observerIds: s.observerIds || [], result: s.result || null, externalUrl: 'forus-team:task/new',
       type: s.type || 'task', required: !!s.required,
       links: (s.links || []).map(function (l) { return { linkId: l.linkId, comment: l.comment }; })   // FT_20: элемент библиотеки ссылок
@@ -3661,11 +3662,11 @@
       // Новая задача и задача шаблона: проверяющий — из шаблона (если есть), наблюдатели — руководитель стажировки, наставник,
       // HR-менеджер и ответственный за подразделение (FT_6)
       if (tt) return { name: tt.name, block: tt.block, description: tt.description, criteria: tt.criteria || '', deadline: addDays(t.startDate, tt.offsetDays), status: 'not_started',
-        reviewerId: tt.reviewerId || '', observers: newTaskObservers(t), result: '', type: tt.type, required: tt.required, links: links(tt.links) };
+        reviewerId: tt.reviewerId || '', extraReviewer: tt.extraReviewer || '', observers: newTaskObservers(t), result: '', type: tt.type, required: tt.required, links: links(tt.links) };
       if (!x) return { name: '', block: 'spec', description: '', criteria: '', deadline: '', status: 'not_started',
-        reviewerId: '', observers: newTaskObservers(t), result: '', type: 'task', required: false, links: [] };
+        reviewerId: '', extraReviewer: '', observers: newTaskObservers(t), result: '', type: 'task', required: false, links: [] };
       return { name: x.name, block: x.block, description: x.description, criteria: x.criteria || '', deadline: x.deadline, status: x.status,
-        reviewerId: x.reviewerId || '', observers: x.observerIds.slice(), result: x.result || '',
+        reviewerId: x.reviewerId || '', extraReviewer: x.extraReviewer || '', observers: x.observerIds.slice(), result: x.result || '',
         type: x.type || 'task', required: !!x.required, links: links(x.links), tab: 'task' };   // FT_14: страница карточки «Задача» / «Выполнение»
     },
     body: function (t) {
@@ -3708,6 +3709,11 @@
             { forId: 'f_reviewerId' }) +
           tfField('Наблюдатели', observersField_, { forId: 'f_observers', error: e.observers, name: 'Наблюдатели' }) +
         '</div>' +
+        // FT_25: дополнительный проверяющий — вводится вручную (сотрудника нет в системе)
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаДопПроверяющий') + '>' +
+          tfField('Доп. проверяющий', inputText('extraReviewer', 'ПолеДопПроверяющий', ro() + (dlgRO() ? '' : ' placeholder="ФИО, если сотрудника нет в системе"') +
+            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }) + '<div class="tf-field tf-spacer"></div>' +
+        '</div>' +
         '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаТипСрок') + '>' +
           tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
           tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
@@ -3743,7 +3749,7 @@
       var program = programOf(t);
       var spec = {
         name: v.name.trim(), block: v.block, description: (v.description || '').trim(), criteria: (v.criteria || '').trim(), deadline: v.deadline, status: v.status,
-        reviewerId: v.reviewerId || null, observerIds: v.observers.slice(), result: required(v.result) ? v.result.trim() : null,   // FT_14: в форме не меняется
+        reviewerId: v.reviewerId || null, extraReviewer: (v.extraReviewer || '').trim(), observerIds: v.observers.slice(), result: required(v.result) ? v.result.trim() : null,   // FT_14: в форме не меняется
         type: v.type, required: !!v.required,
         links: linksFromRows(v.links)
       };
@@ -3769,6 +3775,7 @@
       if ((x.type || 'task') !== spec.type) changed.push('тип: ' + taskTypeText(spec.type));
       if (!!x.required !== spec.required) changed.push(spec.required ? 'стала обязательной' : 'стала необязательной');
       if ((x.reviewerId || null) !== spec.reviewerId) changed.push('проверяющий');
+      if ((x.extraReviewer || '') !== spec.extraReviewer) changed.push('доп. проверяющий');   // FT_25
       if (!sameList(x.observerIds, spec.observerIds)) changed.push('наблюдатели');
       var oldName = x.name;
       if (x.status !== spec.status) logTask(x, 'status', null, STATUS_META[x.status].text + ' → ' + STATUS_META[spec.status].text);   // FT_14: история выполнения
@@ -4246,7 +4253,7 @@
   function templateTasksFor(t, tp) {
     return tp.tasks.map(function (x) {
       return { block: x.block, name: x.name, description: x.description, criteria: x.criteria || '', deadline: addDays(t.startDate, x.offsetDays),
-        type: x.type, required: x.required, links: x.links, reviewerId: x.reviewerId || null };  // проверяющий — из шаблона, если есть
+        type: x.type, required: x.required, links: x.links, reviewerId: x.reviewerId || null, extraReviewer: x.extraReviewer || '' };  // проверяющий — из шаблона, если есть
     });
   }
 
@@ -4290,7 +4297,7 @@
     apply: function (t, v) {
       var src = trainee(v.source);
       var specs = tasksOf(programOf(src)).map(function (x) {
-        return { block: x.block, name: x.name, description: x.description, criteria: x.criteria || '', reviewerId: x.reviewerId || null,
+        return { block: x.block, name: x.name, description: x.description, criteria: x.criteria || '', reviewerId: x.reviewerId || null, extraReviewer: x.extraReviewer || '',
           deadline: addDays(t.startDate, diffDays(src.startDate, x.deadline)), type: x.type, required: x.required, links: x.links };
       });
       createProgram(t, programOf(src).templateId, 'АП создана копированием у стажера ' + src.fullName, specs);
@@ -4376,7 +4383,7 @@
       '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаШаблонТолькоПросмотр') + '>' + icon('lock') + '</span>' +
       '<span class="muted"' + a1c('Надпись', 'ДекорацияШаблонТолькоПросмотр') + '>' + esc(TEMPLATE_RO_TEXT) + '</span></div>';
     var head = '<div class="tf-row tpl-head"' + a1c('ГруппаГоризонтальная', 'ГруппаШаблонРеквизиты') + '>' +
-      '<div class="tf-field tf-wide"><label class="tf-label" for="tpl_name">Название' + (edit ? '<span class="req" title="Обязательное поле"> *</span>' : '') + '</label>' +
+      '<div class="tf-field tf-wide"><label class="tf-label" for="tpl_name">Наименование' + (edit ? '<span class="req" title="Обязательное поле"> *</span>' : '') + '</label>' +
         '<input type="text" class="input" id="tpl_name" data-tpl-field="name" value="' + esc(tp.name) + '"' + dis + (err ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеНазваниеШаблона') + '>' +
         (err ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаНазваниеШаблона') + '>' + esc(err) + '</div>' : '') + '</div>' +
       '<div class="tf-field"><label class="tf-label" for="tpl_position">Должность</label>' +
@@ -4384,36 +4391,49 @@
           [{ v: '', t: 'Для всех должностей' }].concat(templatePositions(tp).map(function (x) { return { v: x, t: x }; })).map(function (o) {
             return '<option value="' + esc(o.v) + '"' + ((tp.position || '') === o.v ? ' selected' : '') + '>' + esc(o.t) + '</option>';
           }).join('') + '</select></div>' +
+      // FT_25: квалификационный уровень — один, из уровней семейства должности шаблона; необязательный
+      '<div class="tf-field"><label class="tf-label" for="tpl_level">Квалификационный уровень</label>' + templateLevelSelect(tp, edit) + '</div>' +
       '<div class="tf-field"><label class="tf-label" for="tpl_author">Автор</label>' +
         '<input type="text" class="input" id="tpl_author" disabled value="' + esc(userName(tp.authorId)) + '"' + a1c('ПолеВвода', 'ПолеАвторШаблона') + '></div>' +
       '</div>';
     var one = sel.length === 1;
     var bar = edit ? '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадачиШаблона') + '>' +
       button('Добавить задачу', { icon: 'plus', action: 'tplAddTask', data: { id: tp.id }, name: 'КнопкаДобавитьЗадачуШаблона' }) +
-      button('Выше', { action: 'tplMove', data: { id: tp.id, dir: -1 }, disabled: !one || sel[0] === 0, title: one ? 'Переместить выше' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаВыше' }) +
-      button('Ниже', { action: 'tplMove', data: { id: tp.id, dir: 1 }, disabled: !one || sel[0] === tp.tasks.length - 1, title: one ? 'Переместить ниже' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаНиже' }) +
+      button('Выше', { action: 'tplMove', data: { id: tp.id, dir: -1 }, disabled: !one || tplNeighbor(tp, sel[0], -1) < 0, title: one ? 'Переместить выше в блоке' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаВыше' }) +
+      button('Ниже', { action: 'tplMove', data: { id: tp.id, dir: 1 }, disabled: !one || tplNeighbor(tp, sel[0], 1) < 0, title: one ? 'Переместить ниже в блоке' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаНиже' }) +
       button('Удалить', { action: 'tplDelete', data: { id: tp.id }, disabled: !sel.length, title: sel.length ? '' : 'Отметьте задачи флажками', name: 'КнопкаУдалитьЗадачиШаблона' }) +
       '<span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадач') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span>' +
       '</div>' : '<div class="row"><span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадачПросмотр') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span></div>';
-    var rows = tp.tasks.map(function (x, i) {
+    var row = function (x, i) {
       var on = !!(state.tplSel[tp.id] || {})[i];
       return '<tr class="task-row tpl-row' + (on ? ' selected' : '') + '" data-tpl-doc="' + tp.id + '" data-tpl-index="' + i + '" title="Двойной клик — открыть задачу шаблона">' +
         (edit ? '<td><input type="checkbox" data-tpl-sel="' + i + '" data-tpl-id="' + tp.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc('Выбрать задачу «' + x.name + '»') + '"' + a1c('Флажок', 'ТаблицаЗадачиШаблонаАПВыбрана') + '></td>' : '') +
         '<td><div class="ellipsis">' + link(x.name, { action: 'tplOpenTask', data: { id: tp.id, index: i }, title: x.name, name: 'ТаблицаЗадачиШаблонаАПЗадача' }) + '</div></td>' +
-        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПБлок') + '>' + blockMeta(x.block).short + '</td>' +
-        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПТип') + '>' + esc(taskTypeText(x.type || 'task')) + '</td>' +
-        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПСрок') + '>' + esc(offsetDaysText(x.offsetDays)) + '</td>' +
+        '<td class="nowrap">' + taskTypeBadge(x.type, 'ТаблицаЗадачиШаблонаАПТип') + '</td>' +
+        '<td class="nowrap" title="' + esc(offsetDaysText(x.offsetDays)) + '"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПСрок') + '>' + pluralN(x.offsetDays, W_DAYS) + '</td>' +
         '<td><div class="ellipsis' + (x.reviewerId ? '' : ' muted') + '"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАППроверяющий') + '>' + esc(x.reviewerId ? userName(x.reviewerId) : 'Не назначен') + '</div></td>' +
+        '<td><div class="ellipsis" title="' + esc(x.extraReviewer || '') + '"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПДопПроверяющий') + '>' + esc(x.extraReviewer || '') + '</div></td>' +
         '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПОбязательная') + '>' + (x.required ? 'Да' : '') + '</td></tr>';
+    };
+    // FT_25: группировка по блоку, как в таблице задач АП: строка группы со сворачиванием, порядок внутри блока — порядок шаблона
+    var span = edit ? 7 : 6;
+    var rows = BLOCKS.map(function (bl) {
+      var idx = tp.tasks.map(function (x, i) { return i; }).filter(function (i) { return tp.tasks[i].block === bl.id; });
+      if (!idx.length) return '';
+      var open = !(state.tplCollapsed[tp.id] || {})[bl.id];
+      return '<tr class="group-row" tabindex="0" data-action="tplToggleBlock" data-id="' + tp.id + '" data-block="' + bl.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
+          a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблонаАПГруппа' + bl.name, 'check') + '>' +
+        '<td colspan="' + span + '"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') + '<b>' + esc(bl.title) + ' (' + idx.length + ')</b></span></td></tr>' +
+        (open ? idx.map(function (i) { return row(tp.tasks[i], i); }).join('') : '');
     }).join('');
     var allOn = edit && tp.tasks.length && sel.length === tp.tasks.length;
     var table = '<div class="table-box"><table class="grid task-table tpl-table" data-resize="tpl"' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблонаАП') + '>' +
-      '<colgroup>' + (edit ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-block" data-col="block"><col class="w-type" data-col="type">' +
-        '<col class="w-offset" data-col="offset"><col class="w-person" data-col="reviewer"><col class="w-req" data-col="req"></colgroup>' +
+      '<colgroup>' + (edit ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-type" data-col="type">' +
+        '<col class="w-days" data-col="offset"><col class="w-person" data-col="reviewer"><col class="w-extra" data-col="extra"><col class="w-req" data-col="req"></colgroup>' +
       '<thead><tr>' + (edit ? '<th><input type="checkbox" data-tpl-all="' + tp.id + '" title="Выбрать все"' + (allOn ? ' checked' : '') + (tp.tasks.length ? '' : ' disabled') +
         a1c('Флажок', 'ТаблицаЗадачиШаблонаАПВыбратьВсе') + '></th>' : '') +
-        '<th>Задача</th><th>Блок</th><th>Тип</th><th>Срок</th><th>Проверяющий</th><th>Обязательная</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="7" class="muted"' + a1c('Надпись', 'ДекорацияЗадачШаблонаНет') + '>В шаблоне нет задач</td></tr>') + '</tbody></table></div>';
+        '<th>Задача</th><th>Тип</th><th title="Дней от даты выхода">Срок</th><th>Проверяющий</th><th title="Вводится вручную, если сотрудника нет в системе">Доп. проверяющий</th><th>Обязательная</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="' + span + '" class="muted"' + a1c('Надпись', 'ДекорацияЗадачШаблонаНет') + '>В шаблоне нет задач</td></tr>') + '</tbody></table></div>';
     return '<div class="col gap-3 tpl-doc"' + a1c('ГруппаВертикальная', 'ГруппаШаблонАП') + '>' + note + head + bar + table + '</div>';
   }
   function setTemplateField(tp, f, value) {
@@ -4426,9 +4446,32 @@
       toast('Шаблон сохранен');
       return;
     }
+    if (f === 'level') { tp.qualificationLevel = value || null; toast('Шаблон сохранен'); return; }   // FT_25
     tp.position = value || null;
+    if (tp.qualificationLevel && templateLevels(tp).indexOf(tp.qualificationLevel) < 0) tp.qualificationLevel = null;   // FT_25: уровень другой должности сбрасывается
+    renderCenter();
     toast('Шаблон сохранен');
   }
+  // FT_25: квалификационные уровни шаблона — по семейству должности (Аналитик — А1–А8, Программист — П1–П8), у других должностей нет
+  function templateLevels(tp) { var f = D.POSITION_FAMILIES[tp.position || '']; return f ? D.QUALIFICATION_LEVELS[f] : []; }
+  function levelText(code) { return code + '. ' + (D.QUALIFICATION_NAMES[code] || ''); }
+  function templateLevelSelect(tp, edit) {
+    var list = templateLevels(tp);
+    var none = !list.length;
+    return '<select class="select" id="tpl_level" data-tpl-field="level"' + (edit && !none ? '' : ' disabled') +
+      (none ? ' title="Для должности шаблона нет квалификационных уровней"' : '') + a1c('ПолеВвода', 'ПолеКвалификационныйУровеньШаблона') + '>' +
+      '<option value="">' + (none ? 'Нет уровней для должности' : 'Не указан') + '</option>' +
+      list.map(function (c) { return '<option value="' + esc(c) + '"' + (tp.qualificationLevel === c ? ' selected' : '') + '>' + esc(levelText(c)) + '</option>'; }).join('') + '</select>';
+  }
+  // FT_25: соседняя задача того же блока (для «Выше» / «Ниже»); -1 — нет
+  function tplNeighbor(tp, i, dir) {
+    if (i == null) return -1;
+    for (var j = i + dir; j >= 0 && j < tp.tasks.length; j += dir) if (tp.tasks[j].block === tp.tasks[i].block) return j;
+    return -1;
+  }
+  // FT_25: цветная плашка типа задачи (Задача — серая, Курс — синяя, Встреча — зеленая, Тест — желтая)
+  var TASK_TYPE_TONES = { task: 'neutral', course: 'info', meeting: 'success', test: 'warning' };
+  function taskTypeBadge(type, name) { return badge(TASK_TYPE_TONES[type || 'task'] || 'neutral', taskTypeText(type || 'task'), name); }
 
   // Задача шаблона: ctx {tplId, index} (index null — новая). Срок — число дней от даты выхода
   function tplOf(ctx) { return byId(D.templates, ctx.tplId); }
@@ -4437,8 +4480,8 @@
     titleFn: function () { var c = dlgCtx(); return (c.index == null ? 'Новая задача шаблона' : 'Задача шаблона') + ' «' + tplOf(c).name + '»'; },
     init: function (t, ctx) {
       var x = ctx.index == null ? null : tplOf(ctx).tasks[ctx.index];
-      if (!x) return { name: '', block: 'spec', type: 'task', required: false, offsetDays: '1', reviewerId: '', description: '', criteria: '', links: [] };
-      return { name: x.name, block: x.block, type: x.type || 'task', required: !!x.required, offsetDays: String(x.offsetDays), reviewerId: x.reviewerId || '',
+      if (!x) return { name: '', block: 'spec', type: 'task', required: false, offsetDays: '1', reviewerId: '', extraReviewer: '', description: '', criteria: '', links: [] };
+      return { name: x.name, block: x.block, type: x.type || 'task', required: !!x.required, offsetDays: String(x.offsetDays), reviewerId: x.reviewerId || '', extraReviewer: x.extraReviewer || '',
         description: x.description || '', criteria: x.criteria || '', links: linkRows(x.links) };
     },
     body: function () {
@@ -4458,11 +4501,13 @@
               title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' }) + '</div>', { forId: 'f_reviewerId', cls: 'tf-wide' }) +
           tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
         '</div>' +
-        '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСрок') + '>' +
+        '<div class="tf-row tpl-term-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСрок') + '>' +
           tfField('Срок, дней от выхода', '<input type="number" class="input" min="0" step="1" id="f_offsetDays" data-field="offsetDays" value="' + esc(dlgValue('offsetDays')) + '"' + ro() +
               (e.offsetDays ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеСрокДнейОтВыхода') + '>' +
             '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокДнейОтВыхода') + '>' + (isNaN(n) ? '&nbsp;' : esc(offsetDaysText(n))) + '</div>',
             { required: true, error: e.offsetDays, forId: 'f_offsetDays', name: 'СрокДнейОтВыхода' }) +
+          tfField('Доп. проверяющий', inputText('extraReviewer', 'ПолеДопПроверяющий', ro() + (dlgRO() ? '' : ' placeholder="ФИО, если сотрудника нет в системе"') +
+            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }) +   // FT_25
           '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
             a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
         '</div>' +
@@ -4488,7 +4533,7 @@
       var tp = tplOf(ctx);
       var x = ctx.index == null ? {} : tp.tasks[ctx.index];
       x.name = v.name.trim(); x.block = v.block; x.type = v.type; x.required = !!v.required; x.offsetDays = Number(v.offsetDays);
-      x.reviewerId = v.reviewerId || null; x.description = (v.description || '').trim(); x.criteria = (v.criteria || '').trim(); x.links = linksFromRows(v.links);
+      x.reviewerId = v.reviewerId || null; x.extraReviewer = (v.extraReviewer || '').trim(); x.description = (v.description || '').trim(); x.criteria = (v.criteria || '').trim(); x.links = linksFromRows(v.links);
       if (ctx.index == null) tp.tasks.push(x);
       toast(ctx.index == null ? 'Задача добавлена в шаблон' : 'Задача шаблона сохранена');
     }
@@ -5320,10 +5365,16 @@
     tplOpenTask: function (btn) { openDialog('tplTask', null, { tplId: btn.getAttribute('data-id'), index: Number(btn.getAttribute('data-index')) }); },
     tplMove: function (btn) {
       var tp = byId(D.templates, btn.getAttribute('data-id'));
-      var i = tplSelected(tp)[0], j = i + Number(btn.getAttribute('data-dir'));
-      if (i == null || j < 0 || j >= tp.tasks.length) return;
+      var i = tplSelected(tp)[0], j = tplNeighbor(tp, i, Number(btn.getAttribute('data-dir')));   // FT_25: внутри блока
+      if (i == null || j < 0) return;
       var x = tp.tasks[i]; tp.tasks[i] = tp.tasks[j]; tp.tasks[j] = x;
       state.tplSel[tp.id] = {}; state.tplSel[tp.id][j] = true;
+      renderCenter();
+    },
+    tplToggleBlock: function (btn) {   // FT_25
+      var id = btn.getAttribute('data-id'), b = btn.getAttribute('data-block');
+      var m = state.tplCollapsed[id] = state.tplCollapsed[id] || {};
+      if (m[b]) delete m[b]; else m[b] = true;
       renderCenter();
     },
     tplDelete: function (btn) { openDialog('tplDeleteTasks', null, { tplId: btn.getAttribute('data-id') }); },
