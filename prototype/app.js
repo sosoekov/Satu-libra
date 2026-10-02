@@ -1256,7 +1256,7 @@
         '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияОжидаютРешенияПояснение') + '>— HR завершил подбор, нужно начать стажировку или отменить</span></div>') +
       '<div class="row wrap pending-cards"' + a1c('ТаблицаФормы', 'ТаблицаОжидаютРешения', 'check') + '>' + list.map(pendingCard).join('') + '</div></div>';
   }
-  // ASSUMPTION (ТЗ 11.2): в карточке — ФИО, должность, подразделение, заявка, дата завершения подбора и необязательная ожидаемая дата выхода
+  // ASSUMPTION (ТЗ 11.2): в карточке — ФИО, должность, подразделение, заявка, дата завершения подбора (FT_24: ожидаемая дата выхода не показывается)
   function pendingCard(t) {
     var r = requisitionOf(t);
     var lock = decideLockText(t);
@@ -1267,8 +1267,7 @@
       '<div class="muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДолжность') + '>' + esc(t.position) + '</div>' +
       '<div class="ellipsis" title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаОжидаютРешенияПодразделение') + '>' + esc(d.name) + '</div>' +
       (r ? '<div>' + link(vrTitle(r), { action: 'pendingOpenRequest', data: { id: t.id }, cls: 'text-s', title: 'Открыть заявку на подбор', name: 'ТаблицаОжидаютРешенияЗаявка' }) + '</div>' : '') +
-      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДаты') + '>Подбор завершен ' + fmtDate(t.foundAt.slice(0, 10)) +
-        (t.expectedStartDate ? ' · ожидаемая дата выхода ' + fmtDate(t.expectedStartDate) : '') + '</div>' +
+      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДаты') + '>Подбор завершен ' + fmtDate(t.foundAt.slice(0, 10)) + '</div>' +   // FT_24: без ожидаемой даты выхода
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОжидаютРешенияДействия', 'high') + '>' +
         button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Подтвердить выход стажера: даты стажировки, руководитель и наставник', name: 'ТаблицаОжидаютРешенияСтарт' }) +
         button('Отменить', { action: 'pendingCancel', data: { id: t.id }, disabled: !!lock, title: lock || 'Человек не выйдет на стажировку — указать причину', name: 'ТаблицаОжидаютРешенияОтменить' }) +
@@ -4905,14 +4904,20 @@
       // Ошибки дат видны сразу, остальные — после «Подтвердить»
       var se = e.startDate || (v.startDate ? startDateError(v.startDate) : '');
       var ee = e.endDate || endDateError(v.startDate, v.endDate);
-      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияСтартКандидат') + '>' + esc(t.position) + ', ' + esc(dept(t.departmentId).name) +
-          (r ? '. ' + esc(vrTitle(r)) : '') + (t.expectedStartDate ? '. Ожидаемая дата выхода — ' + fmtDate(t.expectedStartDate) : '') + '.</p>' +
+      // FT_24: под заголовком — должность, подразделение и основание (заявка на подбор); предупреждение о задачах подготовки
+      return '<div class="col gap-0 start-head"' + a1c('ГруппаВертикальная', 'ГруппаСтартКандидат') + '>' +
+          '<div' + a1c('Надпись', 'ДекорацияСтартДолжность') + '>' + esc(t.position) + '</div>' +
+          '<div' + a1c('Надпись', 'ДекорацияСтартПодразделение') + '>' + esc(dept(t.departmentId).name) + '</div>' +
+          (r ? '<div class="start-basis"' + a1c('ГруппаГоризонтальная', 'ГруппаСтартОснование') + '><b' + a1c('Надпись', 'ДекорацияСтартОснование') + '>Основание:</b> ' +
+            link(vrTitle(r), { action: 'startOpenRequest', data: { id: t.id }, title: 'Открыть заявку на подбор персонала', name: 'ГиперссылкаСтартЗаявка' }) + '.</div>' : '') +
+        '</div>' +
+        '<div class="row gap-3 start-warning"' + a1c('ГруппаГоризонтальная', 'ГруппаСтартПредупреждение') + '>' +
+          '<span class="start-warning-icon"' + a1c('Картинка', 'КартинкаСтартПредупреждение') + '>!</span>' +
+          '<b' + a1c('Надпись', 'ДекорацияСтартПредупреждение') + '>После подтверждения будут созданы задачи подготовки к выходу стажера</b></div>' +
         field('Руководитель стажировки', selectOptions('headId', 'ПолеРуководительСтажировкиСтарт', opts('Не выбран'), ' data-rerender="1"'),
           { error: e.headId, forId: 'f_headId', name: 'РуководительСтажировкиСтарт' }) +
         field('Наставник', selectOptions('mentorId', 'ПолеНаставникСтарт', opts('Не выбран'), ' data-rerender="1"'),
           { error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
-        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияСтартСписокСотрудников') + '>В списках — сотрудники подразделения стажера и руководители вышестоящих подразделений. ' +
-          'Можно не заполнять: назначить позже может руководитель подразделения стажера или вышестоящий руководитель</p>' +
         field('Дата старта', inputDate('startDate', 'ПолеДатаСтарта', D.TODAY), { required: true, error: se, forId: 'f_startDate', name: 'ДатаСтарта' }) +
         field('Длительность', toggle('ТумблерДлительностьСтажировки', 'pendingDuration', DURATION_MODES.map(function (m) {
           return { value: m.value, text: m.text, name: m.name };
@@ -5457,6 +5462,7 @@
     demoHrFound: function () { demoHrFound(); },
     // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
     pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
+    startOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r, true); },   // FT_24: поверх формы подтверждения
     pendingStart: function (btn) {
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || !isPendingDecision(t)) return;
