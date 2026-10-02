@@ -26,6 +26,10 @@
   // ответственные за «Отдел корпоративных проектов» и «Отдел отчетности, НСИ и бизнес-процессов» — по списку сотрудников заказчика
   var departments = [
     { id: 'd-cas',    name: 'ЦАС',                                               parentId: null,     responsibleId: 'u-strygin' },
+    // FT_23: службы вне ЦАС — исполнители пунктов чек-листа подготовки; в дереве — только у HR-менеджеров
+    { id: 'd-fes',    name: 'ФЭС. Финансово-экономическая служба',               parentId: null },
+    { id: 'd-sup',    name: 'СУП. Служба персонала',                             parentId: null },
+    { id: 'd-ksh',    name: 'КШ. Корпоративная школа',                           parentId: null },
     { id: 'd-admin',  name: 'Администрация',                                     parentId: 'd-cas' },
     { id: 'd-corp',   name: 'Отдел корпоративного сопровождения',                parentId: 'd-cas',  responsibleId: 'u-kladova' },
     { id: 'd-doc',    name: 'Направление по автоматизации Документооборота',     parentId: 'd-corp', responsibleId: 'u-podyniglazov' },
@@ -87,7 +91,10 @@
     { id: 'u-kondurova',    fullName: 'Кондурова Алла Ивановна',         role: 'HR-менеджер', departmentId: null },
     { id: 'u-andreeva',     fullName: 'Андреева Елизавета Ивановна',     role: 'HR-менеджер', departmentId: null },
     { id: 'u-samsonova',    fullName: 'Самсонова Дарья Николаевна',      role: 'HR-менеджер', departmentId: null },
-    { id: 'u-baeva',        fullName: 'Баева Диана Владиславовна',       role: 'КШ', departmentId: null },
+    { id: 'u-baeva',        fullName: 'Баева Диана Владиславовна',       role: 'Заместитель директора по персоналу по развитию образовательных программ', departmentId: 'd-ksh' },
+    // FT_23: исполнители пунктов чек-листа подготовки (по данным заказчика)
+    { id: 'u-golovko',      fullName: 'Головко Лариса Васильевна',       role: 'Финансовый директор', departmentId: 'd-fes' },
+    { id: 'u-ivanova-ia',   fullName: 'Иванова Ирина Александровна',     role: 'Заместитель директора по персоналу по кадровым вопросам', departmentId: 'd-sup' },
     // FT_17: сотрудники по списку заказчика (должность — в role)
     { id: 'u-veselov-ae', fullName: 'Веселов Андрей Евгеньевич', role: 'Системный аналитик', departmentId: 'd-doc-mid' },
     { id: 'u-veselov-sv', fullName: 'Веселов Сергей Владимирович', role: 'Руководитель проектов', departmentId: 'd-fpm' },
@@ -470,9 +477,19 @@
     { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program',
       description: 'Отмечается автоматически, когда для стажера создана адаптационная программа.', links: [] },
     { name: 'Подготовить ПО и доступ к ресурсам, порталам',     responsibleRole: 'head',   offsetDays: -1, linkedDocType: null,
-      description: 'Учетные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] }
+      description: 'Учетные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] },
+    // FT_23: пункты служб вне ЦАС — исполнитель закреплен за ролью (ROLE_USERS)
+    { name: 'Подтвердить или изменить юрлицо и должность нового сотрудника', responsibleRole: 'fin', offsetDays: -7, linkedDocType: null,
+      description: 'Проверить юрлицо и должность, указанные в заявке на подбор; при необходимости изменить.', links: [] },
+    { name: 'Внести данные стажера в свои системы, подготовить пакет документов для подписания', responsibleRole: 'personnel', offsetDays: -5, linkedDocType: null,
+      description: 'Кадровые данные стажера и пакет документов к дню выхода.', links: [] },
+    { name: 'Открыть доступ стажеру к охране труда, локальным нормативным актам, положению по ДМС', responsibleRole: 'ksh', offsetDays: -1, linkedDocType: null,
+      description: 'Доступ к курсам и документам на портале.', links: ['lnk-6', 'lnk-4'] }
   ];
-  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажер', ksh: 'КШ' };
+  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажер', ksh: 'КШ',
+    fin: 'ФЭС (финансовый директор)', personnel: 'СУП (кадровые вопросы)' };
+  // FT_23: роли, закрепленные за сотрудником (не зависят от стажера)
+  var ROLE_USERS = { ksh: 'u-baeva', fin: 'u-golovko', personnel: 'u-ivanova-ia' };
 
   /* ---------- ТЧ ЧекЛистЗакрытия (фаза 10, 5.2) ----------
    * closureChecklist: id, traineeId, name, responsibleRole, responsibleId, offsetDays (от endDate: отрицательное — до окончания,
@@ -512,12 +529,14 @@
 
   var checklist = [];
   var clSeq = 1;
+  var svcSeq = 1;
   var docSeq = 90;
   trainees.forEach(function (tr) {
     checklistTemplate.forEach(function (c, i) {
-      var responsibleId = c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId : tr.mentorId;
+      var responsibleId = ROLE_USERS[c.responsibleRole] || (c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId : tr.mentorId);
       var item = {
-        id: 'cl-' + (clSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
+        // FT_23: у пунктов служб — свой номер, номера прежних пунктов не меняются
+        id: i < 7 ? 'cl-' + (clSeq++) : 'cl-s' + (svcSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: responsibleId, offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
         linkedDocType: c.linkedDocType, linkedDocNumber: null,
         status: 'not_started', description: c.description || '', links: libLinks(c.links), reviewerId: null, observerIds: [], log: []
@@ -615,6 +634,8 @@
   }
   templates.forEach(function (tp) { tp.tasks.forEach(withExtras); });
   tasks.forEach(withExtras);
+  // FT_23: у каждой задачи есть исполнитель и проверяющий; исполнитель задачи АП — стажер (в карточке задачи АП поле скрыто)
+  tasks.forEach(function (x) { var pr = programs.filter(function (p) { return p.id === x.programId; })[0]; x.executorId = pr ? pr.traineeId : null; });
 
   /* ---------- FT_14: история выполнения задач АП ----------
    * task.log = [{ at, by, ev, comment, text }] — ev: 'work' (взята в работу), 'done' (выполнена), 'review' (выполнена, отправлена на проверку),
@@ -850,6 +871,7 @@
     defaultRoute: defaultRoute,
     topDepartment: topDepartment,
     ROLE_TITLES: ROLE_TITLES,
+    ROLE_USERS: ROLE_USERS,
     departments: departments,
     users: users,
     trainees: trainees,
