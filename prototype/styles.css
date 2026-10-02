@@ -941,3 +941,13 @@ table.grid.rc-table td { vertical-align: middle; }
 
 /* ---------- FT_21: «Стажировка оформлена» ---------- */
 .dlg-text.started-gap { margin-top: var(--sp-3); }
+
+/* ---------- FT_21: изменение ширины колонок ---------- */
+
+table.grid th.th-resizable { position: sticky; }
+.col-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; z-index: 2; }
+.col-resize::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: transparent; }
+table.grid th:hover > .col-resize::after, body.col-resizing .col-resize:hover::after { background: var(--c-border); }
+.col-resize:hover::after { background: var(--c-primary) !important; }
+body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none; }
+table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }

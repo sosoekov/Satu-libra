@@ -381,6 +381,7 @@
    * ===================================================================== */
 
   var state = {
+    colWidths: {},               // FT_21: ширина колонок таблиц, измененная пользователем: {таблица: {колонка: px}} (в 1С — настройки формы)
     topTab: 'adaptation',        // 'tasks' | 'recruiting' | 'adaptation'
     selectedTraineeId: null,     // выбранный стажер
     traineeTab: null,            // 'program' | 'prepare'
@@ -963,7 +964,72 @@
       if (cur) cur.focus();
     }
     Array.prototype.forEach.call(centerEl().querySelectorAll('[data-indeterminate]'), function (x) { x.indeterminate = true; });
+    applyColWidths(centerEl());
     placeFloatingMenu();
+  }
+
+  /* ---------- FT_21: ширина колонок таблицы задач АП и чек-листов ----------
+   * Граница заголовка колонки перетаскивается мышью; двойной клик по границе — исходная ширина всех колонок таблицы.
+   * Ширина помнится до перезагрузки страницы, общая для всех стажеров. В 1С пользователь меняет ширину колонок сам — это
+   * штатное поведение таблицы формы, ширина сохраняется в настройках формы (см. 1c-mapping.md)
+   */
+  var COL_MIN = 36;
+  var COL_RESIZE_TITLE = 'Перетащите, чтобы изменить ширину колонки. Двойной клик — исходная ширина';
+  function applyColWidths(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('table[data-resize]'), function (tb) {
+      var w = state.colWidths[tb.getAttribute('data-resize')];
+      var cols = tb.querySelectorAll('col[data-col]');
+      if (w) layoutCols(tb, Array.prototype.slice.call(cols), w);
+      var ths = tb.querySelectorAll('thead th');
+      Array.prototype.forEach.call(ths, function (th, i) {
+        if (i === ths.length - 1) return;   // у последней колонки границы нет
+        th.classList.add('th-resizable');
+        th.insertAdjacentHTML('beforeend', '<span class="col-resize" data-col-index="' + i + '" title="' + COL_RESIZE_TITLE + '" aria-hidden="true"></span>');
+      });
+    });
+  }
+  var colDrag = null;
+  document.addEventListener('mousedown', function (e) {
+    var h = e.target.closest && e.target.closest('.col-resize');
+    if (!h || e.button !== 0) return;
+    e.preventDefault();
+    var tb = h.closest('table');
+    var cols = Array.prototype.slice.call(tb.querySelectorAll('col[data-col]'));
+    var ths = tb.querySelectorAll('thead th');
+    var widths = {};
+    // Колонки фиксируются в текущей ширине: меняется только перетаскиваемая, таблица становится шире или уже (прокрутка — в рамке таблицы)
+    cols.forEach(function (c, i) { widths[c.getAttribute('data-col')] = Math.round(ths[i].getBoundingClientRect().width); });
+    var i = Number(h.getAttribute('data-col-index'));
+    colDrag = { tb: tb, cols: cols, widths: widths, id: cols[i].getAttribute('data-col'), x: e.clientX, start: widths[cols[i].getAttribute('data-col')] };
+    document.body.classList.add('col-resizing');
+    applyDrag(e.clientX);
+  });
+  // Ширина колонок по сохраненным значениям; если таблица уже рамки — остаток отдается колонке «Задача» / «Пункт» (name)
+  function layoutCols(tb, cols, widths) {
+    var sum = 0;
+    cols.forEach(function (c) { sum += widths[c.getAttribute('data-col')] || COL_MIN; });
+    var extra = Math.max(0, tb.parentNode.clientWidth - sum);
+    cols.forEach(function (c) {
+      var id = c.getAttribute('data-col');
+      c.style.width = ((widths[id] || COL_MIN) + (id === 'name' ? extra : 0)) + 'px';
+    });
+    tb.style.width = (sum + extra) + 'px';
+  }
+  function applyDrag(x) {
+    var d = colDrag;
+    d.widths[d.id] = Math.max(COL_MIN, d.start + x - d.x);
+    layoutCols(d.tb, d.cols, d.widths);
+  }
+  document.addEventListener('mousemove', function (e) { if (colDrag) applyDrag(e.clientX); });
+  document.addEventListener('mouseup', function () {
+    if (!colDrag) return;
+    state.colWidths[colDrag.tb.getAttribute('data-resize')] = colDrag.widths;
+    colDrag = null;
+    document.body.classList.remove('col-resizing');
+  });
+  function resetColWidths(h) {
+    delete state.colWidths[h.closest('table').getAttribute('data-resize')];
+    renderCenter();
   }
 
   // Текущая строка сводной таблицы: подсветка и фокус из state.summaryCurrent.
@@ -1643,8 +1709,9 @@
         a1c('ТаблицаФормы', 'ТаблицаЗадачАПСортировка' + n1c(key)) + '>' + text + (on ? (state.taskSort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>';
     }
     return '<div class="table-box">' +
-      '<table class="grid task-table"' + a1c('ТаблицаФормы', 'ТаблицаЗадачАП') + '>' +
-      '<colgroup>' + (selectable ? '<col class="w-check">' : '') + '<col><col class="w-status"><col class="w-deadline"><col class="w-person"><col class="w-observers"><col class="w-result"><col class="w-menu"></colgroup>' +
+      '<table class="grid task-table" data-resize="tasks"' + a1c('ТаблицаФормы', 'ТаблицаЗадачАП') + '>' +
+      '<colgroup>' + (selectable ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-status" data-col="status"><col class="w-deadline" data-col="deadline">' +
+        '<col class="w-person" data-col="reviewer"><col class="w-observers" data-col="observers"><col class="w-result" data-col="result"><col class="w-menu" data-col="menu"></colgroup>' +
       '<thead><tr>' +
         (selectable ? '<th><input type="checkbox" data-select-all="1" title="Выбрать все видимые задачи"' +
           (ids.length && selCount === ids.length ? ' checked' : '') + (ids.length ? '' : ' disabled') +
@@ -1871,8 +1938,8 @@
       body = list.map(function (c) { return checklistRow(t, c); }).join('');
     }
 
-    var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-fact"><col class="w-action"></colgroup>' +
+    var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cl"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
+      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
       '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
 
@@ -1950,8 +2017,8 @@
     } else {
       body = list.map(function (c) { return closureRow(t, c); }).join('');
     }
-    var table = '<div class="table-box"><table class="grid checklist-table"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
-      '<colgroup><col class="w-check"><col><col class="w-resp"><col class="w-date"><col class="w-fact"><col class="w-action"></colgroup>' +
+    var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cc"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
+      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
       '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаЗакрытие') + '>' + lockRow + bar + table + '</div>';
@@ -5393,6 +5460,8 @@
   });
   // Двойной клик по строке задачи открывает карточку задачи
   document.addEventListener('dblclick', function (e) {
+    var cr = e.target.closest('.col-resize');   // FT_21: исходная ширина колонок
+    if (cr) { resetColWidths(cr); return; }
     var trow = e.target.closest('tr[data-tpl-task]');
     if (trow && state.dialog && !e.target.closest('input, button')) {
       openDialog('task', state.dialog.traineeId, { templateId: state.dialog.values.template, index: Number(trow.getAttribute('data-tpl-task')) }, { stack: true });
