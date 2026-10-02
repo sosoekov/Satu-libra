@@ -962,3 +962,17 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .tpl-head .tf-field.tf-wide { flex: 2 1 0; }
 .apv-head { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border); border-radius: var(--radius); }
 .apv-part { min-width: 160px; }
+
+/* ---------- FT_24: выбор шаблона и стажера — флажки и кнопки «Открыть» ---------- */
+.dlg-table table.grid td { vertical-align: middle; }
+.dlg-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
+
+/* ---------- FT_24: форма «Подтверждение выхода» ---------- */
+.start-head { margin-top: calc(-1 * var(--sp-2)); line-height: 18px; }
+.start-basis { font-style: italic; }
+.start-basis .link { font-style: italic; }
+.start-warning { align-items: center; padding: var(--sp-2) 0; }
+.start-warning-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  width: 28px; height: 28px; border-radius: 50%; background: var(--c-tab-active); color: var(--c-bg); font-weight: var(--fw-bold); font-size: var(--fs-l);
+}

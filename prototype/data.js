@@ -13,7 +13,11 @@
   }
 
   /* ---------- Константы ---------- */
-  var TODAY = '2026-07-25';           // «сегодня» для всех расчетов
+  // FT_24: тестовые данные построены от «сегодня» = 25.07.26 (BASE_TODAY). Рабочее «сегодня» — системная дата; при загрузке все даты
+  // данных сдвигаются на разницу (shiftDates), поэтому картина данных не меняется. НЕ_ПЕРЕНОСИТЬ: параметр ?today=ГГГГ-ММ-ДД
+  // в адресе страницы фиксирует «сегодня» (для тестов прототипа). В 1С — ТекущаяДатаСеанса()
+  var BASE_TODAY = '2026-07-25';
+  var TODAY = BASE_TODAY;             // при построении данных — базовая дата
   var CURRENT_USER_ID = 'u-strygin';  // текущий пользователь — руководитель ЦАС (FT_8); демо-переключатель меняет его на HR-менеджера
   var LAG_THRESHOLD = 10;             // отставание задач от времени, п.п.
   var CLOSE_AVAILABLE_DAYS = 14;      // за сколько дней до окончания доступно «Начать закрытие»
@@ -851,6 +855,36 @@
   var userNotes = [];
   // FT_12: настройки таблиц вкладки «Задачи и уведомления» по пользователю — сортировка, видимость и заголовки колонок (заполняется в app.js)
   var formSettings = {};
+
+  /* ---------- FT_24: сдвиг дат тестовых данных к системной дате ---------- */
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function systemToday() {
+    var m = typeof location !== 'undefined' && /[?&]today=(\d{4}-\d{2}-\d{2})/.exec(location.search || '');
+    if (m) return m[1];
+    var d = new Date();
+    return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+  }
+  function daysBetween(a, b) { return Math.round((Date.UTC(+b.slice(0, 4), +b.slice(5, 7) - 1, +b.slice(8, 10)) - Date.UTC(+a.slice(0, 4), +a.slice(5, 7) - 1, +a.slice(8, 10))) / 86400000); }
+  var RUN_TODAY = systemToday();
+  var SHIFT = daysBetween(BASE_TODAY, RUN_TODAY);
+  // Строка 'ГГГГ-ММ-ДД[TЧЧ:ММ]' — сдвиг даты; в тексте — даты вида ДД.ММ.ГГ (номера документов, история)
+  function shiftString(v) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return addDays(v.slice(0, 10), SHIFT) + v.slice(10);
+    return v.replace(/\b(\d{2})\.(\d{2})\.(\d{2})\b/g, function (all, dd, mm, yy) {
+      var iso = addDays('20' + yy + '-' + mm + '-' + dd, SHIFT);
+      return iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' + iso.slice(2, 4);
+    });
+  }
+  function shiftDates(x) {
+    if (Array.isArray(x)) { x.forEach(function (v, i) { if (typeof v === 'string') x[i] = shiftString(v); else if (v && typeof v === 'object') shiftDates(v); }); return; }
+    Object.keys(x).forEach(function (k) {
+      var v = x[k];
+      if (typeof v === 'string') x[k] = shiftString(v);
+      else if (v && typeof v === 'object') shiftDates(v);
+    });
+  }
+  if (SHIFT) [recruitTasks, recruitNotes, vacancyRequests, userNotes, trainees, programs, tasks, checklist, closureChecklist].forEach(shiftDates);
+  TODAY = RUN_TODAY;
 
   window.DATA = {
     recruitTasks: recruitTasks,
