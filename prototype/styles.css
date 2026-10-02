@@ -951,3 +951,14 @@ table.grid th:hover > .col-resize::after, body.col-resizing .col-resize:hover::a
 .col-resize:hover::after { background: var(--c-primary) !important; }
 body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none; }
 table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
+
+/* ---------- FT_22: вкладки шаблона АП и просмотра АП ---------- */
+.tpl-table .w-block, .apv-table .w-block { width: 130px; }
+.tpl-table .w-type, .apv-table .w-type { width: 100px; }
+.tpl-table .w-offset, .apv-table .w-offset { width: 190px; }
+.tpl-table .w-person, .apv-table .w-person { width: 22%; }
+.tpl-table .w-req, .apv-table .w-req { width: 110px; }
+.tpl-head .tf-field { flex: 1 1 0; }
+.tpl-head .tf-field.tf-wide { flex: 2 1 0; }
+.apv-head { padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.apv-part { min-width: 160px; }
