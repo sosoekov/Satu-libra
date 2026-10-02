@@ -230,7 +230,7 @@ b, strong { font-weight: var(--fw-bold); }
 .toggle button.on { background: var(--c-bg-selected); color: var(--c-primary); }
 
 /* ================= Таблицы ================= */
-.table-box { overflow: auto; border: 1px solid var(--c-border); border-radius: var(--radius); }  /* фаза 11, 2.3: таблица в скруглённой рамке, содержимое обрезается по скруглению */
+.table-box { overflow: auto; border: 1px solid var(--c-border); border-radius: var(--radius); }  /* фаза 11, 2.3: таблица в скругленной рамке, содержимое обрезается по скруглению */
 table.grid { width: 100%; border-collapse: collapse; }
 table.grid th {
   text-align: left; font-weight: normal; color: var(--c-text-secondary); font-size: var(--fs-s);
@@ -246,7 +246,7 @@ table.grid tbody tr.selected td { background: var(--c-bg-selected); }
 
 /* ================= Карточки/блоки ================= */
 .panel { border-radius: var(--radius); background: var(--c-bg); padding: var(--sp-4); }
-.panel.tcard { border: 1px solid var(--c-border); }  /* фаза 9, 4.2: рамка — только у карточки стажёра и у диалогов */
+.panel.tcard { border: 1px solid var(--c-border); }  /* фаза 9, 4.2: рамка — только у карточки стажера и у диалогов */
 
 /* ================= Подменю ================= */
 .menu-host { display: inline-flex; flex-direction: column; }
@@ -334,7 +334,7 @@ th.num, td.num { text-align: right; }
 }
 .th-sort:hover, .th-sort.on { color: var(--c-text); }
 
-/* ================= Карточка стажёра ================= */
+/* ================= Карточка стажера ================= */
 .trainee-card { max-width: 1280px; }
 .header { gap: var(--sp-4) var(--sp-5); flex-wrap: wrap; }
 .header-col1 { flex: 1 1 300px; min-width: 280px; }
@@ -361,7 +361,7 @@ th.num, td.num { text-align: right; }
 @container (max-width: 840px) {
   .step:not(.step-current) .step-text { display: none; }
 }
-/* Фаза 9, 3.3: пройденный — зелёная галочка и обычный текст; текущий — залитый кружок, текст primary полужирный;
+/* Фаза 9, 3.3: пройденный — зеленая галочка и обычный текст; текущий — залитый кружок, текст primary полужирный;
    будущий — контур и серый текст; линии одного цвета */
 .step-done { color: var(--c-text); }
 .step-done .step-mark { border-color: var(--c-success); color: var(--c-success); }
@@ -387,8 +387,8 @@ th.num, td.num { text-align: right; }
 .menu-pop { position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 20; }
 .menu .danger-text { color: var(--c-danger); }
 
-/* Вкладки стажёра */
-/* Фаза 11, 2.2: 14px; неактивная — обычное начертание, серым; активная — полужирная, --c-text и подчёркивание 2px */
+/* Вкладки стажера */
+/* Фаза 11, 2.2: 14px; неактивная — обычное начертание, серым; активная — полужирная, --c-text и подчеркивание 2px */
 .trainee-card .tabs .tab { font-size: 14px; font-weight: normal; color: var(--c-text-secondary); border-bottom-width: 2px; }
 .trainee-card .tabs .tab.active { color: var(--c-text); font-weight: var(--fw-bold); }
 .trainee-card .tabs .tab:not(.active):hover { color: var(--c-primary); }
@@ -574,7 +574,7 @@ body.markup-1c table[data-1c]::before {
 .obs-text::placeholder { color: var(--c-text-secondary); }
 .picker-list { max-height: 280px; }
 
-/* ================= Фаза 9: карточка стажёра (3.2) ================= */
+/* ================= Фаза 9: карточка стажера (3.2) ================= */
 .tcard { display: flex; flex-direction: row; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); flex-wrap: nowrap; }
 .tcard-who { flex: 0 0 auto; align-items: center; }
 .tcard-name { font-size: var(--fs-xl); line-height: 26px; white-space: nowrap; }
@@ -611,7 +611,7 @@ body.markup-1c table[data-1c]::before {
 .tcard-term { gap: var(--sp-2); flex-wrap: nowrap; white-space: nowrap; }
 
 /* ================= Фаза 11.4: блок «Аналитика по адаптационной программе» ================= */
-/* Рамка и заливка — по самому критичному замечанию (в 1С цвет фона и рамки группы задаётся программно) */
+/* Рамка и заливка — по самому критичному замечанию (в 1С цвет фона и рамки группы задается программно) */
 .analytics { gap: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-bg); }
 .analytics.sev-danger  { background: var(--c-danger-bg);  border-color: var(--c-danger-border); }
 .analytics.sev-warning { background: var(--c-warning-bg); border-color: var(--c-warning-border); }
@@ -634,7 +634,7 @@ button.analytics-head:hover .analytics-title { text-decoration: underline; }
 .analytics-row-icon { display: inline-flex; flex: 0 0 16px; margin-left: -24px; }
 .analytics-row-text { color: var(--c-text); min-width: 0; }
 
-/* ================= Фаза 10.3: завершённая подготовка к выходу ================= */
+/* ================= Фаза 10.3: завершенная подготовка к выходу ================= */
 .trainee-card .tabs .tab.tab-done, .trainee-card .tabs .tab.tab-done.active { color: var(--c-text-secondary); }
 .lock-note .note-icon.muted { color: var(--c-text-secondary); }
 
@@ -652,7 +652,7 @@ button.analytics-head:hover .analytics-title { text-decoration: underline; }
 /* Иконки: фильтры левой панели — 18px */
 .filter-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
 
-/* ================= Фаза 11.3: карточка стажёра ================= */
+/* ================= Фаза 11.3: карточка стажера ================= */
 .panel.tcard { padding: var(--sp-4); gap: 0; align-items: stretch; flex-wrap: wrap; row-gap: var(--sp-3); }
 .tcard-part { padding: 0 var(--sp-4); border-left: 1px solid var(--c-border); min-width: 0; }
 .tcard-part:first-child { padding-left: 0; border-left: none; }
@@ -693,7 +693,7 @@ table.grid.route-table td { vertical-align: middle; }
 .tcard-dept .link { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcard .tcard-who { flex: 1 1 300px; min-width: min-content; }
 .tcard-person { max-width: 240px; }
-/* FT_9: подразделение в шапке у стажёра — текстом; пустая вкладка сотрудника КШ */
+/* FT_9: подразделение в шапке у стажера — текстом; пустая вкладка сотрудника КШ */
 .tcard-dept-text { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ksh-empty { flex: 1 1 auto; justify-content: center; }
 
@@ -795,7 +795,7 @@ table.grid.imp-table td { vertical-align: middle; }
 .tv-card-done { border-top: 1px solid var(--c-border); padding-top: var(--sp-3); }
 .modal-foot .menu-pop { top: auto; bottom: calc(100% + var(--sp-1)); }
 
-/* ================= FT_12: меню «Ещё» окна (платформенное, НЕ_ПЕРЕНОСИТЬ), настройка колонок, сортировка ================= */
+/* ================= FT_12: меню «Еще» окна (платформенное, НЕ_ПЕРЕНОСИТЬ), настройка колонок, сортировка ================= */
 .form-menu-host { position: relative; }
 .platform-menu {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 70;
@@ -840,7 +840,7 @@ table.grid.exec-table td { vertical-align: middle; }
 /* ================= FT_15: вкладка «Подбор персонала» ================= */
 .rc-page { gap: var(--sp-5); padding-bottom: var(--sp-4); }
 .rc-left { flex: 0 0 340px; width: 340px; gap: var(--sp-3); overflow: auto; min-height: 0; }
-/* Карточки счётчиков — цветные градиенты по макету */
+/* Карточки счетчиков — цветные градиенты по макету */
 .rc-card { border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); flex: 0 0 auto; }
 .rc-card-vacancy { background: linear-gradient(135deg, #7B61C9 0%, #C06BC0 55%, #F08BB0 100%); color: #FFFFFF; }
 .rc-card-plan { background: linear-gradient(135deg, #F6D86B 0%, #CFE07A 55%, #9ED28C 100%); color: var(--c-text); }
@@ -938,3 +938,16 @@ table.grid.rc-table td { vertical-align: middle; }
 .combo-list .combo-item:focus-visible { background: var(--c-bg-selected); outline: none; }
 .combo-list .combo-create { flex-direction: row; padding-left: var(--sp-3); color: var(--c-primary); }
 .combo-list .combo-empty { padding: 6px var(--sp-3); }
+
+/* ---------- FT_21: «Стажировка оформлена» ---------- */
+.dlg-text.started-gap { margin-top: var(--sp-3); }
+
+/* ---------- FT_21: изменение ширины колонок ---------- */
+
+table.grid th.th-resizable { position: sticky; }
+.col-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; z-index: 2; }
+.col-resize::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: transparent; }
+table.grid th:hover > .col-resize::after, body.col-resizing .col-resize:hover::after { background: var(--c-border); }
+.col-resize:hover::after { background: var(--c-primary) !important; }
+body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none; }
+table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
