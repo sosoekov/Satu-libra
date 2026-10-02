@@ -1973,7 +1973,7 @@
 
     var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cl"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
       '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
 
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + lockRow + bar + table + '</div>';
@@ -2052,7 +2052,7 @@
     }
     var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cc"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
       '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Ответственный</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаЗакрытие') + '>' + lockRow + bar + table + '</div>';
   }
@@ -2060,7 +2060,7 @@
   // Ответственный (фаза 11, 7.2): только ФИО; если выполнил другой человек — второй строкой серым «Выполнил: ФИО»
   function whoCell(doneBy, responsibleId, done, prefix, byName) {
     var who = responsibleId ? byName(responsibleId) : 'Не назначен';   // FT_21: руководитель или наставник стажировки еще не назначен
-    return '<td><div class="ellipsis' + (responsibleId ? '' : ' muted') + '" title="' + esc(who) + '"' + a1c('Надпись', prefix + 'Ответственный') + '>' + esc(who) + '</div>' +
+    return '<td><div class="ellipsis' + (responsibleId ? '' : ' muted') + '" title="' + esc(who) + '"' + a1c('Надпись', prefix + 'Исполнитель') + '>' + esc(who) + '</div>' +
       (done && doneBy && doneBy !== responsibleId ? '<div class="muted text-s ellipsis" title="' + esc('Выполнил: ' + byName(doneBy)) + '"' + a1c('Надпись', prefix + 'Выполнил') + '>Выполнил: ' + esc(byName(doneBy)) + '</div>' : '') + '</td>';
   }
   // Срок (фаза 11, 7.2): дата; второй строкой — смещение, у невыполненного просроченного — «просрочено на N дн.» (дата и текст danger)
@@ -4236,11 +4236,12 @@
         var on = dlgValue(field_) === tp.id;
         var corpN = tp.tasks.filter(function (x) { return x.block === 'corp'; }).length;
         return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="dlgChoose" data-field="' + field_ + '" data-value="' + tp.id + '">' +
-          '<td><input type="radio" name="' + field_ + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(tp.name) + '"' + a1c('Флажок', oneC + 'Выбран') + '></td>' +
+          // FT_24: флажок вместо переключателя (в 1С в списке переключателей нет), выбрать можно только одну строку
+          '<td><input type="checkbox" data-action="dlgChoose" data-field="' + field_ + '" data-value="' + tp.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(tp.name) + '"' + a1c('Флажок', oneC + 'Выбран') + '></td>' +
           '<td>' + esc(tp.name) + (rec && rec.id === tp.id ? ' ' + badge('success', 'Подходит для должности', 'ДекорацияРекомендуемыйШаблон') : '') + '</td>' +
           '<td>' + esc(tp.position || 'Для всех должностей') + '</td>' +
           '<td class="num">' + corpN + ' / ' + (tp.tasks.length - corpN) + '</td>' +
-          '<td class="nowrap">' + link('Открыть', { action: 'openTemplateDoc', data: { id: tp.id }, title: 'Открыть шаблон в отдельной вкладке', name: oneC + 'Открыть' }) + '</td></tr>';   // FT_22
+          '<td class="nowrap">' + button('Открыть', { action: 'openTemplateDoc', data: { id: tp.id }, title: 'Открыть шаблон в отдельной вкладке', name: oneC + 'Открыть' }) + '</td></tr>';   // FT_22; FT_24 — кнопка
       }).join('') + '</tbody></table></div>';
   }
   function templateTasksFor(t, tp) {
@@ -4279,10 +4280,10 @@
         list.map(function (x) {
           var on = dlgValue('source') === x.id;
           return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="dlgChoose" data-field="source" data-value="' + x.id + '">' +
-            '<td><input type="radio" name="source"' + (on ? ' checked' : '') + ' aria-label="' + esc(x.fullName) + '"' + a1c('Флажок', 'ТаблицаСтажерыСАПВыбран') + '></td>' +
+            '<td><input type="checkbox" data-action="dlgChoose" data-field="source" data-value="' + x.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(x.fullName) + '"' + a1c('Флажок', 'ТаблицаСтажерыСАПВыбран') + '></td>' +
             '<td>' + esc(x.fullName) + '</td><td>' + esc(x.position) + (x.position === t.position ? ' ' + badge('success', 'Та же должность', 'ДекорацияТаЖеДолжность') : '') + '</td>' +
             '<td class="num">' + tasksOf(programOf(x)).length + '</td>' +
-            '<td class="nowrap">' + link('Открыть АП', { action: 'openProgramView', data: { id: x.id }, title: 'Открыть АП стажера в отдельной вкладке (только просмотр)', name: 'ТаблицаСтажерыСАПОткрыть' }) + '</td></tr>';   // FT_22
+            '<td class="nowrap">' + button('Открыть АП', { action: 'openProgramView', data: { id: x.id }, title: 'Открыть АП стажера в отдельной вкладке (только просмотр)', name: 'ТаблицаСтажерыСАПОткрыть' }) + '</td></tr>';   // FT_22; FT_24 — кнопка
         }).join('') + '</tbody></table></div>' +
         (state.dialog.errors.source ? '<div class="field-error">' + esc(state.dialog.errors.source) + '</div>' : '');
     },
