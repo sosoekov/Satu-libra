@@ -381,7 +381,8 @@
    * ===================================================================== */
 
   var state = {
-    colWidths: {},               // FT_21: ширина колонок таблиц, измененная пользователем: {таблица: {колонка: px}} (в 1С — настройки формы)
+    colWidths: {},
+    tplSel: {},                  // FT_22: выбранные задачи шаблона: {шаблон: {номер задачи: true}}               // FT_21: ширина колонок таблиц, измененная пользователем: {таблица: {колонка: px}} (в 1С — настройки формы)
     topTab: 'adaptation',        // 'tasks' | 'recruiting' | 'adaptation'
     selectedTraineeId: null,     // выбранный стажер
     traineeTab: null,            // 'program' | 'prepare'
@@ -649,9 +650,36 @@
    * карточку стажера в новом окне; в 1С — ОткрытьФорму(...) без блокировки владельца, платформа добавляет вкладку.
    * У каждой вкладки свое состояние карточки (выбранная страница, фильтр задач, выбор, свернутые группы).
    * --------------------------------------------------------------------- */
-  var CTX_KEYS = ['selectedTraineeId', 'traineeTab', 'taskFilter', 'taskSort', 'selectedTasks', 'collapsedBlocks', 'programViewOf', 'checklistMode', 'closureMode'];
+  // FT_22: открытая форма (dialog, dialogStack) — тоже часть состояния вкладки: форма выбора шаблона остается на «Начало»,
+  // пока шаблон или АП другого стажера открыты в своей вкладке
+  var CTX_KEYS = ['selectedTraineeId', 'traineeTab', 'taskFilter', 'taskSort', 'selectedTasks', 'collapsedBlocks', 'programViewOf', 'checklistMode', 'closureMode',
+    'dialog', 'dialogStack'];
   function activeDoc() { return state.shell.active ? byId(state.shell.tabs, state.shell.active) : null; }
-  function docTitle(tab) { return 'Адаптационная программа (' + trainee(tab.traineeId).fullName + ')'; }
+  // Вид вкладки: 'ap' — карточка стажера (FT_11), 'tpl' — шаблон АП, 'apv' — просмотр АП другого стажера (FT_22)
+  var DOC_KINDS = {
+    ap:  { form: 'ФормаКарточкаСтажера', tab: 'ВкладкаОкнаКарточкаСтажера', title: function (x) { return 'Адаптационная программа (' + trainee(x.traineeId).fullName + ')'; } },
+    tpl: { form: 'ФормаШаблонАП', tab: 'ВкладкаОкнаШаблонАП', title: function (x) { return 'Шаблон АП: ' + byId(D.templates, x.templateId).name; } },
+    apv: { form: 'ФормаПросмотрАП', tab: 'ВкладкаОкнаПросмотрАП', title: function (x) { return 'Просмотр АП (' + trainee(x.traineeId).fullName + ')'; } }
+  };
+  function docTitle(tab) { return DOC_KINDS[tab.kind || 'ap'].title(tab); }
+  function docCtx(traineeId, page) {
+    return { selectedTraineeId: traineeId, traineeTab: page, taskFilter: null, taskSort: { key: null, dir: 1 }, selectedTasks: {}, collapsedBlocks: {},
+      programViewOf: null, checklistMode: 'all', closureMode: 'all', dialog: null, dialogStack: [] };
+  }
+  // FT_22: шаблон АП или АП другого стажера — в своей вкладке окна; открытая форма остается во вкладке, из которой открыли
+  function openKindTab(kind, key) {
+    var id = kind + ':' + key;
+    if (!byId(state.shell.tabs, id)) {
+      var tab = { id: id, kind: kind, ctx: docCtx(kind === 'apv' ? key : null, kind === 'apv' ? 'program' : null) };
+      if (kind === 'tpl') tab.templateId = key; else tab.traineeId = key;
+      state.shell.tabs.push(tab);
+    }
+    state.openMenu = null;
+    switchShell(id);
+    render();
+  }
+  function openTemplateDoc(id) { openKindTab('tpl', id); }
+  function openProgramView(traineeId) { openKindTab('apv', traineeId); }
   function saveCtx() { var c = {}; CTX_KEYS.forEach(function (k) { c[k] = state[k]; }); return c; }
   function loadCtx(c) { CTX_KEYS.forEach(function (k) { state[k] = c[k]; }); state.openMenu = null; }
   function switchShell(id) {
@@ -666,8 +694,7 @@
     var id = 'ap:' + traineeId;
     state.dialog = null; state.dialogStack = [];
     if (!byId(state.shell.tabs, id)) {
-      state.shell.tabs.push({ id: id, traineeId: traineeId, ctx: { selectedTraineeId: traineeId, traineeTab: page, taskFilter: null,
-        taskSort: { key: null, dir: 1 }, selectedTasks: {}, collapsedBlocks: {}, programViewOf: null, checklistMode: 'all', closureMode: 'all' } });
+      state.shell.tabs.push({ id: id, kind: 'ap', traineeId: traineeId, ctx: docCtx(traineeId, page) });
       switchShell(id);
     } else {
       switchShell(id);
@@ -690,7 +717,7 @@
         var title = docTitle(x);
         return '<span class="shell-tab shell-doc' + (on ? ' active' : '') + '">' +
           '<button type="button" role="tab" aria-selected="' + on + '" class="shell-tab-title" data-action="shellTab" data-id="' + x.id + '" title="' + esc(title) + '"' +
-            a1c('НЕ_ПЕРЕНОСИТЬ', 'ВкладкаОкнаКарточкаСтажера') + '>' + esc(title) + '</button>' +
+            a1c('НЕ_ПЕРЕНОСИТЬ', DOC_KINDS[x.kind || 'ap'].tab) + '>' + esc(title) + '</button>' +
           '<button type="button" class="shell-tab-close" data-action="shellClose" data-id="' + x.id + '" title="Закрыть" aria-label="' + esc('Закрыть: ' + title) + '"' +
             a1c('НЕ_ПЕРЕНОСИТЬ', 'ВкладкаОкнаЗакрыть') + '>' + icon('close') + '</button></span>';
       }).join('');
@@ -703,6 +730,7 @@
     el('docWindow').classList.toggle('hidden', !doc);
     if (doc) {
       el('docTitle').textContent = docTitle(doc);
+      el('docWindow').setAttribute('data-1c-name', DOC_KINDS[doc.kind || 'ap'].form);   // FT_22: форма вкладки
       renderCenter();
       renderDialog();
       renderToasts();
@@ -951,6 +979,9 @@
   // FT_11: центральная зона — окна «Начало» или открытой вкладки с карточкой стажера
   function centerEl() { return activeDoc() ? el('docCenter') : el('centerZone'); }
   function renderCenter() {
+    var doc = activeDoc();
+    if (doc && doc.kind === 'tpl') { el('docCenter').innerHTML = renderTemplateDoc(byId(D.templates, doc.templateId)); applyColWidths(el('docCenter')); return; }   // FT_22
+    if (doc && doc.kind === 'apv') { el('docCenter').innerHTML = renderProgramView(trainee(doc.traineeId)); return; }
     if (isKshUser() && !activeDoc()) {   // FT_9: у сотрудника КШ — пустая вкладка, свой кабинет будет реализован позже
       el('centerZone').innerHTML = '<div class="empty ksh-empty"' + a1c('Надпись', 'ДекорацияКабинетКШ') + '>Здесь пока ничего нет</div>';
       return;
@@ -3646,7 +3677,7 @@
           esc('Задача шаблона «' + byId(D.templates, ctx.templateId).name + '». Только просмотр: изменить задачу можно после добавления в АП. Срок посчитан от даты выхода ' + fmtDate(t.startDate) + '.') + '</span></div>'
         : state.dialog.traineeMode ? ''
         : dlgRO() ? '<div class="note note-info"' + (state.dialog.observerOnly ? a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНаблюдатель') : '') + '><span class="tone-info">' + icon('info') + '</span><span' +
-          (state.dialog.observerOnly ? a1c('Надпись', 'ДекорацияЗадачаНаблюдатель') : '') + '>' + esc(state.dialog.observerOnly ? OBSERVER_ONLY_TEXT : editLock(t)) + '</span></div>'
+          (state.dialog.observerOnly ? a1c('Надпись', 'ДекорацияЗадачаНаблюдатель') : '') + '>' + esc(state.dialog.observerOnly ? OBSERVER_ONLY_TEXT : ctx.viewOnly ? 'Просмотр АП другого стажера — изменения недоступны' : editLock(t)) + '</span></div>'
         : state.dialog.corpLock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаКорпБлока') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияЗадачаКорпБлока') + '>' +
           esc('Задача корпоративного блока: изменить можно только наблюдателей. ' + CORP_LOCK_TEXT + '.') + '</span></div>' : '';
       // Блок (FT_8): в корпоративный блок задача попадает только из шаблона — у новой задачи и у задачи спец. блока варианта «Корпоративный» нет
@@ -4172,7 +4203,7 @@
   function templateTable(field_, oneC) {
     var rec = recommendedTemplate(trainee(state.dialog.traineeId));
     return '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', oneC) + '>' +
-      '<thead><tr><th></th><th>Шаблон</th><th>Должность</th><th class="num">Корп. / спец. задач</th></tr></thead><tbody>' +
+      '<thead><tr><th></th><th>Шаблон</th><th>Должность</th><th class="num">Корп. / спец. задач</th><th></th></tr></thead><tbody>' +
       D.templates.map(function (tp) {
         var on = dlgValue(field_) === tp.id;
         var corpN = tp.tasks.filter(function (x) { return x.block === 'corp'; }).length;
@@ -4180,7 +4211,8 @@
           '<td><input type="radio" name="' + field_ + '"' + (on ? ' checked' : '') + ' aria-label="' + esc(tp.name) + '"' + a1c('Флажок', oneC + 'Выбран') + '></td>' +
           '<td>' + esc(tp.name) + (rec && rec.id === tp.id ? ' ' + badge('success', 'Подходит для должности', 'ДекорацияРекомендуемыйШаблон') : '') + '</td>' +
           '<td>' + esc(tp.position || 'Для всех должностей') + '</td>' +
-          '<td class="num">' + corpN + ' / ' + (tp.tasks.length - corpN) + '</td></tr>';
+          '<td class="num">' + corpN + ' / ' + (tp.tasks.length - corpN) + '</td>' +
+          '<td class="nowrap">' + link('Открыть', { action: 'openTemplateDoc', data: { id: tp.id }, title: 'Открыть шаблон в отдельной вкладке', name: oneC + 'Открыть' }) + '</td></tr>';   // FT_22
       }).join('') + '</tbody></table></div>';
   }
   function templateTasksFor(t, tp) {
@@ -4215,13 +4247,14 @@
       var list = D.trainees.filter(function (x) { return x.id !== t.id && programOf(x) && tasksOf(programOf(x)).length; });
       return '<p class="dlg-text">Задачи скопируются без статусов и результатов, сроки сдвинутся на дату выхода ' + fmtDate(t.startDate) + '.</p>' +
         '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаСтажерыСАП') + '>' +
-        '<thead><tr><th></th><th>ФИО</th><th>Должность</th><th class="num">Задач</th></tr></thead><tbody>' +
+        '<thead><tr><th></th><th>ФИО</th><th>Должность</th><th class="num">Задач</th><th></th></tr></thead><tbody>' +
         list.map(function (x) {
           var on = dlgValue('source') === x.id;
           return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="dlgChoose" data-field="source" data-value="' + x.id + '">' +
             '<td><input type="radio" name="source"' + (on ? ' checked' : '') + ' aria-label="' + esc(x.fullName) + '"' + a1c('Флажок', 'ТаблицаСтажерыСАПВыбран') + '></td>' +
             '<td>' + esc(x.fullName) + '</td><td>' + esc(x.position) + (x.position === t.position ? ' ' + badge('success', 'Та же должность', 'ДекорацияТаЖеДолжность') : '') + '</td>' +
-            '<td class="num">' + tasksOf(programOf(x)).length + '</td></tr>';
+            '<td class="num">' + tasksOf(programOf(x)).length + '</td>' +
+            '<td class="nowrap">' + link('Открыть АП', { action: 'openProgramView', data: { id: x.id }, title: 'Открыть АП стажера в отдельной вкладке (только просмотр)', name: 'ТаблицаСтажерыСАПОткрыть' }) + '</td></tr>';   // FT_22
         }).join('') + '</tbody></table></div>' +
         (state.dialog.errors.source ? '<div class="field-error">' + esc(state.dialog.errors.source) + '</div>' : '');
     },
@@ -4253,7 +4286,8 @@
       var picked = state.dialog.values.picked;
       var existing = tasksOf(programOf(t)).map(function (x) { return x.name; });
       var allOn = picked.length === tp.tasks.length;
-      return field('Шаблон', selectOptions('template', 'ПолеШаблон', D.templates.map(function (x) { return { value: x.id, text: x.name }; }), ' data-rerender="1"'), { forId: 'f_template' }) +
+      return field('Шаблон', '<div class="row gap-2">' + selectOptions('template', 'ПолеШаблон', D.templates.map(function (x) { return { value: x.id, text: x.name }; }), ' data-rerender="1"') +
+          button('Открыть шаблон', { action: 'openTemplateDoc', data: { id: tp.id }, title: 'Открыть шаблон в отдельной вкладке', name: 'КнопкаОткрытьШаблон' }) + '</div>', { forId: 'f_template' }) +   // FT_22
         '<div class="table-box dlg-table"><table class="grid"' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблона') + '>' +
         '<thead><tr><th><input type="checkbox" data-action="dlgPickAll" title="Выбрать все"' + (allOn ? ' checked' : '') + a1c('Флажок', 'ТаблицаЗадачиШаблонаВыбратьВсе') + '></th>' +
         '<th>Задача</th><th>Тип</th><th>Блок</th><th>Срок</th></tr></thead><tbody>' +
@@ -4279,6 +4313,214 @@
       toast('Добавлено задач: ' + specs.length);
     }
   };
+
+
+  /* =====================================================================
+   * FT_22: шаблон АП и просмотр АП другого стажера — в отдельной вкладке окна (рядом с «Начало»).
+   * Шаблон изменяют автор и руководители подразделений, подчиненных подразделению автора; остальные — только просмотр.
+   * Изменения шаблона сразу записываются (как изменения задач на вкладке АП); созданные по шаблону АП не меняются.
+   * В 1С — форма элемента справочника «Шаблоны АП» (ФормаШаблонАП) и форма документа АП в режиме просмотра (ФормаПросмотрАП)
+   * ===================================================================== */
+  function canEditTemplate(tp) {
+    var me = D.CURRENT_USER_ID;
+    if (tp.authorId === me) return true;
+    var author = user(tp.authorId);
+    if (!author || !author.departmentId) return false;
+    return deptSubtree(author.departmentId).some(function (id) { var d = dept(id); return d && d.responsibleId === me; });
+  }
+  var TEMPLATE_RO_TEXT = 'Только просмотр. Изменяют шаблон автор и руководители подразделений, подчиненных автору';
+  function offsetDaysText(n) { return n === 0 ? 'в день выхода' : n > 0 ? 'через ' + n + ' дн. после выхода' : 'за ' + (-n) + ' дн. до выхода'; }
+  function templatePositions(tp) {
+    var list = [];
+    D.templates.map(function (x) { return x.position; }).concat(D.trainees.map(function (x) { return x.position; })).forEach(function (x) {
+      if (x && list.indexOf(x) < 0) list.push(x);
+    });
+    return list.sort(function (a, b) { return a.localeCompare(b, 'ru'); });
+  }
+  function tplSelected(tp) { var m = state.tplSel[tp.id] || {}; return tp.tasks.map(function (x, i) { return i; }).filter(function (i) { return m[i]; }); }
+
+  function renderTemplateDoc(tp) {
+    var edit = canEditTemplate(tp);
+    var sel = tplSelected(tp);
+    var dis = edit ? '' : ' disabled';
+    var err = state.tplError && state.tplError.id === tp.id ? state.tplError.text : '';
+    var note = edit ? '' : '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаШаблонТолькоПросмотр') + '>' +
+      '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаШаблонТолькоПросмотр') + '>' + icon('lock') + '</span>' +
+      '<span class="muted"' + a1c('Надпись', 'ДекорацияШаблонТолькоПросмотр') + '>' + esc(TEMPLATE_RO_TEXT) + '</span></div>';
+    var head = '<div class="tf-row tpl-head"' + a1c('ГруппаГоризонтальная', 'ГруппаШаблонРеквизиты') + '>' +
+      '<div class="tf-field tf-wide"><label class="tf-label" for="tpl_name">Название' + (edit ? '<span class="req" title="Обязательное поле"> *</span>' : '') + '</label>' +
+        '<input type="text" class="input" id="tpl_name" data-tpl-field="name" value="' + esc(tp.name) + '"' + dis + (err ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеНазваниеШаблона') + '>' +
+        (err ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаНазваниеШаблона') + '>' + esc(err) + '</div>' : '') + '</div>' +
+      '<div class="tf-field"><label class="tf-label" for="tpl_position">Должность</label>' +
+        '<select class="select" id="tpl_position" data-tpl-field="position"' + dis + a1c('ПолеВвода', 'ПолеДолжностьШаблона') + '>' +
+          [{ v: '', t: 'Для всех должностей' }].concat(templatePositions(tp).map(function (x) { return { v: x, t: x }; })).map(function (o) {
+            return '<option value="' + esc(o.v) + '"' + ((tp.position || '') === o.v ? ' selected' : '') + '>' + esc(o.t) + '</option>';
+          }).join('') + '</select></div>' +
+      '<div class="tf-field"><label class="tf-label" for="tpl_author">Автор</label>' +
+        '<input type="text" class="input" id="tpl_author" disabled value="' + esc(userName(tp.authorId)) + '"' + a1c('ПолеВвода', 'ПолеАвторШаблона') + '></div>' +
+      '</div>';
+    var one = sel.length === 1;
+    var bar = edit ? '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗадачиШаблона') + '>' +
+      button('Добавить задачу', { icon: 'plus', action: 'tplAddTask', data: { id: tp.id }, name: 'КнопкаДобавитьЗадачуШаблона' }) +
+      button('Выше', { action: 'tplMove', data: { id: tp.id, dir: -1 }, disabled: !one || sel[0] === 0, title: one ? 'Переместить выше' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаВыше' }) +
+      button('Ниже', { action: 'tplMove', data: { id: tp.id, dir: 1 }, disabled: !one || sel[0] === tp.tasks.length - 1, title: one ? 'Переместить ниже' : 'Отметьте одну задачу', name: 'КнопкаЗадачаШаблонаНиже' }) +
+      button('Удалить', { action: 'tplDelete', data: { id: tp.id }, disabled: !sel.length, title: sel.length ? '' : 'Отметьте задачи флажками', name: 'КнопкаУдалитьЗадачиШаблона' }) +
+      '<span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадач') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span>' +
+      '</div>' : '<div class="row"><span class="grow"></span><span class="muted"' + a1c('Надпись', 'ДекорацияШаблонЧислоЗадач') + '>' + pluralN(tp.tasks.length, ['задача', 'задачи', 'задач']) + '</span></div>';
+    var rows = tp.tasks.map(function (x, i) {
+      var on = !!(state.tplSel[tp.id] || {})[i];
+      return '<tr class="task-row tpl-row' + (on ? ' selected' : '') + '" data-tpl-doc="' + tp.id + '" data-tpl-index="' + i + '" title="Двойной клик — открыть задачу шаблона">' +
+        (edit ? '<td><input type="checkbox" data-tpl-sel="' + i + '" data-tpl-id="' + tp.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc('Выбрать задачу «' + x.name + '»') + '"' + a1c('Флажок', 'ТаблицаЗадачиШаблонаАПВыбрана') + '></td>' : '') +
+        '<td><div class="ellipsis">' + link(x.name, { action: 'tplOpenTask', data: { id: tp.id, index: i }, title: x.name, name: 'ТаблицаЗадачиШаблонаАПЗадача' }) + '</div></td>' +
+        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПБлок') + '>' + blockMeta(x.block).short + '</td>' +
+        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПТип') + '>' + esc(taskTypeText(x.type || 'task')) + '</td>' +
+        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПСрок') + '>' + esc(offsetDaysText(x.offsetDays)) + '</td>' +
+        '<td><div class="ellipsis' + (x.reviewerId ? '' : ' muted') + '"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАППроверяющий') + '>' + esc(x.reviewerId ? userName(x.reviewerId) : 'Не назначен') + '</div></td>' +
+        '<td class="nowrap"' + a1c('Надпись', 'ТаблицаЗадачиШаблонаАПОбязательная') + '>' + (x.required ? 'Да' : '') + '</td></tr>';
+    }).join('');
+    var allOn = edit && tp.tasks.length && sel.length === tp.tasks.length;
+    var table = '<div class="table-box"><table class="grid task-table tpl-table" data-resize="tpl"' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблонаАП') + '>' +
+      '<colgroup>' + (edit ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-block" data-col="block"><col class="w-type" data-col="type">' +
+        '<col class="w-offset" data-col="offset"><col class="w-person" data-col="reviewer"><col class="w-req" data-col="req"></colgroup>' +
+      '<thead><tr>' + (edit ? '<th><input type="checkbox" data-tpl-all="' + tp.id + '" title="Выбрать все"' + (allOn ? ' checked' : '') + (tp.tasks.length ? '' : ' disabled') +
+        a1c('Флажок', 'ТаблицаЗадачиШаблонаАПВыбратьВсе') + '></th>' : '') +
+        '<th>Задача</th><th>Блок</th><th>Тип</th><th>Срок</th><th>Проверяющий</th><th>Обязательная</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="7" class="muted"' + a1c('Надпись', 'ДекорацияЗадачШаблонаНет') + '>В шаблоне нет задач</td></tr>') + '</tbody></table></div>';
+    return '<div class="col gap-3 tpl-doc"' + a1c('ГруппаВертикальная', 'ГруппаШаблонАП') + '>' + note + head + bar + table + '</div>';
+  }
+  function setTemplateField(tp, f, value) {
+    if (!canEditTemplate(tp)) return;
+    if (f === 'name') {
+      if (!required(value)) { state.tplError = { id: tp.id, text: 'Укажите название шаблона' }; renderCenter(); var n = centerEl().querySelector('#tpl_name'); if (n) n.focus(); return; }
+      state.tplError = null;
+      tp.name = value.trim();
+      render();   // заголовок вкладки окна
+      toast('Шаблон сохранен');
+      return;
+    }
+    tp.position = value || null;
+    toast('Шаблон сохранен');
+  }
+
+  // Задача шаблона: ctx {tplId, index} (index null — новая). Срок — число дней от даты выхода
+  function tplOf(ctx) { return byId(D.templates, ctx.tplId); }
+  DIALOGS.tplTask = {
+    form: 'ФормаЗадачаШаблона', submit: 'Сохранить', xl: true, noCloseButton: true,
+    titleFn: function () { var c = dlgCtx(); return (c.index == null ? 'Новая задача шаблона' : 'Задача шаблона') + ' «' + tplOf(c).name + '»'; },
+    init: function (t, ctx) {
+      var x = ctx.index == null ? null : tplOf(ctx).tasks[ctx.index];
+      if (!x) return { name: '', block: 'spec', type: 'task', required: false, offsetDays: '1', reviewerId: '', description: '', criteria: '', links: [] };
+      return { name: x.name, block: x.block, type: x.type || 'task', required: !!x.required, offsetDays: String(x.offsetDays), reviewerId: x.reviewerId || '',
+        description: x.description || '', criteria: x.criteria || '', links: linkRows(x.links) };
+    },
+    body: function () {
+      var e = state.dialog.errors;
+      var reviewerId = dlgValue('reviewerId');
+      var n = parseInt(dlgValue('offsetDays'), 10);
+      var note = dlgRO() ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаТолькоПросмотр') + '><span class="tone-info">' + icon('info') + '</span><span' +
+        a1c('Надпись', 'ДекорацияЗадачаШаблонаТолькоПросмотр') + '>' + esc(TEMPLATE_RO_TEXT) + '</span></div>' : '';
+      return note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаШаблонаОсновное') + '>' +
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаНазваниеБлок') + '>' +
+          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
+          tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block' }) +
+        '</div>' +
+        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаПроверяющийТип') + '>' +
+          tfField('Проверяющий', '<div class="row gap-2">' + selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен')) +
+            button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
+              title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' }) + '</div>', { forId: 'f_reviewerId', cls: 'tf-wide' }) +
+          tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
+        '</div>' +
+        '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСрок') + '>' +
+          tfField('Срок, дней от выхода', '<input type="number" class="input" min="0" step="1" id="f_offsetDays" data-field="offsetDays" value="' + esc(dlgValue('offsetDays')) + '"' + ro() +
+              (e.offsetDays ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеСрокДнейОтВыхода') + '>' +
+            '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокДнейОтВыхода') + '>' + (isNaN(n) ? '&nbsp;' : esc(offsetDaysText(n))) + '</div>',
+            { required: true, error: e.offsetDays, forId: 'f_offsetDays', name: 'СрокДнейОтВыхода' }) +
+          '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
+            a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
+        '</div>' +
+        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаОписаниеРезультат') + '>' +
+          tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="5" id="f_description" data-field="description"' + ro() +
+            a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
+          tfField('Результат выполнения', '<textarea class="textarea tf-textarea" rows="5" id="f_criteria" data-field="criteria"' + ro() +
+            ' placeholder="' + (dlgRO() ? '' : 'Критерии, по которым проверяющий примет задачу') + '"' + a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('criteria')) + '</textarea>', { forId: 'f_criteria' }) +
+        '</div>' +
+        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСсылки') + '>' + linksTable() + '</div>' +
+        '</div>';
+    },
+    validate: function (t, v) {
+      var e = {};
+      if (!required(v.name)) e.name = 'Укажите название задачи';
+      var n = Number(v.offsetDays);
+      if (String(v.offsetDays).trim() === '' || !isFinite(n) || n < 0 || Math.round(n) !== n) e.offsetDays = 'Укажите целое число дней от выхода: 0 и больше';
+      if (linksError(v.links)) e.links = linksError(v.links);
+      return e;
+    },
+    apply: function (t, v) {
+      var ctx = dlgCtx();
+      var tp = tplOf(ctx);
+      var x = ctx.index == null ? {} : tp.tasks[ctx.index];
+      x.name = v.name.trim(); x.block = v.block; x.type = v.type; x.required = !!v.required; x.offsetDays = Number(v.offsetDays);
+      x.reviewerId = v.reviewerId || null; x.description = (v.description || '').trim(); x.criteria = (v.criteria || '').trim(); x.links = linksFromRows(v.links);
+      if (ctx.index == null) tp.tasks.push(x);
+      toast(ctx.index == null ? 'Задача добавлена в шаблон' : 'Задача шаблона сохранена');
+    }
+  };
+  DIALOGS.tplDeleteTasks = {
+    title: 'Удалить задачи шаблона', form: 'ФормаУдалитьЗадачиШаблона', submit: 'Удалить', danger: true,
+    body: function () {
+      var tp = tplOf(dlgCtx());
+      var list = tplSelected(tp).map(function (i) { return tp.tasks[i]; });
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияВопросУдаленияЗадачШаблона') + '>Удалить из шаблона «' + esc(tp.name) + '» задач: ' + list.length + '? Созданные по шаблону АП не изменятся.</p>' +
+        (list.length <= 5 ? '<ul class="dlg-list">' + list.map(function (x) { return '<li>' + esc(x.name) + '</li>'; }).join('') + '</ul>' : '');
+    },
+    apply: function () {
+      var tp = tplOf(dlgCtx());
+      var sel = tplSelected(tp);
+      tp.tasks = tp.tasks.filter(function (x, i) { return sel.indexOf(i) < 0; });
+      state.tplSel[tp.id] = {};
+      toast('Удалено задач: ' + sel.length);
+    }
+  };
+
+  // Просмотр АП другого стажера (из формы «Копирование АП»): шапка и задачи по блокам, без изменений, чек-листов и аналитики
+  function renderProgramView(t) {
+    var program = programOf(t);
+    var info = function (label, value, name) {
+      return '<div class="col gap-0 apv-part"><span class="muted text-s">' + esc(label) + '</span><span' + a1c('Надпись', name) + '>' + esc(value) + '</span></div>';
+    };
+    var head = '<div class="card col gap-2 apv-head"' + a1c('ГруппаВертикальная', 'ГруппаПросмотрАПШапка') + '>' +
+      '<div class="tcard-name"' + a1c('Надпись', 'ДекорацияПросмотрАПФИО') + '>' + esc(t.fullName) + '</div>' +
+      '<div class="row wrap gap-4"' + a1c('ГруппаГоризонтальная', 'ГруппаПросмотрАПРеквизиты') + '>' +
+        info('Должность', formatPosition(t), 'ДекорацияПросмотрАПДолжность') +
+        info('Подразделение', dept(t.departmentId).name, 'ДекорацияПросмотрАППодразделение') +
+        info('Даты стажировки', t.startDate ? fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) : 'не назначены', 'ДекорацияПросмотрАПДаты') +
+        info('Руководитель стажировки', t.headId ? userName(t.headId) : 'Не назначен', 'ДекорацияПросмотрАПРуководитель') +
+        info('Наставник', t.mentorId ? userName(t.mentorId) : 'Не назначен', 'ДекорацияПросмотрАПНаставник') +
+      '</div></div>';
+    var note = '<div class="row lock-note"' + a1c('ГруппаГоризонтальная', 'ГруппаПросмотрАПТолькоПросмотр') + '>' +
+      '<span class="note-icon muted"' + a1c('Картинка', 'КартинкаПросмотрАПТолькоПросмотр') + '>' + icon('lock') + '</span>' +
+      '<span class="muted"' + a1c('Надпись', 'ДекорацияПросмотрАПТолькоПросмотр') + '>Только просмотр: АП, которую можно скопировать. Сроки показаны от даты выхода этого стажера</span></div>';
+    if (!program) return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаПросмотрАП') + '>' + head + '<div class="empty"' + a1c('Надпись', 'ДекорацияПросмотрАПНет') + '>АП не создана</div></div>';
+    var list = tasksOf(program);
+    var body = BLOCKS.map(function (bl) {
+      var rows = list.filter(function (x) { return x.block === bl.id; });
+      if (!rows.length) return '';
+      return '<tr class="group-row"' + a1c('ТаблицаФормы', 'ТаблицаПросмотрАПГруппа' + bl.name, 'check') + '><td colspan="5"><b>' + esc(bl.title) + ' (' + rows.length + ')</b></td></tr>' +
+        rows.map(function (x) {
+          return '<tr class="task-row" data-apv-task="' + x.id + '" title="Двойной клик — открыть задачу">' +
+            '<td><div class="ellipsis">' + link(x.name, { action: 'apvOpenTask', data: { id: x.id }, title: x.name, name: 'ТаблицаПросмотрАПЗадача' }) + '</div></td>' +
+            '<td class="nowrap"' + a1c('Надпись', 'ТаблицаПросмотрАПТип') + '>' + esc(taskTypeText(x.type || 'task')) + '</td>' +
+            '<td class="nowrap"><div' + a1c('Надпись', 'ТаблицаПросмотрАПСрок') + '>' + fmtDate(x.deadline) + '</div>' +
+              (t.startDate ? '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаПросмотрАПСрокПояснение') + '>' + esc(offsetDaysText(diffDays(t.startDate, x.deadline))) + '</div>' : '') + '</td>' +
+            '<td><div class="ellipsis' + (x.reviewerId ? '' : ' muted') + '"' + a1c('Надпись', 'ТаблицаПросмотрАППроверяющий') + '>' + esc(x.reviewerId ? userName(x.reviewerId) : 'Не назначен') + '</div></td>' +
+            '<td class="nowrap"' + a1c('Надпись', 'ТаблицаПросмотрАПОбязательная') + '>' + (x.required ? 'Да' : '') + '</td></tr>';
+        }).join('');
+    }).join('');
+    var table = '<div class="table-box"><table class="grid task-table apv-table"' + a1c('ТаблицаФормы', 'ТаблицаПросмотрАП') + '>' +
+      '<colgroup><col><col class="w-type"><col class="w-offset"><col class="w-person"><col class="w-req"></colgroup>' +
+      '<thead><tr><th>Задача</th><th>Тип</th><th>Срок</th><th>Проверяющий</th><th>Обязательная</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+    return '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаПросмотрАП') + '>' + note + head + table + '</div>';
+  }
 
   /* ---------- Диалоги: чек-лист подготовки ---------- */
 
@@ -4743,6 +4985,8 @@
     // FT_9: стажер открывает свои задачи только для просмотра; менять может лишь статус кнопками «Взять в работу» / «Выполнено»
     if (type === 'task' && isTraineeUser()) { state.dialog.readOnly = true; state.dialog.traineeMode = true; }
     if (type === 'task' && ctx.observerOnly) { state.dialog.readOnly = true; state.dialog.observerOnly = true; }   // FT_19: только наблюдатель
+    if (type === 'task' && ctx.viewOnly) state.dialog.readOnly = true;   // FT_22: просмотр АП другого стажера
+    if (type === 'tplTask') state.dialog.readOnly = !canEditTemplate(byId(D.templates, ctx.tplId));   // FT_22
     if (type === 'clTask') {   // FT_20: карточка пункта чек-листа
       state.dialog.lockText = itemCardLock(t, ctx);
       state.dialog.readOnly = !!state.dialog.lockText;
@@ -5031,6 +5275,21 @@
     // Чек-лист подготовки
     clMode: function (btn) { state.checklistMode = btn.getAttribute('data-value'); renderCenter(); },
     ccMode: function (btn) { state.closureMode = btn.getAttribute('data-value'); renderCenter(); },
+    // FT_22: шаблон и АП другого стажера — в отдельной вкладке окна
+    openTemplateDoc: function (btn) { openTemplateDoc(btn.getAttribute('data-id')); },
+    openProgramView: function (btn) { openProgramView(btn.getAttribute('data-id')); },
+    tplAddTask: function (btn) { openDialog('tplTask', null, { tplId: btn.getAttribute('data-id'), index: null }); },
+    tplOpenTask: function (btn) { openDialog('tplTask', null, { tplId: btn.getAttribute('data-id'), index: Number(btn.getAttribute('data-index')) }); },
+    tplMove: function (btn) {
+      var tp = byId(D.templates, btn.getAttribute('data-id'));
+      var i = tplSelected(tp)[0], j = i + Number(btn.getAttribute('data-dir'));
+      if (i == null || j < 0 || j >= tp.tasks.length) return;
+      var x = tp.tasks[i]; tp.tasks[i] = tp.tasks[j]; tp.tasks[j] = x;
+      state.tplSel[tp.id] = {}; state.tplSel[tp.id][j] = true;
+      renderCenter();
+    },
+    tplDelete: function (btn) { openDialog('tplDeleteTasks', null, { tplId: btn.getAttribute('data-id') }); },
+    apvOpenTask: function (btn) { openDialog('task', state.selectedTraineeId, { taskId: btn.getAttribute('data-id'), viewOnly: true }); },
     // FT_20: «Выполнить» / «Взять в работу» в строке чек-листа — только у ответственного
     itemAct: function (btn) {
       var kind = btn.getAttribute('data-kind');
@@ -5344,6 +5603,11 @@
     var f = e.target.getAttribute('data-field');
     if (f && state.dialog) {
       if (e.target.type !== 'checkbox') state.dialog.values[f] = e.target.value;
+      if (f === 'offsetDays') {   // FT_22: пояснение срока задачи шаблона — по мере ввода, без перерисовки формы
+        var hn = topModal().querySelector('[data-1c-name="ДекорацияСрокДнейОтВыхода"]');
+        var nn = parseInt(e.target.value, 10);
+        if (hn) hn.textContent = isNaN(nn) ? '' : offsetDaysText(nn);
+      }
       if (state.dialog.type === 'observersPicker' && f === 'q') {
         var pos = e.target.selectionStart;
         renderDialog();
@@ -5443,6 +5707,22 @@
       renderTasksPage();
       return;
     }
+    // FT_22: реквизиты шаблона и выбор задач шаблона
+    if (tgt.hasAttribute('data-tpl-field')) { setTemplateField(byId(D.templates, activeDoc().templateId), tgt.getAttribute('data-tpl-field'), tgt.value); return; }
+    if (tgt.hasAttribute('data-tpl-sel')) {
+      var tid = tgt.getAttribute('data-tpl-id');
+      state.tplSel[tid] = state.tplSel[tid] || {};
+      if (tgt.checked) state.tplSel[tid][tgt.getAttribute('data-tpl-sel')] = true; else delete state.tplSel[tid][tgt.getAttribute('data-tpl-sel')];
+      renderCenter();
+      return;
+    }
+    if (tgt.hasAttribute('data-tpl-all')) {
+      var tpa = byId(D.templates, tgt.getAttribute('data-tpl-all'));
+      state.tplSel[tpa.id] = {};
+      if (tgt.checked) tpa.tasks.forEach(function (x, i) { state.tplSel[tpa.id][i] = true; });
+      renderCenter();
+      return;
+    }
     // Флажки выбора строк таблицы задач: только выбор, статус задачи не меняется
     if (tgt.hasAttribute('data-select-task')) {
       var id = tgt.getAttribute('data-select-task');
@@ -5480,6 +5760,10 @@
     if (srow && !e.target.closest('button')) { selectTrainee(srow.getAttribute('data-id')); return; }
     var vrow = e.target.closest('tr[data-vr]');   // FT_15: заявка на подбор
     if (vrow) { openRequest(byId(D.vacancyRequests, vrow.getAttribute('data-vr'))); return; }
+    var tprow = e.target.closest('tr[data-tpl-doc]');   // FT_22: задача шаблона во вкладке шаблона
+    if (tprow && !e.target.closest('input, button')) { openDialog('tplTask', null, { tplId: tprow.getAttribute('data-tpl-doc'), index: Number(tprow.getAttribute('data-tpl-index')) }); return; }
+    var avrow = e.target.closest('tr[data-apv-task]');   // FT_22: задача АП другого стажера
+    if (avrow && !e.target.closest('input, button')) { openDialog('task', state.selectedTraineeId, { taskId: avrow.getAttribute('data-apv-task'), viewOnly: true }); return; }
     var irow = e.target.closest('tr[data-item-id]');   // FT_20: пункт чек-листа — карточка задачи
     if (irow && !e.target.closest('input, button')) { openItemCard(irow.getAttribute('data-item-kind'), irow.getAttribute('data-item-id')); return; }
     var row = e.target.closest('tr[data-task-id]');
@@ -5600,6 +5884,8 @@
   window.rerender = function () { render(); };
   window.selectedTraineeDemo = function () { return state.selectedTraineeId; };   // НЕ_ПЕРЕНОСИТЬ (FT_18): выбранный стажер — для тестов
   // НЕ_ПЕРЕНОСИТЬ (FT_18): открыть карточку стажера из тестов — стажеров в дереве больше нет
+  // НЕ_ПЕРЕНОСИТЬ: FT_22 — права текущего пользователя на шаблон АП (для тестов)
+  window.canEditTemplateDemo = function (id) { return canEditTemplate(byId(D.templates, id)); };
   window.openTraineeDemo = function (id) {
     if (activeDoc()) switchShell(null);
     state.topTab = 'adaptation';
