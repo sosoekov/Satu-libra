@@ -1014,3 +1014,6 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 @media (max-width: 1500px) {
   .tv-table .w-status { width: 104px; }
 }
+
+/* ---------- FT_29: выпадающее меню у левого края области открывается вправо ---------- */
+.menu-pop.menu-pop-left { left: 0; right: auto; }
