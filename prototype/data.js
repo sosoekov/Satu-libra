@@ -895,7 +895,13 @@
       else if (v && typeof v === 'object') shiftDates(v);
     });
   }
-  if (SHIFT) [recruitTasks, recruitNotes, vacancyRequests, userNotes, trainees, programs, tasks, checklist, closureChecklist].forEach(shiftDates);
+  /* FT_28: отметки о перенаправлении задач: ключ задачи → {by — кто перенаправил, to — кому, at — когда, comment}.
+   * Отметка видна новому исполнителю в списке задач и в карточке задачи; повторное перенаправление ее заменяет */
+  var taskRedirects = {
+    'rt-5': { by: 'u-kladova', to: 'u-strygin', at: '2026-07-24T16:20', comment: 'Прошу провести собеседование вместо меня — я в командировке' }
+  };
+
+  if (SHIFT) [recruitTasks, recruitNotes, vacancyRequests, userNotes, trainees, programs, tasks, checklist, closureChecklist, taskRedirects].forEach(shiftDates);
   TODAY = RUN_TODAY;
 
   window.DATA = {
@@ -907,6 +913,7 @@
     IMPORTANCE_DEFAULT: IMPORTANCE_DEFAULT,
     userNotes: userNotes,
     formSettings: formSettings,
+    taskRedirects: taskRedirects,   // FT_28
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
     LAG_THRESHOLD: LAG_THRESHOLD,

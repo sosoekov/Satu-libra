@@ -2035,7 +2035,7 @@
 
     var body;
     if (!list.length) {
-      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
+      body = '<tr><td colspan="7"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистПуст') + '>У вас нет пунктов в чек-листе</span>' +
         link('Показать все', { action: 'clMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПункты' }) +
         '</div></td></tr>';
@@ -2044,8 +2044,8 @@
     }
 
     var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cl"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистПодготовки') + '>' +
-      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
+      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-cl-status" data-col="status"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Статус</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
 
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаПодготовка') + '>' + lockRow + bar + table + '</div>';
@@ -2113,18 +2113,18 @@
 
     var body;
     if (!closureOf(t).length) {
-      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияПуст') + '>' +
+      body = '<tr><td colspan="7"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияНеФормировался') + '>Чек-лист закрытия не формировался</span></div></td></tr>';
     } else if (!list.length) {
-      body = '<tr><td colspan="6"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияМоиПуст') + '>' +
+      body = '<tr><td colspan="7"><div class="empty"' + a1c('ГруппаВертикальная', 'ГруппаЧекЛистЗакрытияМоиПуст') + '>' +
         '<span' + a1c('Надпись', 'ДекорацияЧекЛистЗакрытияМоиПуст') + '>У вас нет пунктов закрытия</span>' +
         link('Показать все', { action: 'ccMode', data: { value: 'all' }, name: 'ГиперссылкаПоказатьВсеПунктыЗакрытия' }) + '</div></td></tr>';
     } else {
       body = list.map(function (c) { return closureRow(t, c); }).join('');
     }
     var table = '<div class="table-box"><table class="grid checklist-table" data-resize="cc"' + a1c('ТаблицаФормы', 'ТаблицаЧекЛистЗакрытия') + '>' +
-      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
-      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
+      '<colgroup><col class="w-check" data-col="check"><col data-col="name"><col class="w-cl-status" data-col="status"><col class="w-resp" data-col="resp"><col class="w-date" data-col="date"><col class="w-fact" data-col="fact"><col class="w-action" data-col="action"></colgroup>' +
+      '<thead><tr><th title="Выполнено"></th><th>Пункт</th><th>Статус</th><th>Исполнитель</th><th>Срок</th><th>Дата выполнения (факт)</th><th>Действие</th></tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
     return '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаСтраницаЗакрытие') + '>' + lockRow + bar + table + '</div>';
   }
@@ -2195,12 +2195,12 @@
     return '<td><span class="cl-mark' + (c.done ? ' on' : '') + (auto ? ' auto' : '') + '" role="img" title="' + esc(title) + '" aria-label="' + esc(title + ': ' + c.name) + '"' +
       a1c('Флажок', ITEM_KINDS[kind].prefix + 'Выполнено') + '>' + (c.done ? icon('check') : '') + '</span></td>';
   }
-  function itemStateBadge(kind, c) {
+  // FT_28: колонка «Статус» (было — бейдж «В работе» / «На проверке» рядом с названием пункта)
+  function itemStatusCell(kind, c) {
     var st = itemStatus(c);
+    var m = STATUS_META[st];
     var P = ITEM_KINDS[kind].prefix;
-    if (st === 'in_progress') return badge('info', 'В работе', P + 'ВРаботе');
-    if (st === 'review') return '<span title="' + esc('Проверяющий: ' + userName(c.reviewerId)) + '">' + badge('warning', 'На проверке', P + 'НаПроверке') + '</span>';
-    return '';
+    return '<td' + (st === 'review' && c.reviewerId ? ' title="' + esc('Проверяющий: ' + userName(c.reviewerId)) + '"' : '') + '>' + badge(m.tone, m.text, P + 'Статус') + '</td>';
   }
   // «Выполнить ▾»: основная часть — выполнить, в меню — «Взять в работу». У выполненных и отправленных на проверку кнопки нет
   function itemActionCell(kind, t, c) {
@@ -2222,8 +2222,9 @@
     var P = ITEM_KINDS[kind].prefix;
     return '<tr class="cl-row" tabindex="0" data-id="' + c.id + '" data-item-kind="' + kind + '" data-item-id="' + c.id + '" title="Двойной клик — открыть задачу">' +
       itemMarkCell(kind, c) +
-      '<td><div class="row gap-2"><div class="ellipsis grow" title="' + esc(c.name) + '"' + a1c('Надпись', P + 'Пункт') + '>' + esc(c.name) + '</div>' + itemStateBadge(kind, c) + '</div>' +
+      '<td><div class="ellipsis" title="' + esc(c.name) + '"' + a1c('Надпись', P + 'Пункт') + '>' + esc(c.name) + '</div>' +
         (c.optional ? '<div class="muted text-s"' + a1c('Надпись', P + 'Необязательно') + '>необязательно</div>' : '') + '</td>' +
+      itemStatusCell(kind, c) +
       whoCell(c.doneBy, c.responsibleId, c.done, P, kind === 'cl' ? userName : personById) +
       dueCell(itemDate(kind, c), itemOverdue(kind, c), kind === 'cl' ? offsetText(c.offsetDays) : closureOffsetText(c.offsetDays), P) +
       factCell(c, P) + itemActionCell(kind, t, c) + '</tr>';
@@ -2616,10 +2617,11 @@
     { id: 'task',   title: 'Задача', locked: true, name: 'Задача' },
     { id: 'source', title: 'Источник', w: 'w-src', sort: true, name: 'Источник' },
     { id: 'type',   title: 'Тип задачи', w: 'w-type', sort: true, name: 'ТипЗадачи' },
+    { id: 'status', title: 'Статус', w: 'w-status', name: 'Статус' },   // FT_28: «Не начата» / «В работе», у выполненной — результат, у наблюдателя — статус задачи АП
     { id: 'due',    title: 'Срок', w: 'w-due', name: 'Срок' },
     { id: 'author', title: 'Автор', w: 'w-author', name: 'Автор' },
     { id: 'adept',  title: 'Подразделение автора', w: 'w-adept', name: 'ПодразделениеАвтора' },
-    { id: 'action', title: 'Действие', doneTitle: 'Результат', obsTitle: 'Статус', w: 'w-act', locked: true, name: 'Действие' }   // FT_19: у наблюдателя — статус задачи
+    { id: 'action', title: 'Действие', w: 'w-act', locked: true, name: 'Действие' }   // FT_28: у выполненных и у наблюдателя команд нет — колонка скрыта
   ];
   var NOTE_COLS = [
     { id: 'sev',    title: 'Важность', w: 'w-sev', noHeader: true, name: 'Важность' },
@@ -2644,7 +2646,8 @@
   }
   function visibleCols(table) {
     var cfg = formSettings(table).cols;
-    return orderedCols(table).filter(function (c) { return c.locked || !(cfg[c.id] && cfg[c.id].hidden); });
+    var noAct = table === 'tasks' && (state.tv.filter === 'done' || state.tv.filter === 'observed');   // FT_28: результат и статус — в колонке «Статус»
+    return orderedCols(table).filter(function (c) { return (c.locked || !(cfg[c.id] && cfg[c.id].hidden)) && !(noAct && c.id === 'action'); });
   }
   function colTitle(table, c, doneMode) {
     var cfg = formSettings(table).cols[c.id];
@@ -2909,20 +2912,36 @@
       task: '<td><div class="row gap-1 tv-subject">' +
           (li >= 0 ? impFlag(li, 'Важность: ' + imp.levels[li].name, 'ТаблицаМоиЗадачиВажность') : '') +
           '<span class="clamp2 grow" title="' + esc(full) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиЗадача', 'check') + '><b>' + esc(tm.text) + ':</b> ' + esc(x.subject) + '</span>' +
-          (x.inWork ? badge('info', 'В работе', 'ТаблицаМоиЗадачиВРаботе') : '') + '</div>' +
+          tvRedirectMark(x) + '</div>' +
         (x.context ? '<div class="muted text-s ellipsis" title="' + esc(x.context) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиКонтекст') + '>' + esc(x.context) + '</div>' : '') + '</td>',
       source: '<td>' + sourceBadge(x.source, 'ТаблицаМоиЗадачиИсточник') + '</td>',
       type: '<td>' + badge(tm.tone, tm.text, 'ТаблицаМоиЗадачиТипЗадачи') + '</td>',
+      status: '<td class="tv-status">' + (x.done ? tvResultCell(x) : x.kind === 'ob' ? tvObservedStatus(x) : tvActiveStatus(x)) + '</td>',   // FT_28
       due: tvDueCell(x),
       author: '<td><div class="clamp2" title="' + esc(personById(x.authorId)) + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиАвтор') + '>' + esc(personById(x.authorId)) + '</div></td>',
       adept: '<td><div class="clamp2' + (dept_ ? '' : ' muted') + '" title="' + esc(dept_ || 'Подразделение не указано') + '"' + a1c('Надпись', 'ТаблицаМоиЗадачиПодразделениеАвтора') + '>' + esc(dept_ || '—') + '</div></td>',
-      action: '<td>' + (x.done ? tvResultCell(x) : x.kind === 'ob' ? tvObservedStatus(x) : tvActionCell(x)) + '</td>'
+      action: '<td>' + (x.done || x.kind === 'ob' ? '' : tvActionCell(x)) + '</td>'
     };
     return '<tr class="tv-row' + (selected ? ' selected' : '') + '" data-tv-key="' + esc(x.key) + '" title="Двойной клик — открыть карточку задачи">' +
       '<td>' + (x.done || x.kind === 'ob' ? '' : '<input type="checkbox" data-tv-select="' + esc(x.key) + '"' + (selected ? ' checked' : '') + ' title="Выбрать задачу" aria-label="' + esc('Выбрать задачу «' + full + '»') + '"' + a1c('Флажок', 'ТаблицаМоиЗадачиВыбрана') + '>') + '</td>' +
       visibleCols('tasks').map(function (c) { return cells[c.id]; }).join('') + '</tr>';
   }
 
+  // FT_28: статус активной задачи — «Не начата» или «В работе» (было — бейдж «В работе» рядом с названием)
+  function tvActiveStatus(x) { return x.inWork ? badge('info', 'В работе', 'ТаблицаМоиЗадачиСтатус') : badge('neutral', 'Не начата', 'ТаблицаМоиЗадачиСтатус'); }
+  // FT_28: отметка «Задача перенаправлена» — у нового исполнителя; кто и когда перенаправил — в подсказке и в карточке задачи
+  function tvRedirectOf(x) { var r = D.taskRedirects[x.markKey || x.key]; return r && r.to === D.CURRENT_USER_ID ? r : null; }
+  function tvRedirectText(r) { return 'Перенаправил: ' + personById(r.by) + (r.at ? ', ' + fmtStamp(r.at) : '') + (r.comment ? '. Комментарий: «' + r.comment + '»' : ''); }
+  function tvRedirectMark(x) {
+    var r = tvRedirectOf(x);
+    return r ? '<span class="tv-redirect" role="img" title="' + esc(tvRedirectText(r)) + '" aria-label="' + esc('Задача перенаправлена. ' + tvRedirectText(r)) + '"' +
+      a1c('Картинка', 'ТаблицаМоиЗадачиПеренаправлена') + '>' + icon('arrowFill') + '</span>' : '';
+  }
+  function personInfo(id) {   // «ФИО (подразделение, должность)»
+    var u = user(id);
+    var bits = [authorDept(id), u && u.role ? u.role.charAt(0).toLowerCase() + u.role.slice(1) : ''].filter(Boolean);
+    return personById(id) + (bits.length ? ' (' + bits.join(', ') + ')' : '');
+  }
   // FT_19: статус задачи АП у наблюдателя (вместо команд выполнения)
   function tvObservedStatus(x) {
     var m = STATUS_META[x.itemKind ? itemViewStatus(x.itemKind, x.ref) : viewStatus(x.ref)];
@@ -3027,6 +3046,8 @@
     var change = userName(D.CURRENT_USER_ID) + ' → ' + userName(uid) + note;
     var t = x.traineeId ? trainee(x.traineeId) : null;
     var program = t ? programOf(t) : null;
+    // FT_28: отметка о перенаправлении — у задачи; повторное перенаправление заменяет ее
+    D.taskRedirects[x.markKey || x.key] = { by: D.CURRENT_USER_ID, to: uid, at: nowStamp(), comment: required(comment) ? comment.trim() : '' };
     if (x.kind === 'rt') x.ref.assigneeId = uid;
     else if (x.kind === 'ap') {
       x.ref.approval.steps[currentStepIndex(x.ref)].userId = uid;
@@ -4815,6 +4836,7 @@
       var li = levelIndex(imp.marks[x.markKey || x.key]);
       var dept_ = authorDept(x.authorId);
       var hint = x.done ? null : tvDueHint(x);
+      var redir = tvRedirectOf(x);   // FT_28
       var d = x.done;
       var r = d ? DONE_RESULT[d.result] || DONE_RESULT.done : null;
       return '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачи') + '>' +
@@ -4830,6 +4852,9 @@
         field('Подразделение автора', tvCardValue(esc(dept_ || '—'), 'ДекорацияПодразделениеАвтораЗадачи', dept_ ? '' : 'muted')) +
         field('Дата создания', tvCardValue(x.createdAt ? fmtStamp(x.createdAt) : '—', 'ДекорацияДатаСозданияЗадачи')) +
         field('Срок выполнения', tvCardValue((x.deadline ? fmtDate(x.deadline) : '—') + (hint ? ' <span class="text-s ' + hint.cls + '">' + esc(hint.text) + '</span>' : ''), 'ДекорацияСрокЗадачи')) +
+        (redir ? '<div class="col gap-3"' + a1c('ГруппаВертикальная', 'ГруппаПеренаправлениеЗадачи') + '>' +   // FT_28
+          field('Перенаправил', tvCardValue(esc(personInfo(redir.by)) + (redir.at ? ' <span class="text-s muted">' + fmtStamp(redir.at) + '</span>' : ''), 'ДекорацияПеренаправилЗадачу')) +
+          (redir.comment ? field('Комментарий перенаправления', tvCardValue(esc(redir.comment), 'ДекорацияКомментарийПеренаправления', 'tv-card-text')) : '') + '</div>' : '') +
         field('Предмет', '<div class="tv-card-value">' + link(x.subjectText, { action: 'tvOpenSubject', data: { key: x.key }, name: 'ГиперссылкаПредметЗадачи',
           title: x.source === 'recruit' ? 'Открыть документ подбора персонала' : 'Открыть карточку стажера в новой вкладке' }) + '</div>') +
         (d ? '<div class="col gap-3 tv-card-done"' + a1c('ГруппаВертикальная', 'ГруппаВыполнениеЗадачи') + '>' +

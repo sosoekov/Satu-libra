@@ -457,9 +457,9 @@ table.grid.task-table td { vertical-align: middle; }
 /* ================= Вкладка «Подготовка к выходу» ================= */
 .checklist-table { table-layout: fixed; }
 .checklist-table .w-check { width: 36px; }
-.checklist-table .w-resp { width: 240px; }
-.checklist-table .w-fact { width: 150px; }
-.checklist-table .w-date { width: 150px; }
+.checklist-table .w-resp { width: 190px; }   /* FT_28: уже — место под колонку «Статус» */
+.checklist-table .w-fact { width: 110px; }
+.checklist-table .w-date { width: 120px; }
 .checklist-table .w-action { width: 150px; }
 table.grid.checklist-table td { vertical-align: middle; }
 /* Фаза 9, 6.4: все строки одной высоты — две строки текста */
@@ -731,8 +731,8 @@ table.grid.tv-table td { vertical-align: middle; }
 .tv-table .w-src { width: 96px; }
 .tv-table .w-type { width: 116px; }
 .tv-table .w-due { width: 132px; }
-.tv-table .w-author { width: 14%; }
-.tv-table .w-adept { width: 15%; }
+.tv-table .w-author { width: 12%; }   /* FT_28: уже — место под колонку «Статус» */
+.tv-table .w-adept { width: 12%; }
 .tv-table .w-act { width: 168px; }
 .tv-table .w-sev { width: 32px; }
 .tv-table .w-date { width: 120px; }
@@ -757,11 +757,11 @@ table.grid.imp-table td { vertical-align: middle; }
 .imp-name { width: 100%; }
 /* Узкий экран: колонки таблицы задач уже, все колонки остаются видимыми (длинный текст — две строки и подсказка) */
 @media (max-width: 1500px) {
-  .tv-table .w-src { width: 84px; }
-  .tv-table .w-type { width: 104px; }
-  .tv-table .w-due { width: 120px; }
-  .tv-table .w-author { width: 12%; }
-  .tv-table .w-adept { width: 13%; }
+  .tv-table .w-src { width: 80px; }
+  .tv-table .w-type { width: 100px; }
+  .tv-table .w-due { width: 112px; }
+  .tv-table .w-author { width: 10%; }
+  .tv-table .w-adept { width: 10%; }
   .tv-table .w-act { width: 136px; }
   .tv-action .split { width: 122px; }
   .tv-action .split .split-main { padding: 0 var(--sp-2); }
@@ -1003,3 +1003,14 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: var(--fs-s); line-height: 1.4; color: var(--c-text); white-space: normal;
 }
 .hint-wrap.open .hint-pop { display: block; }
+
+/* ---------- FT_28: колонка «Статус» в списке задач и чек-листах; отметка «Задача перенаправлена» ---------- */
+.tv-table .w-status { width: 112px; }
+.checklist-table .w-cl-status { width: 104px; }
+.tv-status .badge { white-space: normal; text-align: left; }   /* «Возвращено на доработку» — в две строки */
+.tv-status .muted { white-space: nowrap; }
+.tv-redirect { display: inline-flex; flex: 0 0 auto; color: var(--c-info); }
+.tv-redirect svg { width: 14px; height: 14px; }
+@media (max-width: 1500px) {
+  .tv-table .w-status { width: 104px; }
+}
