@@ -259,6 +259,7 @@
     info: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r=".9" fill="currentColor"/>',
     alert: '<circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="11.3" r=".9" fill="currentColor"/>',
     dot: '<circle cx="8" cy="8" r="5" fill="currentColor"/>',
+    archive: '<rect x="2" y="3" width="12" height="3.2" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.2 6.2V12a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V6.2M6.5 8.8h3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     circleX: '<circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     arrowFill: '<path d="M2 6h6.5V3L14 8l-5.5 5v-3H2z" fill="currentColor"/>',
     arrowUp: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -837,7 +838,10 @@
     // FT_26: кандидаты, отмененные до подтверждения выхода, — карточки справа (вернуть или подтвердить выход); отделены чертой,
     // скрываются командой меню «Показывать отмененных»
     { id: 'cancelled',    title: 'Отмененные',          icon: 'circleX',  color: 'stage-found',    name: 'Отмененные', sepBefore: true,
-      hidden: function () { return !state.showCancelled; }, match: function () { return false; }, count: function () { return myCancelled().length; } }
+      hidden: function () { return !state.showCancelled; }, match: function () { return false; }, count: function () { return myCancelled().length; } },
+    // FT_29: закрытые стажировки (завершенные и отмененные после старта) — только здесь: в дереве, списке и других фильтрах их нет
+    { id: 'archive',      title: 'Архив стажировок',    icon: 'archive',  color: 'stage-found',    name: 'АрхивСтажировок',
+      match: function (t) { return isClosed(t); } }
   ];
   function filterById(id) {
     for (var i = 0; i < FILTERS.length; i++) if (FILTERS[i].id === id) return FILTERS[i];
@@ -868,8 +872,10 @@
   // ignoreDept — без отбора по подразделению (для дерева слева: в нем выбирают подразделение)
   function visibleTrainees(ignoreDept) {
     var q = searchQuery();
-    return myTrainees().filter(function (t) { return traineeMatchesCounter(t) && traineeMatchesSearch(t, q) && (ignoreDept || traineeMatchesDept(t)); });
+    return myTrainees().filter(function (t) { return inArchiveView(t) && traineeMatchesCounter(t) && traineeMatchesSearch(t, q) && (ignoreDept || traineeMatchesDept(t)); });
   }
+  // FT_29: закрытые стажировки видны только в «Архиве стажировок», остальные — везде, кроме него
+  function inArchiveView(t) { return (state.counterFilter === 'archive') === isClosed(t); }
   // FT_18: стажер в выбранном подразделении или во вложенном
   function traineeMatchesDept(t) {
     return !state.deptFilter || deptChain(t.departmentId).some(function (d) { return d.id === state.deptFilter; });
@@ -974,6 +980,7 @@
     var text = searchQuery() ? 'Никого не нашли'
       : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
       : state.counterFilter === 'cancelled' && place === 'Дерево' ? 'Отмененные кандидаты — справа; в дерево они попадут после подтверждения выхода'   // FT_26
+      : state.counterFilter === 'archive' ? 'В архиве нет стажировок: сюда попадают завершенные и отмененные стажировки'   // FT_29
       : state.counterFilter ? 'Нет стажеров по фильтру «' + filterById(state.counterFilter).title + '»' + (state.deptFilter && place !== 'Дерево' ? ' в подразделении «' + dept(state.deptFilter).name + '»' : '')
       : state.deptFilter ? 'Нет стажеров в подразделении «' + dept(state.deptFilter).name + '»'   // FT_18
       : 'Нет стажеров';   // FT_23: у пользователя не осталось видимых стажеров (например, руководитель передал стажировку)
@@ -1231,7 +1238,7 @@
           '<span class="muted"' + a1c('Надпись', 'ТаблицаСтажеровГруппаПодразделениеКоличество') + '>' + n.count + '</span></span></td></tr>';
     }).join('');
 
-    var total = myTrainees().length;
+    var total = myTrainees().filter(function (t) { return !isClosed(t); }).length;   // FT_29: без архива
     var chips = '';
     if (state.counterFilter) {
       chips += '<span class="chip"' + a1c('ГруппаГоризонтальная', 'ГруппаЧипФильтра') + '><span' + a1c('Надпись', 'ДекорацияЧипФильтра') + '>' +
@@ -1261,7 +1268,9 @@
         '</div>';
     }
     var pending = !state.counterFilter || pendingOnly ? myPending().filter(function (t) { return traineeMatchesSearch(t, searchQuery()) && traineeMatchesDept(t); }) : [];
-    var head = pendingOnly ? 'Ожидают решения: ' + pending.length : 'Стажеры: ' + (chips ? list.length + ' из ' + total : list.length);
+    var head = pendingOnly ? 'Ожидают решения: ' + pending.length
+      : state.counterFilter === 'archive' ? 'Архив стажировок: ' + list.length   // FT_29
+      : 'Стажеры: ' + (chips ? list.length + ' из ' + total : list.length);
     return '<div class="col gap-3 summary"' + a1c('ГруппаВертикальная', 'ГруппаСводка') + '>' +
       (pendingOnly ? '' : pendingBlock(pending, false)) +
       '<div class="row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаголовокСводки') + '>' +
@@ -1351,6 +1360,7 @@
     return 'АП_' + p[0] + (p[1] ? '_' + p[1][0] : '') + (p[2] ? '_' + p[2][0] : '') + '.docx';
   }
   function isClosed(t) { return t.stage === 'closed'; }
+  function programApproved(t) { return ['active', 'closing', 'closed'].indexOf(t.stage) >= 0; }   // FT_29
 
   function renderTraineeCard(t) {
     // Крупные блоки через 16px (фаза 9, раздел 4.1): «← Все стажеры» с ⋮ ?, карточка, уведомления, вкладки
@@ -1554,8 +1564,16 @@
       (open ? '<div class="menu ' + (opts.float ? 'menu-float' : 'menu-pop') + '"' + a1c(type, name + 'Список') + '>' + items.join('') + '</div>' : '') +
       '</div>';
   }
+  // FT_29: выпадающее меню выравнивается по правому краю кнопки; если так оно уходит за левый край области (под левую панель) — по левому краю
+  function fitPopMenus() {
+    Array.prototype.forEach.call(document.querySelectorAll('.menu-pop'), function (m) {
+      var zone = m.closest('.zone-center, .zone-left, .modal') || document.body;
+      if (m.getBoundingClientRect().left < zone.getBoundingClientRect().left) m.classList.add('menu-pop-left');
+    });
+  }
   // Меню строки таблицы — поверх прокручиваемого контейнера, координаты от кнопки
   function placeFloatingMenu() {
+    fitPopMenus();
     var m = document.querySelector('.menu-float');
     if (!m) return;
     var r = (m.parentNode.querySelector('[data-action="toggleMenu"]') || m.parentNode.querySelector('button')).getBoundingClientRect();
@@ -1709,6 +1727,8 @@
   function renderProgramTab(t) {
     var program = programOf(t);
     if (!program && isTraineeUser()) return '<div class="empty"' + a1c('Надпись', 'ДекорацияАПЕщеНеСоздана') + '>Адаптационная программа еще не создана</div>';
+    // FT_29: стажер видит задачи АП только после согласования всеми участниками (этапы «Стажировка», «Закрытие», «Закрыта»)
+    if (isTraineeUser() && !programApproved(t)) return '<div class="empty"' + a1c('Надпись', 'ДекорацияАПЕщеНеСогласована') + '>Адаптационная программа еще не согласована</div>';
     if (!program) return renderProgramEmpty(t);
     var all = tasksOf(program);
     var lock = isTraineeUser() ? null : editLock(t);   // FT_9: у стажера строки запрета нет — изменения ему недоступны в принципе
