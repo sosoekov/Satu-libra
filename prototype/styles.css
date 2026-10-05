@@ -1029,3 +1029,8 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .brq-form .brq-ro { background: var(--c-bg-panel); color: var(--c-text-secondary); }   /* из АП и физлица — только просмотр */
 .brq-form .input-date { max-width: 180px; }
 .brq-status .select { max-width: 360px; }
+
+/* ---------- EXP_1: ссылки в карточке задачи пользователя ---------- */
+.tv-card-links { margin-top: var(--sp-1); }
+.tv-card-link-row > .input { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: 32px; height: auto; }
+.tv-card-link-comment { white-space: normal; }

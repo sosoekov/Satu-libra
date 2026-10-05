@@ -3677,10 +3677,10 @@
   function isInternalUrl(u) { return INTERNAL_URL_RE.test(u || ''); }
   function internalCommand(u) { return u.replace(/^e1c:\/\/[^#]+#/, '').replace(/^e1cib\/command\//, ''); }
   var BITRIX_DOC_COMMAND = 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать';
-  function openLink(url) {
+  function openLink(url, traineeId) {
     if (!isInternalUrl(url)) { toast('Ссылка откроется в браузере: ' + url); return; }
     var cmd = internalCommand(url);
-    var tid = (state.dialog && state.dialog.traineeId) || state.selectedTraineeId;
+    var tid = traineeId || (state.dialog && state.dialog.traineeId) || state.selectedTraineeId;
     if (cmd === BITRIX_DOC_COMMAND) {
       if (!tid) { toast('Заявка на трудоустройство открывается из задачи стажера'); return; }
       openKindTab('brq', tid);
@@ -5047,6 +5047,25 @@
     var cmd = TV_COMMANDS[x.type];
     return cmd.items.length ? cmd.items : [[cmd.main, byId(TV_TYPES, x.type).text, byId(TV_TYPES, x.type).name]];
   }
+  // EXP_1: «Ссылки для ознакомления» в карточке задачи — если у задачи (пункта чек-листа, задачи АП) есть ссылки; только просмотр.
+  // Ссылка — гиперссылка и кнопка «Открыть»: внутренняя открывает объект 1С в новой вкладке, внешняя — браузер
+  function tvCardLinks(x) {
+    var links = x.kind !== 'ap' && x.ref && x.ref.links ? x.ref.links.filter(function (l) { return linkById(l.linkId); }) : [];
+    if (!links.length) return '';
+    return '<div class="col gap-2 tv-card-links"' + a1c('ГруппаВертикальная', 'ГруппаСсылкиЗадачиПользователя') + '>' +
+      '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияСсылкиЗадачиПользователя') + '>Ссылки для ознакомления</div>' +
+      links.map(function (l) {
+        var lk = linkById(l.linkId);
+        var data = { url: lk.url, trainee: x.traineeId || '' };
+        return '<div class="row gap-3 tv-card-link-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСсылкаЗадачиПользователя') + '>' +
+          '<div class="input row gap-1 tv-card-link" title="' + esc(lk.url) + '">' +
+            '<span class="grow ellipsis">' + link(lk.name, { action: 'openLinkUrl', data: data, title: lk.url, name: 'ТаблицаСсылкиЗадачиПользователяСсылка' }) + '</span>' +
+            button('', { cls: 'btn-icon btn-flat btn-small', icon: 'openCard', action: 'openLinkUrl', data: data,
+              title: (isInternalUrl(lk.url) ? 'Открыть в новой вкладке: ' : 'Открыть в браузере: ') + lk.name, type: 'НЕ_ПЕРЕНОСИТЬ', name: 'ТаблицаСсылкиЗадачиПользователяКнопкаОткрытия' }) + '</div>' +
+          '<div class="input tv-card-link-comment' + (l.comment ? '' : ' muted') + '"' + a1c('Надпись', 'ТаблицаСсылкиЗадачиПользователяКомментарий') + '>' + esc(l.comment || 'Комментарий') + '</div>' +
+          '</div>';
+      }).join('') + '</div>';
+  }
   DIALOGS.tvTask = {
     form: 'ФормаЗадачаПользователя', wide: true, readOnly: true, plainClose: true, noCloseButton: true,
     titleFn: function () { var x = tvTaskByKey(dlgCtx().key); return x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : 'Задача'; },
@@ -5079,6 +5098,7 @@
           (redir.comment ? field('Комментарий перенаправления', tvCardValue(esc(redir.comment), 'ДекорацияКомментарийПеренаправления', 'tv-card-text')) : '') + '</div>' : '') +
         field('Предмет', '<div class="tv-card-value">' + link(x.subjectText, { action: 'tvOpenSubject', data: { key: x.key }, name: 'ГиперссылкаПредметЗадачи',
           title: x.source === 'recruit' ? 'Открыть документ подбора персонала' : 'Открыть карточку стажера в новой вкладке' }) + '</div>') +
+        tvCardLinks(x) +   // EXP_1: ссылки задачи
         (d ? '<div class="col gap-3 tv-card-done"' + a1c('ГруппаВертикальная', 'ГруппаВыполнениеЗадачи') + '>' +
           field('Результат', tvCardValue(esc(r[1]), 'ДекорацияРезультатВыполнения')) +
           field('Выполнил', tvCardValue(esc(d.by ? personById(d.by) : '—'), 'ДекорацияВыполнилЗадачу')) +
@@ -5806,7 +5826,7 @@
       state.dialog.values.observers = [];
       renderDialog();
     },
-    openLinkUrl: function (btn) { openLink(btn.getAttribute('data-url')); },   // EXP_1: внутренние — объект 1С в новой вкладке
+    openLinkUrl: function (btn) { openLink(btn.getAttribute('data-url'), btn.getAttribute('data-trainee')); },   // EXP_1: внутренние — объект 1С в новой вкладке
     openExecutorCard: function () {   // FT_23
       if (state.dialog.values.executorId) toast('Откроется карточка сотрудника: ' + personById(state.dialog.values.executorId));
     },
