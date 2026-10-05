@@ -4668,6 +4668,10 @@
    */
   var BRQ_EMPLOYMENT = [{ value: 'main', text: 'Основное место работы' }, { value: 'ext', text: 'Внешнее совместительство' }, { value: 'int', text: 'Внутреннее совместительство' }];
   var BRQ_PROBATION = [{ value: '14d', text: '14 дней' }, { value: '1m', text: '1 месяц' }, { value: '2m', text: '2 месяца' }, { value: '3m', text: '3 месяца' }, { value: 'none', text: 'Нет испытательного срока' }];
+  // EXP_1: статус заявки — поле выбора в шапке; у новой — «Новая» (в 1С статус будет приходить из Bitrix)
+  var BRQ_STATUSES = [{ value: 'new', text: 'Новая' }, { value: 'incorrect', text: 'Некорректно заполнена заявка' }, { value: 'returned', text: 'Возвращено на корректировку' },
+    { value: 'rejected', text: 'Отклонено рук.ЦФО' }, { value: 'cfo', text: 'Передано на согласование рук.ЦФО' }, { value: 'fes', text: 'Передано на согласование ФЭС' },
+    { value: 'sup', text: 'Передано на оформление в СУП' }, { value: 'hired', text: 'Сотрудник трудоустроен' }, { value: 'cancelled', text: 'Прием отменен' }];
   var BRQ_FORMAT = [{ value: 'full', text: 'Полный рабочий день' }, { value: 'part', text: 'Неполный рабочий день' }];
   // Числовые поля: имя → [подпись для ошибки, максимум]
   var BRQ_NUMBERS = { incomeProbation: [null], incomeMain: [null], salary: [null], rate: [null], northBonus: [100], regionalCoeff: [null] };
@@ -4675,11 +4679,12 @@
   function brqOf(traineeId) { return D.bitrixRequests.filter(function (r) { return r.traineeId === traineeId; })[0] || null; }
   function brqInitValues(traineeId) {
     var r = brqOf(traineeId);
-    if (r) return JSON.parse(JSON.stringify(r.values));
+    if (r) return JSON.parse(JSON.stringify(r.values));   // EXP_1: записанный документ
     var t = trainee(traineeId);
     return { fullName: t.fullName, phone: t.phone || '', email: t.email || '', employment: 'main', hireDate: t.startDate || '', position: t.position || '', city: t.city || '',
       remote: false, cfoId: t.departmentId || '', probation: '', workFormat: 'full', student: false, incomeProbation: '', incomeMain: '', supComment: '',
-      legalEntityId: '', departmentId: '', regPosition: '', salary: '', rate: '', northBonus: '', regionalCoeff: '', fesComment: '' };
+      legalEntityId: '', departmentId: '', regPosition: '', salary: '', rate: '', northBonus: '', regionalCoeff: '', fesComment: '',
+      supFinalComment: '', hireDateFact: '', status: 'new' };
   }
   function brqTitle(tab) {
     var r = brqOf(tab.traineeId);
@@ -4709,6 +4714,7 @@
     else if (kind === 'check') return '<div class="field-row"><span class="field-label"></span><label class="check"><input type="checkbox" id="' + id + '" data-brq-field="' + name + '"' +
       (v ? ' checked' : '') + a1c('Флажок', oneC) + '> ' + esc(label) + '</label></div>';
     else if (kind === 'textarea') control = '<textarea class="textarea" rows="3"' + attrs + '>' + esc(v) + '</textarea>';
+    else if (kind === 'date') control = '<input type="date" class="input input-date"' + attrs + ' value="' + esc(v) + '">';
     else control = '<input type="' + (kind === 'number' ? 'number' : 'text') + '" class="input' + (kind === 'number' ? ' input-num' : '') + '"' +
       (kind === 'number' ? ' min="0" step="any"' : '') + attrs + ' value="' + esc(v) + '"' + (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>';
     return field(label, control + (opts.hint ? '<div class="muted text-s">' + esc(opts.hint) + '</div>' : ''), { forId: id, error: err, name: oneC.replace(/^Поле/, '') });
@@ -4718,8 +4724,12 @@
   function renderBitrixDoc(tab) {
     var r = brqOf(tab.traineeId);
     var t = trainee(tab.traineeId);
-    var pages = [{ id: 'sup', text: 'Поля формы заявки СУП', name: 'СтраницаПоляФормыЗаявкиСУП' }, { id: 'fes', text: 'Поля согласования ФЭС', name: 'СтраницаПоляСогласованияФЭС' }];
-    var body = tab.page === 'sup'
+    var pages = [{ id: 'sup', text: 'Поля формы заявки СУП', name: 'СтраницаПоляФормыЗаявкиСУП' }, { id: 'fes', text: 'Поля согласования ФЭС', name: 'СтраницаПоляСогласованияФЭС' },
+      { id: 'fin', text: 'Поля завершения СУП', name: 'СтраницаПоляЗавершенияСУП' }];
+    var body = tab.page === 'fin'
+      ? brqField(tab, 'Комментарий СУП', 'supFinalComment', 'ПолеКомментарийСУП', 'textarea') +
+        brqField(tab, 'Дата приема (фактическая)', 'hireDateFact', 'ПолеДатаПриемаФактическая', 'date')
+      : tab.page === 'sup'
       ? brqField(tab, 'ФИО сотрудника', 'fullName', 'ПолеФИОСотрудника', 'ro', { title: BRQ_FROM_AP }) +
         brqField(tab, 'Мобильный телефон', 'phone', 'ПолеМобильныйТелефон', 'ro', { title: BRQ_FROM_PERSON }) +
         brqField(tab, 'Email сотрудника', 'email', 'ПолеEmailСотрудника', 'ro', { title: BRQ_FROM_PERSON }) +
@@ -4750,10 +4760,11 @@
       '<div class="row gap-4 brq-head"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаЗаявки') + '>' +
         '<span class="muted"' + a1c('Надпись', 'ДекорацияНомерЗаявки') + '>' + (r ? 'Номер ' + esc(r.number) + ' от ' + fmtDate(r.date) : 'Новый документ — номер присвоится при записи') + '</span>' +
         '<span' + a1c('Надпись', 'ДекорацияСтажерЗаявки') + '>Стажер: ' + esc(t.fullName) + '</span></div>' +
+      '<div class="brq-form brq-status"' + a1c('ГруппаГоризонтальная', 'ГруппаСтатусЗаявки') + '>' + brqField(tab, 'Статус', 'status', 'ПолеСтатусЗаявки', 'select', { options: BRQ_STATUSES }) + '</div>' +
       '<div class="tabs"' + a1c('Страницы', 'СтраницыЗаявки') + '>' + pages.map(function (x) {
         return '<button type="button" class="tab' + (tab.page === x.id ? ' active' : '') + '" data-action="brqPage" data-tab="' + x.id + '"' + a1c('Страница', x.name) + '>' + x.text + '</button>';
       }).join('') + '</div>' +
-      '<div class="col gap-3 brq-form"' + a1c('ГруппаВертикальная', tab.page === 'sup' ? 'ГруппаПоляФормыЗаявкиСУП' : 'ГруппаПоляСогласованияФЭС') + '>' + body + '</div>' +
+      '<div class="col gap-3 brq-form"' + a1c('ГруппаВертикальная', tab.page === 'sup' ? 'ГруппаПоляФормыЗаявкиСУП' : tab.page === 'fes' ? 'ГруппаПоляСогласованияФЭС' : 'ГруппаПоляЗавершенияСУП') + '>' + body + '</div>' +
       '</div>';
   }
   function brqErrors(v) {

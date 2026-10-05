@@ -1027,3 +1027,5 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .brq-form .input-num { max-width: 180px; }
 .brq-head { align-items: baseline; }
 .brq-form .brq-ro { background: var(--c-bg-panel); color: var(--c-text-secondary); }   /* из АП и физлица — только просмотр */
+.brq-form .input-date { max-width: 180px; }
+.brq-status .select { max-width: 360px; }
