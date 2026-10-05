@@ -981,7 +981,25 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .tpl-table .w-days { width: 90px; }
 .tpl-table .w-extra { width: 18%; }
 .tpl-table .w-type { width: 110px; }
-.tpl-term-row .tf-check { margin-top: 30px; }
 
 /* ---------- FT_26: подписи формы подтверждения выхода в одну строку ---------- */
 .modal[data-1c-name="ФормаСтартСтажировки"] .field-label { flex: 0 0 210px; width: 210px; white-space: nowrap; }
+
+/* ---------- FT_27: карточка задачи — две колонки реквизитов; «Обязательная задача» с подсказкой «?» ---------- */
+.tf-cols { align-items: flex-start; }
+.tf-col { display: flex; flex-direction: column; gap: var(--sp-4); flex: 1 1 0; min-width: 0; }
+.tf-col > .tf-row { gap: var(--sp-4); }
+.tf-req { padding-top: 21px; }
+.tf-req .check { white-space: nowrap; }
+.hint-wrap { position: relative; display: inline-flex; align-self: flex-start; }
+.hint-q {
+  width: 16px; height: 16px; padding: 0; border: 1px solid var(--c-text-secondary); border-radius: 50%;
+  background: var(--c-bg); color: var(--c-text-secondary); font-size: 11px; line-height: 14px; text-align: center; cursor: pointer;
+}
+.hint-q:hover, .hint-wrap.open .hint-q { border-color: var(--c-primary); color: var(--c-primary); }
+.hint-pop {
+  display: none; position: absolute; z-index: 30; top: 22px; right: -8px; width: 260px;
+  padding: var(--sp-2) var(--sp-3); border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: var(--fs-s); line-height: 1.4; color: var(--c-text); white-space: normal;
+}
+.hint-wrap.open .hint-pop { display: block; }
