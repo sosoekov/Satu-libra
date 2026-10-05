@@ -982,3 +982,6 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .tpl-table .w-extra { width: 18%; }
 .tpl-table .w-type { width: 110px; }
 .tpl-term-row .tf-check { margin-top: 30px; }
+
+/* ---------- FT_26: подписи формы подтверждения выхода в одну строку ---------- */
+.modal[data-1c-name="ФормаСтартСтажировки"] .field-label { flex: 0 0 210px; width: 210px; white-space: nowrap; }
