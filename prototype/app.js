@@ -1355,6 +1355,7 @@
     return (p[0] ? p[0][0] : '') + (p[1] ? p[1][0] : '');
   }
   // Файл печати: АП_Лебедев_С_Н.docx
+  var PRINT_SAMPLE = 'print/ap-template.pdf';   // FT_30: НЕ_ПЕРЕНОСИТЬ — образец печатной формы АП для прототипа
   function printFileName(t) {
     var p = t.fullName.split(' ');
     return 'АП_' + p[0] + (p[1] ? '_' + p[1][0] : '') + (p[2] ? '_' + p[2][0] : '') + '.docx';
@@ -1758,7 +1759,7 @@
         menuItem('Новая задача', 'openDialog', { dialog: 'task' }, 'КнопкаНоваяЗадача'),
         menuItem('Из шаблона…', 'openDialog', { dialog: 'addFromTemplate' }, 'КнопкаДобавитьИзШаблона')
       ], { text: 'Добавить ▾', icon: 'plus', disabled: !!lock, title: lock || '' })) +  // закрытая — только просмотр (фаза 10, 5.4)
-      button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП' }) +
+      button('Печать АП', { icon: 'print', action: 'printProgram', name: 'КнопкаПечатьАП', title: 'Открыть печатную форму АП в новой вкладке браузера' }) +
       '<span class="grow"></span>' +
       (sel ? '<span class="row gap-3"' + a1c('ГруппаГоризонтальная', 'ГруппаВыбранныеЗадачи') + '>' +
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
@@ -5447,7 +5448,17 @@
       var d = dept(trainee(state.selectedTraineeId).departmentId);
       toast('Откроется карточка подразделения «' + d.name + '»');
     },
-    printProgram: function () { toast('Файл ' + printFileName(trainee(state.selectedTraineeId)) + ' сформирован'); },
+    // FT_30: образец печатной формы АП (шаблон заказчика, PDF-копия .docx) — в новой вкладке браузера: просмотр, печать, скачивание.
+    // Если браузер не открыл вкладку (блокировка всплывающих окон) — файл скачивается. В 1С — печатная форма документа «Адаптационная программа»
+    printProgram: function () {
+      var w = window.open(PRINT_SAMPLE, '_blank');
+      if (!w) {
+        var a = document.createElement('a');
+        a.href = PRINT_SAMPLE; a.download = printFileName(trainee(state.selectedTraineeId)).replace(/\.docx$/, '.pdf');
+        document.body.appendChild(a); a.click(); a.parentNode.removeChild(a);
+      }
+      toast('Печатная форма АП открыта в новой вкладке браузера');
+    },
     openProgramDoc: function () { state.openMenu = null; renderCenter(); toast('Откроется форма документа'); },
 
     // Диалоги
