@@ -628,8 +628,10 @@
     t.cancelledBy = D.CURRENT_USER_ID;
   }
   // FT_26: отмененные до подтверждения выхода, видимые текущему пользователю; сначала недавно отмененные
+  // FT_32: стажировка, отмененная из карточки стажера («Отменить стажировку»), — тоже в «Отмененных», не в архиве
+  function isCancelledInternship(t) { return t.stage === 'closed' && t.closeKind === 'cancelled'; }
   function myCancelled() {
-    return D.trainees.filter(function (t) { return t.stage === 'cancelled' && canSeePending(t); })
+    return D.trainees.filter(function (t) { return (t.stage === 'cancelled' && canSeePending(t)) || (isCancelledInternship(t) && seesByScope(t)); })
       .sort(function (a, b) { return (b.cancelledAt || '').localeCompare(a.cancelledAt || ''); });
   }
   function restoreCandidate(t) {
@@ -841,7 +843,7 @@
       hidden: function () { return !state.showCancelled; }, match: function () { return false; }, count: function () { return myCancelled().length; } },
     // FT_29: закрытые стажировки (завершенные и отмененные после старта) — только здесь: в дереве, списке и других фильтрах их нет
     { id: 'archive',      title: 'Архив стажировок',    icon: 'archive',  color: 'stage-found',    name: 'АрхивСтажировок',
-      match: function (t) { return isClosed(t); } }
+      match: function (t) { return isClosed(t) && !isCancelledInternship(t); } }   // FT_32: отмененные стажировки — в «Отмененных»
   ];
   function filterById(id) {
     for (var i = 0; i < FILTERS.length; i++) if (FILTERS[i].id === id) return FILTERS[i];
@@ -980,7 +982,7 @@
     var text = searchQuery() ? 'Никого не нашли'
       : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
       : state.counterFilter === 'cancelled' && place === 'Дерево' ? 'Отмененные кандидаты — справа; в дерево они попадут после подтверждения выхода'   // FT_26
-      : state.counterFilter === 'archive' ? 'В архиве нет стажировок: сюда попадают завершенные и отмененные стажировки'   // FT_29
+      : state.counterFilter === 'archive' ? 'В архиве нет стажировок: сюда попадают завершенные стажировки'   // FT_29; FT_32: отмененные — в «Отмененных»
       : state.counterFilter ? 'Нет стажеров по фильтру «' + filterById(state.counterFilter).title + '»' + (state.deptFilter && place !== 'Дерево' ? ' в подразделении «' + dept(state.deptFilter).name + '»' : '')
       : state.deptFilter ? 'Нет стажеров в подразделении «' + dept(state.deptFilter).name + '»'   // FT_18
       : 'Нет стажеров';   // FT_23: у пользователя не осталось видимых стажеров (например, руководитель передал стажировку)
@@ -1319,12 +1321,15 @@
       '<div class="muted"' + a1c('Надпись', 'ТаблицаОтмененныеДолжность') + '>' + esc(t.position) + '</div>' +
       '<div class="ellipsis" title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПодразделение') + '>' + esc(dept(t.departmentId).name) + '</div>' +
       (r ? '<div>' + link(vrTitle(r), { action: 'pendingOpenRequest', data: { id: t.id }, cls: 'text-s', title: 'Открыть заявку на подбор', name: 'ТаблицаОтмененныеЗаявка' }) + '</div>' : '') +
-      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОтмененныеКогда') + '>Отменен ' + (t.cancelledAt ? fmtStamp(t.cancelledAt) : '') +
+      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОтмененныеКогда') + '>' + (isCancelledInternship(t) ? 'Стажировка отменена ' : 'Отменен ') +
+        (t.cancelledAt ? fmtStamp(t.cancelledAt) : t.closedAt ? fmtDate(t.closedAt) : '') +
         (t.cancelledBy ? ' · ' + esc(personById(t.cancelledBy)) : '') + '</div>' +
       (t.cancelReason ? '<div class="text-s clamp2" title="' + esc(t.cancelReason) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПричина') + '>Причина: ' + esc(t.cancelReason) + '</div>' : '') +
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОтмененныеДействия', 'high') + '>' +
+        // FT_32: выход уже подтвержден, стажировка отменена после старта — только открыть карточку (только просмотр)
+        (isCancelledInternship(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) :
         button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Отмена была ошибкой — сразу подтвердить выход стажера', name: 'ТаблицаОтмененныеПодтвердитьВыход' }) +
-        button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' }) +
+        button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' })) +
       '</div></div>';
   }
   // ASSUMPTION (ТЗ 11.2): в карточке — ФИО, должность, подразделение, заявка, дата завершения подбора (FT_24: ожидаемая дата выхода не показывается)
@@ -3526,6 +3531,7 @@
       apply: function (t, v) {
         t.closeKind = 'cancelled';
         t.closedAt = D.TODAY;
+        t.cancelReason = v.reason.trim(); t.cancelledAt = nowStamp(); t.cancelledBy = D.CURRENT_USER_ID;   // FT_32: для карточки в «Отмененных»
         setStage(t, 'closed');
         var program = programOf(t);
         if (program) addHistory(program, 'Стажировка отменена. Причина: «' + v.reason.trim() + '»');
@@ -5348,6 +5354,7 @@
       if (!state.showCancelled && state.counterFilter === 'cancelled') state.counterFilter = null;
       render();
     },
+    cancelledOpen: function (btn) { selectTrainee(btn.getAttribute('data-id')); },   // FT_32
     cancelledRestore: function (btn) {   // FT_26: вернуть отмененного кандидата в «Ожидают решения»
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || t.stage !== 'cancelled') return;
