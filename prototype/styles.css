@@ -1017,3 +1017,6 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 
 /* ---------- FT_29: выпадающее меню у левого края области открывается вправо ---------- */
 .menu-pop.menu-pop-left { left: 0; right: auto; }
+
+/* ---------- FT_31: выбор наблюдателей — выбранные наверху, ниже черта и остальные ---------- */
+.picker-sep { border-top: 1px solid var(--c-border); margin: var(--sp-1) 0; flex: 0 0 auto; }
