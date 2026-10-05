@@ -1765,7 +1765,6 @@
           '<span' + a1c('Надпись', 'ДекорацияВыбраноЗадач') + '>Выбрано: ' + sel + '</span>' +
           submenu('massActions', 'ПодменюДействияСВыбранными', [
             menuItemIf('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer' }, 'КнопкаНазначитьПроверяющего', allCorp ? CORP_LOCK_TEXT : ''),
-            menuItem('Наблюдатели', 'openDialog', { dialog: 'massObservers' }, 'КнопкаНаблюдатели'),
             menuItemIf('Перенести срок', 'openDialog', { dialog: 'massDeadline' }, 'КнопкаПеренестиСрок', allCorp ? CORP_LOCK_TEXT : ''),
             '<div class="menu-sep"></div>',
             menuItem('Удалить', 'openDialog', { dialog: 'deleteTasks' }, 'КнопкаУдалитьЗадачи', 'danger-text')
@@ -1880,6 +1879,7 @@
     return submenu('row:' + x.id, 'КонтекстноеМенюЗадачи', [
       item(lock ? 'Открыть' : 'Изменить', 'openDialog', { dialog: 'task', task: x.id }, 'КонтекстноеМенюЗадачиИзменить'),
       item('Назначить проверяющего', 'openDialog', { dialog: 'massReviewer', task: x.id }, 'КонтекстноеМенюЗадачиНазначитьПроверяющего', lock || (corpLocked(x) ? CORP_LOCK_TEXT : '')),
+      item('Наблюдатели…', 'openDialog', { dialog: 'taskObservers', task: x.id }, 'КонтекстноеМенюЗадачиНаблюдатели', lock),   // FT_31: наблюдатели — только у одной задачи
       item('Перенести срок', 'openDialog', { dialog: 'massDeadline', task: x.id }, 'КонтекстноеМенюЗадачиПеренестиСрок', lock || (corpLocked(x) ? CORP_LOCK_TEXT : '')),
       item('Выше', 'moveTask', { task: x.id, dir: -1 }, 'КонтекстноеМенюЗадачиВыше', orderReason || (idx === 0 ? 'Задача уже первая в блоке' : '')),
       item('Ниже', 'moveTask', { task: x.id, dir: 1 }, 'КонтекстноеМенюЗадачиНиже', orderReason || (idx === siblings.length - 1 ? 'Задача уже последняя в блоке' : '')),
@@ -3426,6 +3426,10 @@
     return '<input type="text" class="input grow" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
       (attrs || '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
   }
+  // FT_31: срок задачи — не раньше сегодняшнего дня (прошедшие дни в календаре недоступны); прежний просроченный срок можно оставить без изменения
+  var PAST_DEADLINE_TEXT = 'Срок не может быть раньше сегодняшнего дня';
+  function pastDeadlineError(v, orig) { return v && v < D.TODAY && v !== orig ? PAST_DEADLINE_TEXT + ' (' + fmtDate(D.TODAY) + ')' : null; }
+  function laterOf(a, b) { return a > b ? a : b; }
   function inputDate(name, oneC, min) {
     return '<input type="date" class="input" id="f_' + name + '" data-field="' + name + '" value="' + esc(dlgValue(name)) + '"' +
       (min ? ' min="' + min + '"' : '') + (state.dialog.readOnly || state.dialog.corpLock ? ' disabled' : '') + (state.dialog.errors[name] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC) + '>';
@@ -3836,7 +3840,7 @@
       var reqField = state.dialog.traineeMode ? '' : requiredField();
       var statusField = fromTemplate ? '' : tfField('Статус', selectOptions('status', 'ПолеСтатус', [
         { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'review', text: 'На проверке' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status' });
-      var deadlineField = tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' });
+      var deadlineField = tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения', D.TODAY), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' });
       return tabs + note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
         tfPair('ГруппаЗадачаНазвание',
           tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' })) +
@@ -3873,6 +3877,8 @@
       var e = {};
       if (!required(v.name)) e.name = 'Укажите название задачи';
       if (!required(v.deadline)) e.deadline = 'Укажите срок выполнения';
+      var cur = dlgCtx().taskId ? taskById(dlgCtx().taskId) : null;
+      if (!e.deadline && pastDeadlineError(v.deadline, cur && cur.deadline)) e.deadline = pastDeadlineError(v.deadline, cur && cur.deadline);   // FT_31
       if (linksError(v.links)) e.links = linksError(v.links);
       return e;
     },
@@ -3981,7 +3987,7 @@
       var executorId = dlgValue('executorId');
       var deadline = noBase
         ? '<input type="text" class="input" id="f_deadline" disabled value="" placeholder="После назначения даты выхода"' + a1c('ПолеВвода', 'ПолеСрокВыполнения') + '>'
-        : inputDate('deadline', 'ПолеСрокВыполнения');
+        : inputDate('deadline', 'ПолеСрокВыполнения', D.TODAY);   // FT_31
       // FT_27: раскладка как у задачи АП — название; описание; ссылки; слева исполнитель и наблюдатели, справа статус и срок
       return tabs + note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
         tfPair('ГруппаЗадачаНазвание',
@@ -4010,6 +4016,8 @@
       var ctx = dlgCtx();
       if (!required(v.name)) e.name = 'Укажите название задачи';
       if (!(ctx.kind === 'cl' && !t.startDate) && !required(v.deadline)) e.deadline = 'Укажите срок выполнения';
+      var c0 = itemById(ctx.kind, ctx.itemId);
+      if (!e.deadline && pastDeadlineError(v.deadline, itemDate(ctx.kind, c0))) e.deadline = pastDeadlineError(v.deadline, itemDate(ctx.kind, c0));   // FT_31
       if (v.status === 'review' && !v.reviewerId) e.status = 'Назначьте проверяющего или выберите другой статус';
       if (linksError(v.links)) e.links = linksError(v.links);
       return e;
@@ -4240,26 +4248,35 @@
   };
 
   // Выбор наблюдателей задачи: список сотрудников с флажками и поиском (FT_6: без «Как в АП» — умолчаний нет)
+  // FT_31: выбор наблюдателей — поиск по ФИО и должности; выбранные при открытии окна — наверху с галками, ниже остальные
+  // (порядок не меняется при отметке, чтобы строка не «прыгала»). Общий для окна из карточки задачи и из меню ⋮ строки
+  function observerPickerBody(v, P) {
+    var q = v.q.trim().toLowerCase();
+    var list = D.users.filter(function (u) { return !q || u.fullName.toLowerCase().indexOf(q) >= 0 || (u.role || '').toLowerCase().indexOf(q) >= 0; });
+    var top = list.filter(function (u) { return v.top.indexOf(u.id) >= 0; });
+    var rest = list.filter(function (u) { return v.top.indexOf(u.id) < 0; });
+    function row(u) {
+      return '<label class="check"><input type="checkbox" data-field-list="picked" value="' + u.id + '"' +
+        (v.picked.indexOf(u.id) >= 0 ? ' checked' : '') + a1c('Флажок', P.table + 'Пометка') + '> ' +
+        esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
+    }
+    return '<input type="text" class="input" data-field="q" placeholder="Поиск по ФИО или должности" value="' + esc(v.q) + '"' +
+        ' title="Поиск по ФИО или должности"' + a1c('ПолеВвода', P.search) + '>' +
+      '<div class="check-list picker-list"' + a1c('ТаблицаФормы', P.table) + '>' +
+        (list.length ? top.map(row).join('') + (top.length && rest.length ? '<div class="picker-sep" role="separator"></div>' : '') + rest.map(row).join('')
+          : '<span class="muted"' + a1c('Надпись', P.empty) + '>Никого не нашли</span>') +
+      '</div>' +
+      '<div class="muted text-s"' + a1c('Надпись', P.count) + '>' + (v.picked.length ? 'Выбрано: ' + v.picked.length : 'Никто не выбран') + '</div>';
+  }
+  var OBS_PICKER_DIALOGS = ['observersPicker', 'taskObservers'];
   DIALOGS.observersPicker = {
     title: 'Выбор наблюдателей', form: 'ФормаВыборНаблюдателей', submit: 'Выбрать',
     init: function (t, ctx) {
       var owner = state.dialogStack[state.dialogStack.length - 1]; // карточка задачи — форма-владелец
-      return { picked: owner.values.observers.slice(), q: '' };
+      return { picked: owner.values.observers.slice(), top: owner.values.observers.slice(), q: '' };
     },
-    body: function (t) {
-      var v = state.dialog.values;
-      var q = v.q.trim().toLowerCase();
-      var list = D.users.filter(function (u) { return !q || u.fullName.toLowerCase().indexOf(q) >= 0; });
-      return '<input type="text" class="input" data-field="q" placeholder="Поиск по ФИО" value="' + esc(v.q) + '"' +
-          ' title="Поиск по ФИО"' + a1c('ПолеВвода', 'ПолеПоискНаблюдателя') + '>' +
-        '<div class="check-list picker-list"' + a1c('ТаблицаФормы', 'ТаблицаВыборНаблюдателей') + '>' +
-          (list.length ? list.map(function (u) {
-            return '<label class="check"><input type="checkbox" data-field-list="picked" value="' + u.id + '"' +
-              (v.picked.indexOf(u.id) >= 0 ? ' checked' : '') + a1c('Флажок', 'ТаблицаВыборНаблюдателейПометка') + '> ' +
-              esc(u.fullName) + ' <span class="muted text-s">' + esc(u.role) + '</span></label>';
-          }).join('') : '<span class="muted"' + a1c('Надпись', 'ДекорацияНикогоНеНашли') + '>Никого не нашли</span>') +
-        '</div>' +
-        '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияВыбраноНаблюдателей') + '>' + (v.picked.length ? 'Выбрано: ' + v.picked.length : 'Никто не выбран') + '</div>';
+    body: function () {
+      return observerPickerBody(state.dialog.values, { search: 'ПолеПоискНаблюдателя', table: 'ТаблицаВыборНаблюдателей', empty: 'ДекорацияНикогоНеНашли', count: 'ДекорацияВыбраноНаблюдателей' });
     },
     // Результат выбора возвращается в карточку задачи (форму-владельца), изменение АП — при ее сохранении
     apply: function (t, v) {
@@ -4286,29 +4303,19 @@
     }
   };
 
-  DIALOGS.massObservers = {
-    title: 'Наблюдатели', form: 'ФормаНаблюдатели', submit: 'Сохранить',
-    init: function () { return { mode: 'add', observers: [] }; },
-    body: function (t) {
-      return '<p class="dlg-text">Задач: ' + targetTasks(t).length + '</p>' +
-        field('Действие', choice('mode', 'ПолеСпособИзменения', [
-          { value: 'add', text: 'Добавить к текущим', name: 'Добавить' }, { value: 'replace', text: 'Заменить', name: 'Заменить' }])) +
-        field('Наблюдатели', userCheckList('observers', 'ТаблицаНаблюдатели'), { required: true, error: state.dialog.errors.observers, name: 'Наблюдатели' });
+  // FT_31: наблюдатели одной задачи — из меню ⋮ строки (массовое назначение наблюдателей убрано)
+  DIALOGS.taskObservers = {
+    form: 'ФормаНаблюдателиЗадачи', submit: 'Сохранить',
+    titleFn: function () { var x = taskById(dlgCtx().taskId); return 'Наблюдатели: ' + (x ? x.name : ''); },
+    init: function (t, ctx) { var x = taskById(ctx.taskId); return { picked: x.observerIds.slice(), top: x.observerIds.slice(), q: '' }; },
+    body: function () {
+      return observerPickerBody(state.dialog.values, { search: 'ПолеПоискНаблюдателяЗадачи', table: 'ТаблицаНаблюдателиЗадачи', empty: 'ДекорацияНикогоНеНашлиНаблюдатели', count: 'ДекорацияВыбраноНаблюдателейЗадачи' });
     },
-    validate: function (t, v) { return v.observers.length ? {} : { observers: 'Выберите хотя бы одного наблюдателя' }; },
     apply: function (t, v) {
-      var program = programOf(t);
-      var list = targetTasks(t);
-      list.forEach(function (x) {
-        if (v.mode === 'replace') x.observerIds = v.observers.slice();
-        else {
-          var cur = x.observerIds.slice();
-          v.observers.forEach(function (id) { if (cur.indexOf(id) < 0) cur.push(id); });
-          x.observerIds = cur;
-        }
-      });
-      programChanged(t, (v.mode === 'replace' ? 'Заменены' : 'Добавлены') + ' наблюдатели (' + namesOf(v.observers) + '): задач ' + list.length);
-      state.selectedTasks = {};
+      var x = taskById(dlgCtx().taskId);
+      if (sameList(x.observerIds, v.picked)) { toast('Наблюдатели не изменились'); return; }
+      x.observerIds = v.picked.slice();
+      programChanged(t, 'Изменена задача «' + x.name + '»: наблюдатели');
       toast('Наблюдатели изменены');
     }
   };
@@ -4325,14 +4332,19 @@
           ? field('Дней', '<input type="number" step="1" class="input input-num" id="f_days" data-field="days" value="' + esc(dlgValue('days')) + '"' +
               (e.days ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеДней') + '>' +
               '<div class="muted text-s">Отрицательное число переносит срок на более раннюю дату</div>', { required: true, error: e.days, forId: 'f_days', name: 'Дней' })
-          : field('Новый срок', inputDate('date', 'ПолеНовыйСрок'), { required: true, error: e.date, forId: 'f_date', name: 'НовыйСрок' }));
+          : field('Новый срок', inputDate('date', 'ПолеНовыйСрок', D.TODAY), { required: true, error: e.date, forId: 'f_date', name: 'НовыйСрок' }));
     },
     validate: function (t, v) {
       if (v.mode === 'days') {
         var n = Number(v.days);
-        return v.days !== '' && Math.round(n) === n && n !== 0 ? {} : { days: 'Укажите целое число дней, не равное нулю' };
+        if (!(v.days !== '' && Math.round(n) === n && n !== 0)) return { days: 'Укажите целое число дней, не равное нулю' };
+        // FT_31: перенос не должен ставить срок в прошлое
+        var past = editableTargets(t).filter(function (x) { return addDays(x.deadline, n) < D.TODAY; });
+        return past.length ? { days: 'Срок ' + (past.length === 1 ? 'задачи «' + past[0].name + '» станет ' + fmtDate(addDays(past[0].deadline, n)) : pluralN(past.length, ['задачи', 'задач', 'задач']) + ' окажется') +
+          ' раньше сегодняшнего дня (' + fmtDate(D.TODAY) + ')' } : {};
       }
-      return required(v.date) ? {} : { date: 'Укажите новый срок' };
+      if (!required(v.date)) return { date: 'Укажите новый срок' };
+      return v.date < D.TODAY ? { date: PAST_DEADLINE_TEXT + ' (' + fmtDate(D.TODAY) + ')' } : {};   // FT_31
     },
     apply: function (t, v) {
       var list = editableTargets(t);
@@ -4752,7 +4764,7 @@
 
   DIALOGS.checklistItem = {
     title: 'Добавить пункт', form: 'ФормаПунктЧекЛиста', submit: 'Добавить пункт',
-    init: function (t) { return { name: '', role: 'head', userId: t.headId || '', date: addDays(t.startDate, -1) }; },
+    init: function (t) { return { name: '', role: 'head', userId: t.headId || '', date: laterOf(addDays(t.startDate, -1), D.TODAY) }; },   // FT_31: не в прошлом
     onChange: function (f, v) { if (f === 'role') v.userId = roleDefaultUser(trainee(state.dialog.traineeId), v.role) || ''; },   // FT_23: сотрудник роли
     body: function (t) {
       var e = state.dialog.errors;
@@ -4762,12 +4774,13 @@
         field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', ['head', 'hr', 'mentor', 'fin', 'personnel', 'ksh'].map(function (r) {
           return { value: r, text: D.ROLE_TITLES[r] }; }), ' data-rerender="1"'), { forId: 'f_role' }) +
         field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions('Не назначен')), { forId: 'f_userId' }) +
-        field('Срок', inputDate('date', 'ПолеСрокПункта') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
+        field('Срок', inputDate('date', 'ПолеСрокПункта', D.TODAY) + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
     },
     validate: function (t, v) {
       var e = {};
       if (!required(v.name)) e.name = 'Укажите пункт';
       if (!required(v.date)) e.date = 'Укажите срок';
+      else if (pastDeadlineError(v.date)) e.date = pastDeadlineError(v.date);   // FT_31
       return e;
     },
     apply: function (t, v) {
@@ -4782,7 +4795,7 @@
   // Пункт чек-листа закрытия: наименование, ответственный (роль), срок от даты окончания, обязательность
   DIALOGS.closureItem = {
     title: 'Добавить пункт закрытия', form: 'ФормаПунктЧекЛистаЗакрытия', submit: 'Добавить пункт',
-    init: function (t) { return { name: '', role: 'head', date: t.endDate, optional: false }; },
+    init: function (t) { return { name: '', role: 'head', date: laterOf(t.endDate, D.TODAY), optional: false }; },   // FT_31: не в прошлом
     body: function (t) {
       var e = state.dialog.errors;
       var v = state.dialog.values;
@@ -4790,13 +4803,14 @@
       return field('Пункт', inputText('name', 'ПолеНаименованиеПунктаЗакрытия'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПунктаЗакрытия' }) +
         field('Ответственный', selectOptions('role', 'ПолеРольОтветственногоЗакрытия', ['head', 'hr', 'mentor', 'trainee', 'ksh'].map(function (r) {
           return { value: r, text: D.ROLE_TITLES[r] }; })), { forId: 'f_role' }) +
-        field('Срок', inputDate('date', 'ПолеСрокПунктаЗакрытия') + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПунктаЗакрытия' }) +
+        field('Срок', inputDate('date', 'ПолеСрокПунктаЗакрытия', D.TODAY) + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПунктаЗакрытия' }) +
         '<label class="check"><input type="checkbox" data-field="optional"' + (v.optional ? ' checked' : '') + a1c('Флажок', 'ПолеНеобязательный') + '> Необязательный пункт</label>';
     },
     validate: function (t, v) {
       var e = {};
       if (!required(v.name)) e.name = 'Укажите пункт';
       if (!required(v.date)) e.date = 'Укажите срок';
+      else if (pastDeadlineError(v.date)) e.date = pastDeadlineError(v.date);   // FT_31
       return e;
     },
     apply: function (t, v) {
@@ -5177,7 +5191,7 @@
   };
 
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
-  var EDIT_DIALOGS = ['massReviewer', 'massObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
+  var EDIT_DIALOGS = ['massReviewer', 'taskObservers', 'massDeadline', 'deleteTasks', 'addFromTemplate'];
 
   // Диалоги открываются стеком: вложенная форма (например, задача шаблона поверх «Добавить из шаблона»)
   // закрывается и возвращает к форме-владельцу. opts.stack — открыть поверх текущей формы.
@@ -5878,7 +5892,7 @@
         var nn = parseInt(e.target.value, 10);
         if (hn) hn.textContent = isNaN(nn) ? '' : offsetDaysText(nn);
       }
-      if (state.dialog.type === 'observersPicker' && f === 'q') {
+      if (OBS_PICKER_DIALOGS.indexOf(state.dialog.type) >= 0 && f === 'q') {   // FT_31
         var pos = e.target.selectionStart;
         renderDialog();
         var q = topModal().querySelector('[data-field="q"]');
