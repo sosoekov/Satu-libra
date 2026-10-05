@@ -3586,6 +3586,27 @@
       (opts.error ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибка' + (opts.name || '')) + '>' + esc(opts.error) + '</div>' : '') +
       '</div>';
   }
+  // FT_27: раскладка карточки задачи — две колонки: слева проверяющий (исполнитель) и наблюдатели, справа тип, блок, статус, срок
+  function tfCols(name, left, right) {
+    return '<div class="tf-row tf-cols"' + a1c('ГруппаГоризонтальная', name) + '>' +
+      '<div class="tf-col"' + a1c('ГруппаВертикальная', name + 'Лево') + '>' + left + '</div>' +
+      '<div class="tf-col"' + a1c('ГруппаВертикальная', name + 'Право') + '>' + right + '</div></div>';
+  }
+  function tfPair(name, a, b) { return '<div class="tf-row"' + a1c('ГруппаГоризонтальная', name) + '>' + a + (b || '<div class="tf-field tf-spacer"></div>') + '</div>'; }
+  // FT_27: «Обязательная задача» и «?» — щелчок показывает подсказку (в 1С — расширенная подсказка флажка, ОтображениеПодсказки = Кнопка)
+  var REQUIRED_HINT = 'Без завершения обязательных задач Адаптационная программа не может быть закрыта. Стажер не видит отметку обязательности задачи';
+  function requiredField() {
+    return '<div class="tf-field tf-req"><div class="row gap-1 tf-check">' +
+      '<label class="check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
+        a1c('Флажок', 'ПолеОбязательная') + '> Обязательная задача</label>' +
+      '<span class="hint-wrap"><button type="button" class="hint-q" data-action="hintToggle" title="Подсказка" aria-label="Подсказка"' +
+        a1c('Кнопка', 'ПолеОбязательнаяРасширеннаяПодсказка') + '>?</button>' +
+        '<span class="hint-pop" role="tooltip"' + a1c('Надпись', 'ДекорацияПодсказкаОбязательная') + '>' + esc(REQUIRED_HINT) + '</span></span>' +
+      '</div></div>';
+  }
+  function closeHints(except) {
+    Array.prototype.forEach.call(document.querySelectorAll('.hint-wrap.open'), function (w) { if (w !== except) w.classList.remove('open'); });
+  }
   /* ---------- FT_20: ссылки для ознакомления — элементы справочника «Библиотека ссылок» ----------
    * Строка таблицы — {linkId, comment}; в форме еще sel (флажок выбора) и q (текст, введенный для поиска в списке выбора).
    * Поле «Ссылка» — поле выбора: выпадающий список по группам, отбор по мере ввода, внизу — «+ Создать».
@@ -3768,12 +3789,26 @@
           return '<button type="button" class="tab' + (dlgValue('tab') === x.id ? ' active' : '') + '" data-action="taskCardTab" data-tab="' + x.id + '"' + a1c('Страница', x.name) + '>' + x.text + '</button>';
         }).join('') + '</div>' : '';
       if (curTask && dlgValue('tab') === 'exec') return tabs + taskExecBody(curTask);
+      // FT_27: раскладка по макету — название; описание и ожидаемый результат; ссылки; слева проверяющие и наблюдатели, справа тип, блок, статус, срок.
+      // У стажера «Обязательная задача» скрыта (в 1С — Видимость = Ложь)
+      var reqField = state.dialog.traineeMode ? '' : requiredField();
+      var statusField = fromTemplate ? '' : tfField('Статус', selectOptions('status', 'ПолеСтатус', [
+        { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'review', text: 'На проверке' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status' });
+      var deadlineField = tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' });
       return tabs + note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНазвание') + '>' +
-          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
-          '<div class="tf-field tf-spacer"></div>' +
+        tfPair('ГруппаЗадачаНазвание',
+          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' })) +
+        // FT_16: справа от описания — ожидаемый результат: критерии, по которым проверяющий принимает задачу.
+        // Комментарий стажера к выполнению — на странице «Выполнение» (FT_14)
+        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаОписаниеРезультат') + '>' +
+          tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="6" id="f_description" data-field="description"' + ro() +
+            a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
+          tfField('Ожидаемый результат выполнения задачи', '<textarea class="textarea tf-textarea" rows="6" id="f_criteria" data-field="criteria"' + ro() +
+            ' placeholder="' + (dlgRO() || state.dialog.corpLock ? '' : 'Критерии, по которым проверяющий примет задачу') + '"' +
+            ' title="Критерии приемки: по ним проверяющий принимает задачу"' + a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('criteria')) + '</textarea>', { forId: 'f_criteria' }) +
         '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПроверяющийНаблюдатели') + '>' +
+        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаСсылки') + '>' + linksTable() + '</div>' +
+        tfCols('ГруппаЗадачаРеквизиты',
           tfField('Проверяющий', '<div class="row gap-2">' +
               (fromTemplate
                 ? '<input type="text" class="input grow" disabled value="' + esc(reviewerId ? userName(reviewerId) : 'Не назначен') + '"' + a1c('ПолеВвода', 'ПолеПроверяющий') + '>'
@@ -3781,35 +3816,15 @@
               (fromTemplate ? '' : button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
                 title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' })) + '</div>',
             { forId: 'f_reviewerId' }) +
-          tfField('Наблюдатели', observersField_, { forId: 'f_observers', error: e.observers, name: 'Наблюдатели' }) +
-        '</div>' +
-        // FT_25: дополнительный проверяющий — вводится вручную (сотрудника нет в системе)
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаДопПроверяющий') + '>' +
+          // FT_25: дополнительный проверяющий — вводится вручную (сотрудника нет в системе)
           tfField('Доп. проверяющий', inputText('extraReviewer', 'ПолеДопПроверяющий', ro() + (dlgRO() ? '' : ' placeholder="ФИО, если сотрудника нет в системе"') +
-            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }) + '<div class="tf-field tf-spacer"></div>' +
-        '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаТипСрок') + '>' +
-          tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
-          tfField('Срок выполнения', inputDate('deadline', 'ПолеСрокВыполнения'), { required: true, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
-        '</div>' +
-        '<div class="tf-row tf-row-bottom"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаБлокСтатус') + '>' +
-          tfField('Блок', selectOptions('block', 'ПолеБлок', blockOptions, blockOptions.length === 1 && !dlgRO() ? ' title="Задачи в корпоративный блок добавляются только из шаблона"' : ''), { forId: 'f_block', cls: 'tf-half' }) +
-          (fromTemplate ? '<div class="tf-field tf-half"></div>' :
-            tfField('Статус', selectOptions('status', 'ПолеСтатус', [
-              { value: 'not_started', text: 'Не начата' }, { value: 'in_progress', text: 'В работе' }, { value: 'review', text: 'На проверке' }, { value: 'done', text: 'Выполнена' }]), { forId: 'f_status', cls: 'tf-half' })) +
-          '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
-            a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
-        '</div>' +
-        // FT_16: справа от описания — «Результат выполнения»: критерии, по которым проверяющий принимает задачу.
-        // Комментарий стажера к выполнению — на странице «Выполнение» (FT_14)
-        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаОписаниеРезультат') + '>' +
-          tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="6" id="f_description" data-field="description"' + ro() +
-            a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
-          tfField('Результат выполнения', '<textarea class="textarea tf-textarea" rows="6" id="f_criteria" data-field="criteria"' + ro() +
-            ' placeholder="' + (dlgRO() || state.dialog.corpLock ? '' : 'Критерии, по которым проверяющий примет задачу') + '"' +
-            ' title="Критерии приемки: по ним проверяющий принимает задачу"' + a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('criteria')) + '</textarea>', { forId: 'f_criteria' }) +
-        '</div>' +
-        '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаСсылки') + '>' + linksTable() + '</div>' +
+            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }) +
+          tfField('Наблюдатели', observersField_, { forId: 'f_observers', error: e.observers, name: 'Наблюдатели' }),
+          tfPair('ГруппаЗадачаТипБлок',
+            tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }),
+            tfField('Блок', selectOptions('block', 'ПолеБлок', blockOptions, blockOptions.length === 1 && !dlgRO() ? ' title="Задачи в корпоративный блок добавляются только из шаблона"' : ''), { forId: 'f_block' })) +
+          // у задачи шаблона статуса нет (в 1С — Видимость = Ложь), «Обязательная задача» остается справа
+          tfPair('ГруппаЗадачаСтатусОбязательная', statusField || '<div class="tf-field tf-spacer"></div>', reqField) + deadlineField) +
         '</div>';
     },
     validate: function (t, v) {
@@ -3925,30 +3940,27 @@
       var deadline = noBase
         ? '<input type="text" class="input" id="f_deadline" disabled value="" placeholder="После назначения даты выхода"' + a1c('ПолеВвода', 'ПолеСрокВыполнения') + '>'
         : inputDate('deadline', 'ПолеСрокВыполнения');
+      // FT_27: раскладка как у задачи АП — название; описание; ссылки; слева исполнитель и наблюдатели, справа статус и срок
       return tabs + note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаОсновное') + '>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНазваниеСтатус') + '>' +
-          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
-          tfField('Статус', selectOptions('status', 'ПолеСтатус', itemStatusOptions(c), auto && !dlgRO() ? ' disabled title="' + esc(AUTO_ITEM_TEXT) + '"' : ''),
-            { forId: 'f_status', error: e.status, name: 'Статус' }) +
-        '</div>' +
-        // FT_23: у задачи чек-листа видимо поле «Исполнитель» (ответственный пункта), «Проверяющий» скрыт (в 1С — Видимость = Ложь)
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаИсполнительСрок') + '>' +
-          tfField('Исполнитель', '<div class="row gap-2">' + selectOptions('executorId', 'ПолеИсполнитель', executorOptions(dlgValue('executorId')),
-                dlgRO() ? '' : ' title="' + esc(EXECUTOR_HINT) + '"') +
-              button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openExecutorCard', disabled: !executorId,
-                title: executorId ? 'Открыть карточку сотрудника: ' + personById(executorId) : 'Исполнитель не назначен', name: 'КнопкаОткрытьКарточкуИсполнителя' }) + '</div>',
-            { forId: 'f_executorId', cls: 'tf-wide' }) +
-          tfField('Срок выполнения', deadline + '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокОтДаты') + '>' + esc(base) + '</div>',
-            { required: !noBase, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' }) +
-        '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаНаблюдатели') + '>' +
-          tfField('Наблюдатели', observersField(dlgRO()), { forId: 'f_observers', cls: 'tf-wide' }) + '<div class="tf-field tf-spacer"></div>' +
-        '</div>' +
+        tfPair('ГруппаЗадачаНазвание',
+          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' })) +
         '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаОписание') + '>' +
           tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="5" id="f_description" data-field="description"' + ro() +
             a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
         '</div>' +
         '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаСсылки') + '>' + linksTable() + '</div>' +
+        // FT_23: у задачи чек-листа видимо поле «Исполнитель» (ответственный пункта), «Проверяющий» скрыт (в 1С — Видимость = Ложь)
+        tfCols('ГруппаЗадачаРеквизиты',
+          tfField('Исполнитель', '<div class="row gap-2">' + selectOptions('executorId', 'ПолеИсполнитель', executorOptions(dlgValue('executorId')),
+                dlgRO() ? '' : ' title="' + esc(EXECUTOR_HINT) + '"') +
+              button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openExecutorCard', disabled: !executorId,
+                title: executorId ? 'Открыть карточку сотрудника: ' + personById(executorId) : 'Исполнитель не назначен', name: 'КнопкаОткрытьКарточкуИсполнителя' }) + '</div>',
+            { forId: 'f_executorId' }) +
+          tfField('Наблюдатели', observersField(dlgRO()), { forId: 'f_observers' }),
+          tfField('Статус', selectOptions('status', 'ПолеСтатус', itemStatusOptions(c), auto && !dlgRO() ? ' disabled title="' + esc(AUTO_ITEM_TEXT) + '"' : ''),
+            { forId: 'f_status', error: e.status, name: 'Статус' }) +
+          tfField('Срок выполнения', deadline + '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокОтДаты') + '>' + esc(base) + '</div>',
+            { required: !noBase, error: e.deadline, forId: 'f_deadline', name: 'СрокВыполнения' })) +
         '</div>';
     },
     validate: function (t, v) {
@@ -4576,34 +4588,32 @@
       var n = parseInt(dlgValue('offsetDays'), 10);
       var note = dlgRO() ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаТолькоПросмотр') + '><span class="tone-info">' + icon('info') + '</span><span' +
         a1c('Надпись', 'ДекорацияЗадачаШаблонаТолькоПросмотр') + '>' + esc(TEMPLATE_RO_TEXT) + '</span></div>' : '';
+      // FT_27: раскладка как у задачи АП — название; описание и ожидаемый результат; ссылки; слева проверяющие, справа тип, блок, срок и обязательность
       return note + '<div class="col gap-4 task-form"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаШаблонаОсновное') + '>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаНазваниеБлок') + '>' +
-          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' }) +
-          tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block' }) +
-        '</div>' +
-        '<div class="tf-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаПроверяющийТип') + '>' +
-          tfField('Проверяющий', '<div class="row gap-2">' + selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен')) +
-            button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
-              title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' }) + '</div>', { forId: 'f_reviewerId', cls: 'tf-wide' }) +
-          tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }) +
-        '</div>' +
-        '<div class="tf-row tpl-term-row"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСрок') + '>' +
-          tfField('Срок, дней от выхода', '<input type="number" class="input" min="0" step="1" id="f_offsetDays" data-field="offsetDays" value="' + esc(dlgValue('offsetDays')) + '"' + ro() +
-              (e.offsetDays ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеСрокДнейОтВыхода') + '>' +
-            '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокДнейОтВыхода') + '>' + (isNaN(n) ? '&nbsp;' : esc(offsetDaysText(n))) + '</div>',
-            { required: true, error: e.offsetDays, forId: 'f_offsetDays', name: 'СрокДнейОтВыхода' }) +
-          tfField('Доп. проверяющий', inputText('extraReviewer', 'ПолеДопПроверяющий', ro() + (dlgRO() ? '' : ' placeholder="ФИО, если сотрудника нет в системе"') +
-            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }) +   // FT_25
-          '<div class="tf-field"><label class="check tf-check"><input type="checkbox" data-field="required"' + (dlgValue('required') ? ' checked' : '') + ro() +
-            a1c('Флажок', 'ПолеОбязательная') + '> Обязательная</label></div>' +
-        '</div>' +
+        tfPair('ГруппаЗадачаШаблонаНазвание',
+          tfField('Название задачи', inputText('name', 'ПолеНазваниеЗадачи', ro()), { required: true, error: e.name, forId: 'f_name', name: 'НазваниеЗадачи', cls: 'tf-wide' })) +
         '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаОписаниеРезультат') + '>' +
           tfField('Описание задачи', '<textarea class="textarea tf-textarea" rows="5" id="f_description" data-field="description"' + ro() +
             a1c('ПолеВвода', 'ПолеОписаниеЗадачи') + '>' + esc(dlgValue('description')) + '</textarea>', { forId: 'f_description' }) +
-          tfField('Результат выполнения', '<textarea class="textarea tf-textarea" rows="5" id="f_criteria" data-field="criteria"' + ro() +
+          tfField('Ожидаемый результат выполнения задачи', '<textarea class="textarea tf-textarea" rows="5" id="f_criteria" data-field="criteria"' + ro() +
             ' placeholder="' + (dlgRO() ? '' : 'Критерии, по которым проверяющий примет задачу') + '"' + a1c('ПолеВвода', 'ПолеРезультатВыполнения') + '>' + esc(dlgValue('criteria')) + '</textarea>', { forId: 'f_criteria' }) +
         '</div>' +
         '<div class="tf-row tf-row-top"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаШаблонаСсылки') + '>' + linksTable() + '</div>' +
+        tfCols('ГруппаЗадачаШаблонаРеквизиты',
+          tfField('Проверяющий', '<div class="row gap-2">' + selectOptions('reviewerId', 'ПолеПроверяющий', userOptions('Не назначен')) +
+            button('', { cls: 'btn-icon btn-flat', icon: 'openCard', action: 'openReviewerCard', disabled: !reviewerId,
+              title: reviewerId ? 'Открыть карточку сотрудника: ' + userName(reviewerId) : 'Проверяющий не назначен', name: 'КнопкаОткрытьКарточкуПроверяющего' }) + '</div>', { forId: 'f_reviewerId' }) +
+          tfField('Доп. проверяющий', inputText('extraReviewer', 'ПолеДопПроверяющий', ro() + (dlgRO() ? '' : ' placeholder="ФИО, если сотрудника нет в системе"') +
+            ' title="Вводится вручную, если проверяющего нет в системе. Задачу «Проверить» не получает"'), { forId: 'f_extraReviewer' }),   // FT_25
+          tfPair('ГруппаЗадачаШаблонаТипБлок',
+            tfField('Тип задачи', selectOptions('type', 'ПолеТипЗадачи', D.taskTypes), { forId: 'f_type' }),
+            tfField('Блок', selectOptions('block', 'ПолеБлок', [{ value: 'corp', text: 'Корпоративный' }, { value: 'spec', text: 'Специальный' }]), { forId: 'f_block' })) +
+          tfPair('ГруппаЗадачаШаблонаСрок',
+            tfField('Срок, дней от выхода', '<input type="number" class="input" min="0" step="1" id="f_offsetDays" data-field="offsetDays" value="' + esc(dlgValue('offsetDays')) + '"' + ro() +
+                (e.offsetDays ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ПолеСрокДнейОтВыхода') + '>' +
+              '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияСрокДнейОтВыхода') + '>' + (isNaN(n) ? '&nbsp;' : esc(offsetDaysText(n))) + '</div>',
+              { required: true, error: e.offsetDays, forId: 'f_offsetDays', name: 'СрокДнейОтВыхода' }),
+            requiredField())) +
         '</div>';
     },
     validate: function (t, v) {
@@ -5270,6 +5280,8 @@
     },
     clearCounterFilter: function () { state.counterFilter = null; state.selectedTraineeId = null; render(); },
     resetSearch: function () { state.search = ''; state.selectedTraineeId = null; render(); },
+    // FT_27: «?» у поля — подсказка открывается и закрывается щелчком, без перерисовки формы
+    hintToggle: function (btn) { var w = btn.closest('.hint-wrap'); closeHints(w); w.classList.toggle('open'); },
     toggleHideEmpty: function () { state.hideEmpty = !state.hideEmpty; state.openMenu = null; renderLeft(); },
     toggleShowCancelled: function () {   // FT_26
       state.showCancelled = !state.showCancelled; state.openMenu = null;
@@ -5777,6 +5789,7 @@
 
   document.addEventListener('click', function (e) {
     if (state.formMenuOpen && !e.target.closest('#formMenuHost')) { state.formMenuOpen = false; renderFormMenu(); }   // FT_12
+    if (!e.target.closest('.hint-wrap')) closeHints();   // FT_27: подсказка закрывается щелчком мимо
     if (state.openMenu && state.openMenu.indexOf('link:') === 0 && !e.target.closest('.menu-host')) {
       // FT_20: список выбора ссылки закрывается без перерисовки формы — щелчок (например, по флажку строки) не теряется
       var li = state.openMenu.slice(5);
@@ -6049,7 +6062,8 @@
       return;
     }
     if (e.key === 'Escape') {
-      if (state.formMenuOpen) { state.formMenuOpen = false; renderFormMenu(); }   // FT_12: меню «Еще» окна
+      if (document.querySelector('.hint-wrap.open')) closeHints();   // FT_27: сначала — подсказка «?»
+      else if (state.formMenuOpen) { state.formMenuOpen = false; renderFormMenu(); }   // FT_12: меню «Еще» окна
       else if (state.openMenu) { closeLinkList(); renderMain(); }   // FT_11: сначала — подменю (в т. ч. в подвале карточки задачи)
       else if (state.dialog) closeDialog();
       else if (state.demoMenuOpen || state.demoUserMenuOpen) { state.demoMenuOpen = false; state.demoUserMenuOpen = false; renderDemo(); }
