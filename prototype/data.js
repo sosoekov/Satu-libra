@@ -474,6 +474,7 @@
     { id: 'lnk-12', name: 'Сервис заявок 0911',                     groupId: 'lg-ext',    url: 'https://0911.cas.local' },
     // EXP_1: внутренняя ссылка — команда 1С (e1cib/command/… или e1c://server/HR_Forus#e1cib/command/…): открывает объект системы в новой вкладке
     { id: 'lnk-bitrix-doc', name: 'Заявка на трудоустройство в Bitrix',  groupId: 'lg-1c',     url: 'e1cib/command/Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать' },
+    { id: 'lnk-transfer-doc', name: 'Заявка на перевод',                 groupId: 'lg-1c',     url: 'e1cib/command/Документ.ЗаявкаНаПеревод.Создать' },   // FT_33
     { id: 'lnk-13', name: 'СИТ: заявки',                            groupId: 'lg-ext',    url: 'https://sit.cas.local' }
   ];
   function libLinks(ids) { return (ids || []).map(function (id) { return { linkId: id, comment: '' }; }); }
@@ -483,10 +484,12 @@
    * Проверяющий и наблюдатели по умолчанию пустые. done / inWork — производные от status.
    */
   var checklistTemplate = [
-    { name: 'Создать заявку на трудоустройство в Bitrix',       responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix',
-      description: 'Заявка на трудоустройство стажера оформляется документом «Заявка на трудоустройство в Bitrix» — откройте его по ссылке ниже.', links: ['lnk-bitrix-doc'] },   // EXP_1
+    // FT_33: заявка на прием (трудоустройство) или на перевод — внутренние ссылки на оба документа
+    { name: 'Создать заявку в Bitrix',                          responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix',
+      description: 'Требуется создать заявку на прием или заявку на перевод в Bitrix. Заявка на прием создается, если найден новый сотрудник. Заявка на перевод, если заявка закрыта действующим сотрудником ГК Форус.',
+      links: ['lnk-bitrix-doc', 'lnk-transfer-doc'] },
     { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
-      description: 'Заявка на выпуск пропуска создается в сервисе заявок 0911.', links: ['lnk-12'] },
+      description: 'Заявка на выпуск пропуска создается в сервисе заявок 0911 после сдачи сотрудником экзамена СИТ.', links: ['lnk-12'] },   // FT_33
     { name: 'Создать заявку на создание учетной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
       description: 'Заявка на создание учетной записи создается в сервисе заявок 0911.', links: ['lnk-12'] },
     { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, linkedDocType: null,
@@ -495,13 +498,10 @@
       description: 'Ноутбук, монитор, гарнитура.', links: ['lnk-12'] },
     { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program',
       description: 'Отмечается автоматически, когда для стажера создана адаптационная программа.', links: [] },
-    { name: 'Подготовить ПО и доступ к ресурсам, порталам',     responsibleRole: 'head',   offsetDays: -1, linkedDocType: null,
+    // FT_33: переименован (было «Подготовить ПО и доступ к ресурсам, порталам»)
+    { name: 'Подготовить ПО и доступ к внутренним ресурсам подразделения', responsibleRole: 'head', offsetDays: -1, linkedDocType: null,
       description: 'Учетные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] },
-    // FT_23: пункты служб вне ЦАС — исполнитель закреплен за ролью (ROLE_USERS)
-    { name: 'Подтвердить или изменить юрлицо и должность нового сотрудника', responsibleRole: 'fin', offsetDays: -7, linkedDocType: null,
-      description: 'Проверить юрлицо и должность, указанные в заявке на подбор; при необходимости изменить.', links: [] },
-    { name: 'Внести данные стажера в свои системы, подготовить пакет документов для подписания', responsibleRole: 'personnel', offsetDays: -5, linkedDocType: null,
-      description: 'Кадровые данные стажера и пакет документов к дню выхода.', links: [] },
+    // FT_23: пункт службы вне ЦАС — исполнитель закреплен за ролью (ROLE_USERS); FT_33: пункты ФЭС и СУП убраны из шаблона
     { name: 'Открыть доступ стажеру к охране труда, локальным нормативным актам, положению по ДМС', responsibleRole: 'ksh', offsetDays: -1, linkedDocType: null,
       description: 'Доступ к курсам и документам на портале.', links: ['lnk-6', 'lnk-4'] }
   ];
@@ -928,6 +928,7 @@
   ];
   // EXP_1: документы «Заявка на трудоустройство в Bitrix» (один на стажера); создаются в прототипе
   var bitrixRequests = [];
+  var transferRequests = [];   // FT_33: документы «Заявка на перевод»
 
   /* FT_28: отметки о перенаправлении задач: ключ задачи → {by — кто перенаправил, to — кому, at — когда, comment}.
    * Отметка видна новому исполнителю в списке задач и в карточке задачи; повторное перенаправление ее заменяет */
@@ -950,6 +951,7 @@
     taskRedirects: taskRedirects,   // FT_28
     legalEntities: legalEntities,   // EXP_1
     bitrixRequests: bitrixRequests,   // EXP_1
+    transferRequests: transferRequests,   // FT_33
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
     LAG_THRESHOLD: LAG_THRESHOLD,

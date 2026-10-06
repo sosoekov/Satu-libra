@@ -686,7 +686,9 @@
     tpl: { form: 'ФормаШаблонАП', tab: 'ВкладкаОкнаШаблонАП', title: function (x) { return 'Шаблон АП: ' + byId(D.templates, x.templateId).name; } },
     apv: { form: 'ФормаПросмотрАП', tab: 'ВкладкаОкнаПросмотрАП', title: function (x) { return 'Просмотр АП (' + trainee(x.traineeId).fullName + ')'; } },
     // EXP_1: документ «Заявка на трудоустройство в Bitrix» — открывается внутренней ссылкой из задачи чек-листа
-    brq: { form: 'ФормаДокументаЗаявкаНаТрудоустройствоВBitrix', tab: 'ВкладкаОкнаЗаявкаНаТрудоустройство', title: function (x) { return brqTitle(x); } }
+    brq: { form: 'ФормаДокументаЗаявкаНаТрудоустройствоВBitrix', tab: 'ВкладкаОкнаЗаявкаНаТрудоустройство', title: function (x) { return brqTitle(x); } },
+    // FT_33: документ «Заявка на перевод» — реквизиты заявки на трудоустройство без телефона, email и «Студент»
+    trq: { form: 'ФормаДокументаЗаявкаНаПеревод', tab: 'ВкладкаОкнаЗаявкаНаПеревод', title: function (x) { return brqTitle(x); } }
   };
   function docTitle(tab) { return DOC_KINDS[tab.kind || 'ap'].title(tab); }
   function docCtx(traineeId, page) {
@@ -699,7 +701,7 @@
     if (!byId(state.shell.tabs, id)) {
       var tab = { id: id, kind: kind, ctx: docCtx(kind === 'apv' ? key : null, kind === 'apv' ? 'program' : null) };
       if (kind === 'tpl') tab.templateId = key; else tab.traineeId = key;
-      if (kind === 'brq') { tab.values = brqInitValues(key); tab.page = 'sup'; tab.dirty = false; tab.errors = {}; }   // EXP_1
+      if (REQ_META[kind]) { tab.values = brqInitValues(key, kind); tab.page = 'sup'; tab.dirty = false; tab.errors = {}; }   // EXP_1; FT_33
       state.shell.tabs.push(tab);
     }
     state.openMenu = null;
@@ -733,7 +735,7 @@
   function closeDocTab(id, force) {
     var tab = byId(state.shell.tabs, id);
     // EXP_1: документ изменен и не записан — как в 1С: «Данные были изменены. Сохранить изменения?»
-    if (tab && tab.kind === 'brq' && tab.dirty && !force) {
+    if (tab && REQ_META[tab.kind] && tab.dirty && !force) {
       if (state.shell.active !== id) { switchShell(id); render(); }
       openDialog('brqUnsaved', tab.traineeId, { tabId: id });
       return;
@@ -1038,7 +1040,7 @@
     var doc = activeDoc();
     if (doc && doc.kind === 'tpl') { el('docCenter').innerHTML = renderTemplateDoc(byId(D.templates, doc.templateId)); applyColWidths(el('docCenter')); return; }   // FT_22
     if (doc && doc.kind === 'apv') { el('docCenter').innerHTML = renderProgramView(trainee(doc.traineeId)); return; }
-    if (doc && doc.kind === 'brq') { el('docCenter').innerHTML = renderBitrixDoc(doc); return; }   // EXP_1
+    if (doc && REQ_META[doc.kind]) { el('docCenter').innerHTML = renderBitrixDoc(doc); return; }   // EXP_1; FT_33
     if (isKshUser() && !activeDoc()) {   // FT_9: у сотрудника КШ — пустая вкладка, свой кабинет будет реализован позже
       el('centerZone').innerHTML = '<div class="empty ksh-empty"' + a1c('Надпись', 'ДекорацияКабинетКШ') + '>Здесь пока ничего нет</div>';
       return;
@@ -3682,14 +3684,14 @@
   var EXTERNAL_URL_RE = /^https?:\/\/\S+$/;
   function isInternalUrl(u) { return INTERNAL_URL_RE.test(u || ''); }
   function internalCommand(u) { return u.replace(/^e1c:\/\/[^#]+#/, '').replace(/^e1cib\/command\//, ''); }
-  var BITRIX_DOC_COMMAND = 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать';
   function openLink(url, traineeId) {
     if (!isInternalUrl(url)) { toast('Ссылка откроется в браузере: ' + url); return; }
     var cmd = internalCommand(url);
     var tid = traineeId || (state.dialog && state.dialog.traineeId) || state.selectedTraineeId;
-    if (cmd === BITRIX_DOC_COMMAND) {
-      if (!tid) { toast('Заявка на трудоустройство открывается из задачи стажера'); return; }
-      openKindTab('brq', tid);
+    var kind = Object.keys(REQ_META).filter(function (k) { return REQ_META[k].command === cmd; })[0];   // FT_33: заявка на трудоустройство или на перевод
+    if (kind) {
+      if (!tid) { toast(REQ_META[kind].title + ' открывается из задачи стажера'); return; }
+      openKindTab(kind, tid);
       return;
     }
     toast('Откроется объект 1С: ' + cmd);
@@ -4682,9 +4684,14 @@
   // Числовые поля: имя → [подпись для ошибки, максимум]
   var BRQ_NUMBERS = { incomeProbation: [null], incomeMain: [null], salary: [null], rate: [null], northBonus: [100], regionalCoeff: [null] };
   var brqSeq = 0;
-  function brqOf(traineeId) { return D.bitrixRequests.filter(function (r) { return r.traineeId === traineeId; })[0] || null; }
-  function brqInitValues(traineeId) {
-    var r = brqOf(traineeId);
+  // FT_33: виды документов-заявок: команда внутренней ссылки, заголовок, префикс номера, хранилище, скрытые реквизиты
+  var REQ_META = {
+    brq: { command: 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать', title: 'Заявка на трудоустройство в Bitrix', prefix: 'ЗТ-', store: function () { return D.bitrixRequests; }, hidden: [] },
+    trq: { command: 'Документ.ЗаявкаНаПеревод.Создать', title: 'Заявка на перевод', prefix: 'ЗПР-', store: function () { return D.transferRequests; }, hidden: ['phone', 'email', 'student'] }
+  };
+  function brqOf(traineeId, kind) { return REQ_META[kind || 'brq'].store().filter(function (r) { return r.traineeId === traineeId; })[0] || null; }
+  function brqInitValues(traineeId, kind) {
+    var r = brqOf(traineeId, kind);
     if (r) return JSON.parse(JSON.stringify(r.values));   // EXP_1: записанный документ
     var t = trainee(traineeId);
     return { fullName: t.fullName, phone: t.phone || '', email: t.email || '', employment: 'main', hireDate: t.startDate || '', position: t.position || '', city: t.city || '',
@@ -4693,8 +4700,8 @@
       supFinalComment: '', hireDateFact: '', status: 'new' };
   }
   function brqTitle(tab) {
-    var r = brqOf(tab.traineeId);
-    return 'Заявка на трудоустройство в Bitrix ' + (r ? r.number + ' от ' + fmtDate(r.date) : '(создание)') + (tab.dirty ? ' *' : '');
+    var r = brqOf(tab.traineeId, tab.kind);
+    return REQ_META[tab.kind].title + ' ' + (r ? r.number + ' от ' + fmtDate(r.date) : '(создание)') + (tab.dirty ? ' *' : '');
   }
   // Подразделения — из структуры предприятия, с отступом по уровню вложенности
   function deptOptions(empty) {
@@ -4709,6 +4716,7 @@
   }
   function brqField(tab, label, name, oneC, kind, opts) {
     opts = opts || {};
+    if (REQ_META[tab.kind].hidden.indexOf(name) >= 0) return '';   // FT_33: у заявки на перевод нет телефона, email и «Студент»
     var v = tab.values[name];
     var id = 'brq_' + name;
     var err = tab.errors[name];
@@ -4728,7 +4736,7 @@
   var BRQ_FROM_AP = 'Из адаптационной программы';
   var BRQ_FROM_PERSON = 'Из физического лица стажера';
   function renderBitrixDoc(tab) {
-    var r = brqOf(tab.traineeId);
+    var r = brqOf(tab.traineeId, tab.kind);
     var t = trainee(tab.traineeId);
     var pages = [{ id: 'sup', text: 'Поля формы заявки СУП', name: 'СтраницаПоляФормыЗаявкиСУП' }, { id: 'fes', text: 'Поля согласования ФЭС', name: 'СтраницаПоляСогласованияФЭС' },
       { id: 'fin', text: 'Поля завершения СУП', name: 'СтраницаПоляЗавершенияСУП' }];
@@ -4794,10 +4802,11 @@
       toast('Не удалось записать: проверьте выделенные поля');
       return false;
     }
-    var r = brqOf(tab.traineeId);
+    var r = brqOf(tab.traineeId, tab.kind);
     if (!r) {
-      r = { id: 'brq-' + (++brqSeq), number: 'ЗТ-' + ('00000' + (D.bitrixRequests.length + 1)).slice(-6), date: D.TODAY, traineeId: tab.traineeId, authorId: D.CURRENT_USER_ID };
-      D.bitrixRequests.push(r);
+      var store = REQ_META[tab.kind].store();
+      r = { id: tab.kind + '-' + (++brqSeq), number: REQ_META[tab.kind].prefix + ('00000' + (store.length + 1)).slice(-6), date: D.TODAY, traineeId: tab.traineeId, authorId: D.CURRENT_USER_ID };
+      store.push(r);
     }
     r.values = JSON.parse(JSON.stringify(tab.values));
     r.savedAt = nowStamp(); r.savedBy = D.CURRENT_USER_ID;
@@ -4808,7 +4817,7 @@
   }
   // Закрытие измененного документа: «Да» — записать и закрыть, «Нет» — закрыть без записи, «Отмена» — остаться
   DIALOGS.brqUnsaved = {
-    title: 'Заявка на трудоустройство в Bitrix', form: 'ФормаВопросСохранитьИзменения', submit: 'Да', cancelText: 'Отмена',
+    titleFn: function () { var tab = byId(state.shell.tabs, dlgCtx().tabId); return tab ? REQ_META[tab.kind].title : 'Сохранить изменения'; }, form: 'ФормаВопросСохранитьИзменения', submit: 'Да', cancelText: 'Отмена',
     init: function () { return {}; },
     body: function () { return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияДанныеИзменены') + '>Данные были изменены. Сохранить изменения?</p>'; },
     extraFoot: function () { return button('Нет', { action: 'brqDiscard', name: 'ФормаВопросСохранитьИзмененияКнопкаНет' }); },
@@ -6103,7 +6112,7 @@
   // EXP_1: поле документа «Заявка на трудоустройство в Bitrix» — значение в черновик вкладки, заголовок со «*» (без перерисовки формы)
   function brqFieldInput(tgt) {
     var tab = activeDoc();
-    if (!tab || tab.kind !== 'brq') return;
+    if (!tab || !REQ_META[tab.kind]) return;
     tab.values[tgt.getAttribute('data-brq-field')] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
     if (!tab.dirty) { tab.dirty = true; renderShellTabs(); el('docTitle').textContent = docTitle(tab); }
   }
