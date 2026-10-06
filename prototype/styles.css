@@ -1020,3 +1020,17 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 
 /* ---------- FT_31: выбор наблюдателей — выбранные наверху, ниже черта и остальные ---------- */
 .picker-sep { border-top: 1px solid var(--c-border); margin: var(--sp-1) 0; flex: 0 0 auto; }
+
+/* ---------- EXP_1: документ «Заявка на трудоустройство в Bitrix» ---------- */
+.brq-doc { max-width: 980px; }
+.brq-form .field-label { flex: 0 0 300px; }
+.brq-form .input-num { max-width: 180px; }
+.brq-head { align-items: baseline; }
+.brq-form .brq-ro { background: var(--c-bg-panel); color: var(--c-text-secondary); }   /* из АП и физлица — только просмотр */
+.brq-form .input-date { max-width: 180px; }
+.brq-status .select { max-width: 360px; }
+
+/* ---------- EXP_1: ссылки в карточке задачи пользователя ---------- */
+.tv-card-links { margin-top: var(--sp-1); }
+.tv-card-link-row > .input { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: 32px; height: auto; }
+.tv-card-link-comment { white-space: normal; }

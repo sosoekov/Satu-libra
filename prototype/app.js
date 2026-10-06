@@ -628,8 +628,10 @@
     t.cancelledBy = D.CURRENT_USER_ID;
   }
   // FT_26: отмененные до подтверждения выхода, видимые текущему пользователю; сначала недавно отмененные
+  // FT_32: стажировка, отмененная из карточки стажера («Отменить стажировку»), — тоже в «Отмененных», не в архиве
+  function isCancelledInternship(t) { return t.stage === 'closed' && t.closeKind === 'cancelled'; }
   function myCancelled() {
-    return D.trainees.filter(function (t) { return t.stage === 'cancelled' && canSeePending(t); })
+    return D.trainees.filter(function (t) { return (t.stage === 'cancelled' && canSeePending(t)) || (isCancelledInternship(t) && seesByScope(t)); })
       .sort(function (a, b) { return (b.cancelledAt || '').localeCompare(a.cancelledAt || ''); });
   }
   function restoreCandidate(t) {
@@ -682,7 +684,9 @@
   var DOC_KINDS = {
     ap:  { form: 'ФормаКарточкаСтажера', tab: 'ВкладкаОкнаКарточкаСтажера', title: function (x) { return 'Адаптационная программа (' + trainee(x.traineeId).fullName + ')'; } },
     tpl: { form: 'ФормаШаблонАП', tab: 'ВкладкаОкнаШаблонАП', title: function (x) { return 'Шаблон АП: ' + byId(D.templates, x.templateId).name; } },
-    apv: { form: 'ФормаПросмотрАП', tab: 'ВкладкаОкнаПросмотрАП', title: function (x) { return 'Просмотр АП (' + trainee(x.traineeId).fullName + ')'; } }
+    apv: { form: 'ФормаПросмотрАП', tab: 'ВкладкаОкнаПросмотрАП', title: function (x) { return 'Просмотр АП (' + trainee(x.traineeId).fullName + ')'; } },
+    // EXP_1: документ «Заявка на трудоустройство в Bitrix» — открывается внутренней ссылкой из задачи чек-листа
+    brq: { form: 'ФормаДокументаЗаявкаНаТрудоустройствоВBitrix', tab: 'ВкладкаОкнаЗаявкаНаТрудоустройство', title: function (x) { return brqTitle(x); } }
   };
   function docTitle(tab) { return DOC_KINDS[tab.kind || 'ap'].title(tab); }
   function docCtx(traineeId, page) {
@@ -695,6 +699,7 @@
     if (!byId(state.shell.tabs, id)) {
       var tab = { id: id, kind: kind, ctx: docCtx(kind === 'apv' ? key : null, kind === 'apv' ? 'program' : null) };
       if (kind === 'tpl') tab.templateId = key; else tab.traineeId = key;
+      if (kind === 'brq') { tab.values = brqInitValues(key); tab.page = 'sup'; tab.dirty = false; tab.errors = {}; }   // EXP_1
       state.shell.tabs.push(tab);
     }
     state.openMenu = null;
@@ -725,7 +730,14 @@
     }
     render();
   }
-  function closeDocTab(id) {
+  function closeDocTab(id, force) {
+    var tab = byId(state.shell.tabs, id);
+    // EXP_1: документ изменен и не записан — как в 1С: «Данные были изменены. Сохранить изменения?»
+    if (tab && tab.kind === 'brq' && tab.dirty && !force) {
+      if (state.shell.active !== id) { switchShell(id); render(); }
+      openDialog('brqUnsaved', tab.traineeId, { tabId: id });
+      return;
+    }
     if (state.shell.active === id) switchShell(null);
     state.shell.tabs = state.shell.tabs.filter(function (x) { return x.id !== id; });
     render();
@@ -841,7 +853,7 @@
       hidden: function () { return !state.showCancelled; }, match: function () { return false; }, count: function () { return myCancelled().length; } },
     // FT_29: закрытые стажировки (завершенные и отмененные после старта) — только здесь: в дереве, списке и других фильтрах их нет
     { id: 'archive',      title: 'Архив стажировок',    icon: 'archive',  color: 'stage-found',    name: 'АрхивСтажировок',
-      match: function (t) { return isClosed(t); } }
+      match: function (t) { return isClosed(t) && !isCancelledInternship(t); } }   // FT_32: отмененные стажировки — в «Отмененных»
   ];
   function filterById(id) {
     for (var i = 0; i < FILTERS.length; i++) if (FILTERS[i].id === id) return FILTERS[i];
@@ -980,7 +992,7 @@
     var text = searchQuery() ? 'Никого не нашли'
       : state.counterFilter === 'pending' && place === 'Дерево' ? 'Кандидаты, ожидающие решения, — справа; в дерево они попадут после старта стажировки'   // FT_17
       : state.counterFilter === 'cancelled' && place === 'Дерево' ? 'Отмененные кандидаты — справа; в дерево они попадут после подтверждения выхода'   // FT_26
-      : state.counterFilter === 'archive' ? 'В архиве нет стажировок: сюда попадают завершенные и отмененные стажировки'   // FT_29
+      : state.counterFilter === 'archive' ? 'В архиве нет стажировок: сюда попадают завершенные стажировки'   // FT_29; FT_32: отмененные — в «Отмененных»
       : state.counterFilter ? 'Нет стажеров по фильтру «' + filterById(state.counterFilter).title + '»' + (state.deptFilter && place !== 'Дерево' ? ' в подразделении «' + dept(state.deptFilter).name + '»' : '')
       : state.deptFilter ? 'Нет стажеров в подразделении «' + dept(state.deptFilter).name + '»'   // FT_18
       : 'Нет стажеров';   // FT_23: у пользователя не осталось видимых стажеров (например, руководитель передал стажировку)
@@ -1026,6 +1038,7 @@
     var doc = activeDoc();
     if (doc && doc.kind === 'tpl') { el('docCenter').innerHTML = renderTemplateDoc(byId(D.templates, doc.templateId)); applyColWidths(el('docCenter')); return; }   // FT_22
     if (doc && doc.kind === 'apv') { el('docCenter').innerHTML = renderProgramView(trainee(doc.traineeId)); return; }
+    if (doc && doc.kind === 'brq') { el('docCenter').innerHTML = renderBitrixDoc(doc); return; }   // EXP_1
     if (isKshUser() && !activeDoc()) {   // FT_9: у сотрудника КШ — пустая вкладка, свой кабинет будет реализован позже
       el('centerZone').innerHTML = '<div class="empty ksh-empty"' + a1c('Надпись', 'ДекорацияКабинетКШ') + '>Здесь пока ничего нет</div>';
       return;
@@ -1319,12 +1332,15 @@
       '<div class="muted"' + a1c('Надпись', 'ТаблицаОтмененныеДолжность') + '>' + esc(t.position) + '</div>' +
       '<div class="ellipsis" title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПодразделение') + '>' + esc(dept(t.departmentId).name) + '</div>' +
       (r ? '<div>' + link(vrTitle(r), { action: 'pendingOpenRequest', data: { id: t.id }, cls: 'text-s', title: 'Открыть заявку на подбор', name: 'ТаблицаОтмененныеЗаявка' }) + '</div>' : '') +
-      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОтмененныеКогда') + '>Отменен ' + (t.cancelledAt ? fmtStamp(t.cancelledAt) : '') +
+      '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОтмененныеКогда') + '>' + (isCancelledInternship(t) ? 'Стажировка отменена ' : 'Отменен ') +
+        (t.cancelledAt ? fmtStamp(t.cancelledAt) : t.closedAt ? fmtDate(t.closedAt) : '') +
         (t.cancelledBy ? ' · ' + esc(personById(t.cancelledBy)) : '') + '</div>' +
       (t.cancelReason ? '<div class="text-s clamp2" title="' + esc(t.cancelReason) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПричина') + '>Причина: ' + esc(t.cancelReason) + '</div>' : '') +
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОтмененныеДействия', 'high') + '>' +
+        // FT_32: выход уже подтвержден, стажировка отменена после старта — только открыть карточку (только просмотр)
+        (isCancelledInternship(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) :
         button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Отмена была ошибкой — сразу подтвердить выход стажера', name: 'ТаблицаОтмененныеПодтвердитьВыход' }) +
-        button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' }) +
+        button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' })) +
       '</div></div>';
   }
   // ASSUMPTION (ТЗ 11.2): в карточке — ФИО, должность, подразделение, заявка, дата завершения подбора (FT_24: ожидаемая дата выхода не показывается)
@@ -3526,6 +3542,7 @@
       apply: function (t, v) {
         t.closeKind = 'cancelled';
         t.closedAt = D.TODAY;
+        t.cancelReason = v.reason.trim(); t.cancelledAt = nowStamp(); t.cancelledBy = D.CURRENT_USER_ID;   // FT_32: для карточки в «Отмененных»
         setStage(t, 'closed');
         var program = programOf(t);
         if (program) addHistory(program, 'Стажировка отменена. Причина: «' + v.reason.trim() + '»');
@@ -3659,6 +3676,24 @@
    * В 1С — поле ссылочного типа СправочникСсылка.БиблиотекаСсылок со стандартным быстрым выбором
    */
   function linkById(id) { return byId(D.linkLibrary, id); }
+  // EXP_1: внутренняя ссылка — команда 1С: e1cib/command/… или e1c://сервер/база#e1cib/command/… (открывает объект системы в новой вкладке);
+  // внешняя — начинается с http(s)://, открывается в браузере
+  var INTERNAL_URL_RE = /^(e1c:\/\/[^#\s]+#)?e1cib\/command\/\S+$/;
+  var EXTERNAL_URL_RE = /^https?:\/\/\S+$/;
+  function isInternalUrl(u) { return INTERNAL_URL_RE.test(u || ''); }
+  function internalCommand(u) { return u.replace(/^e1c:\/\/[^#]+#/, '').replace(/^e1cib\/command\//, ''); }
+  var BITRIX_DOC_COMMAND = 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать';
+  function openLink(url, traineeId) {
+    if (!isInternalUrl(url)) { toast('Ссылка откроется в браузере: ' + url); return; }
+    var cmd = internalCommand(url);
+    var tid = traineeId || (state.dialog && state.dialog.traineeId) || state.selectedTraineeId;
+    if (cmd === BITRIX_DOC_COMMAND) {
+      if (!tid) { toast('Заявка на трудоустройство открывается из задачи стажера'); return; }
+      openKindTab('brq', tid);
+      return;
+    }
+    toast('Откроется объект 1С: ' + cmd);
+  }
   function linkRows(list) { return (list || []).map(function (l) { return { linkId: l.linkId, comment: l.comment || '', sel: false, q: null }; }); }
   function linksFromRows(rows) {
     return rows.filter(function (r) { return r.linkId; }).map(function (r) { return { linkId: r.linkId, comment: (r.comment || '').trim() }; });
@@ -3701,6 +3736,9 @@
           (invalid ? ' aria-invalid="true"' : '') + ' aria-label="Ссылка"' + a1c('ПолеВвода', 'ТаблицаСсылкиСсылка') + '>' +
         button('', { cls: 'btn-icon btn-flat btn-small', icon: 'chevronDown', action: 'linkListToggle', data: { idx: i }, title: 'Выбрать из библиотеки ссылок',
           type: 'НЕ_ПЕРЕНОСИТЬ', name: 'ТаблицаСсылкиСсылкаКнопкаВыбора' }) +
+        // EXP_1: «Открыть» выбранную ссылку (в 1С — кнопка открытия поля ссылочного типа)
+        (lk && !open ? button('', { cls: 'btn-icon btn-flat btn-small', icon: 'openCard', action: 'openLinkUrl', data: { url: lk.url },
+          title: (isInternalUrl(lk.url) ? 'Открыть в новой вкладке: ' : 'Открыть в браузере: ') + lk.name, type: 'НЕ_ПЕРЕНОСИТЬ', name: 'ТаблицаСсылкиСсылкаКнопкаОткрытия' }) : '') +
       '</div>' + (open ? linkDropdown(i, l.q) : '') + '</div>';
   }
   // Список выбора — поверх прокручиваемых таблицы и формы, координаты от поля
@@ -4055,7 +4093,9 @@
       return field('Название', inputText('name', 'ПолеНазвание'), { required: true, error: e.name, forId: 'f_name', name: 'Название' }) +
         field('Группа', selectOptions('groupId', 'ПолеГруппа', [{ value: '', text: NO_GROUP.name }].concat(D.linkGroups.map(function (g) { return { value: g.id, text: g.name }; }))),
           { forId: 'f_groupId' }) +
-        field('Ссылка', inputText('url', 'ПолеСсылка', ' placeholder="Например, portal.cas.local/docs/reglamenty"'), { required: true, error: e.url, forId: 'f_url', name: 'Ссылка' });
+        field('Ссылка', inputText('url', 'ПолеСсылка', ' placeholder="Внешняя — с http(s)://, внутренняя — e1cib/command/…"') +
+          '<div class="muted text-s"' + a1c('Надпись', 'ДекорацияВидыСсылок') + '>Внешняя открывается в браузере, внутренняя (e1cib/command/… или e1c://сервер/база#e1cib/command/…) — объект 1С в новой вкладке</div>',
+          { required: true, error: e.url, forId: 'f_url', name: 'Ссылка' });
     },
     validate: function (t, v) {
       var e = {};
@@ -4064,6 +4104,7 @@
       var dup = D.linkLibrary.filter(function (l) { return l.url.toLowerCase() === url.toLowerCase(); })[0];
       if (!url) e.url = 'Укажите ссылку';
       else if (/\s/.test(url)) e.url = 'Ссылка не должна содержать пробелов';
+      else if (!isInternalUrl(url) && !EXTERNAL_URL_RE.test(url)) e.url = 'Внешняя ссылка начинается с http(s)://, внутренняя — с e1cib/command/ или e1c://сервер/база#e1cib/command/';   // EXP_1
       else if (dup) e.url = 'Такая ссылка уже есть в библиотеке: «' + dup.name + '»';
       return e;
     },
@@ -4625,6 +4666,158 @@
   var TASK_TYPE_TONES = { task: 'neutral', course: 'info', meeting: 'success', test: 'warning' };
   function taskTypeBadge(type, name) { return badge(TASK_TYPE_TONES[type || 'task'] || 'neutral', taskTypeText(type || 'task'), name); }
 
+  /* ---------- EXP_1: документ «Заявка на трудоустройство в Bitrix» ----------
+   * Один на стажера. Открывается внутренней ссылкой e1cib/command/Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать из задачи чек-листа
+   * в своей вкладке окна: если документа еще нет — новый, заполненный из АП и физлица стажера.
+   * Страницы «Поля формы заявки СУП» и «Поля согласования ФЭС». «Записать» / «Записать и закрыть»; пункт чек-листа выполняют отдельно.
+   * Изменять может любой, кто открыл документ (экспериментальная наработка — права не настраивались)
+   */
+  var BRQ_EMPLOYMENT = [{ value: 'main', text: 'Основное место работы' }, { value: 'ext', text: 'Внешнее совместительство' }, { value: 'int', text: 'Внутреннее совместительство' }];
+  var BRQ_PROBATION = [{ value: '14d', text: '14 дней' }, { value: '1m', text: '1 месяц' }, { value: '2m', text: '2 месяца' }, { value: '3m', text: '3 месяца' }, { value: 'none', text: 'Нет испытательного срока' }];
+  // EXP_1: статус заявки — поле выбора в шапке; у новой — «Новая» (в 1С статус будет приходить из Bitrix)
+  var BRQ_STATUSES = [{ value: 'new', text: 'Новая' }, { value: 'incorrect', text: 'Некорректно заполнена заявка' }, { value: 'returned', text: 'Возвращено на корректировку' },
+    { value: 'rejected', text: 'Отклонено рук.ЦФО' }, { value: 'cfo', text: 'Передано на согласование рук.ЦФО' }, { value: 'fes', text: 'Передано на согласование ФЭС' },
+    { value: 'sup', text: 'Передано на оформление в СУП' }, { value: 'hired', text: 'Сотрудник трудоустроен' }, { value: 'cancelled', text: 'Прием отменен' }];
+  var BRQ_FORMAT = [{ value: 'full', text: 'Полный рабочий день' }, { value: 'part', text: 'Неполный рабочий день' }];
+  // Числовые поля: имя → [подпись для ошибки, максимум]
+  var BRQ_NUMBERS = { incomeProbation: [null], incomeMain: [null], salary: [null], rate: [null], northBonus: [100], regionalCoeff: [null] };
+  var brqSeq = 0;
+  function brqOf(traineeId) { return D.bitrixRequests.filter(function (r) { return r.traineeId === traineeId; })[0] || null; }
+  function brqInitValues(traineeId) {
+    var r = brqOf(traineeId);
+    if (r) return JSON.parse(JSON.stringify(r.values));   // EXP_1: записанный документ
+    var t = trainee(traineeId);
+    return { fullName: t.fullName, phone: t.phone || '', email: t.email || '', employment: 'main', hireDate: t.startDate || '', position: t.position || '', city: t.city || '',
+      remote: false, cfoId: t.departmentId || '', probation: '', workFormat: 'full', student: false, incomeProbation: '', incomeMain: '', supComment: '',
+      legalEntityId: '', departmentId: '', regPosition: '', salary: '', rate: '', northBonus: '', regionalCoeff: '', fesComment: '',
+      supFinalComment: '', hireDateFact: '', status: 'new' };
+  }
+  function brqTitle(tab) {
+    var r = brqOf(tab.traineeId);
+    return 'Заявка на трудоустройство в Bitrix ' + (r ? r.number + ' от ' + fmtDate(r.date) : '(создание)') + (tab.dirty ? ' *' : '');
+  }
+  // Подразделения — из структуры предприятия, с отступом по уровню вложенности
+  function deptOptions(empty) {
+    var out = [{ value: '', text: empty }];
+    (function walk(parentId, level) {
+      D.departments.filter(function (d) { return (d.parentId || null) === parentId; }).forEach(function (d) {
+        out.push({ value: d.id, text: new Array(level + 1).join('   ') + d.name });
+        walk(d.id, level + 1);
+      });
+    })(null, 0);
+    return out;
+  }
+  function brqField(tab, label, name, oneC, kind, opts) {
+    opts = opts || {};
+    var v = tab.values[name];
+    var id = 'brq_' + name;
+    var err = tab.errors[name];
+    var attrs = ' id="' + id + '" data-brq-field="' + name + '"' + (err ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', oneC);
+    var control;
+    if (kind === 'ro') control = '<input type="text" class="input brq-ro" readonly tabindex="-1"' + attrs.replace('data-brq-field', 'data-brq-ro') + ' value="' + esc(opts.date ? fmtDate(v) : v) + '"' + (opts.title ? ' title="' + esc(opts.title) + '"' : '') + '>';
+    else if (kind === 'select') control = '<select class="select"' + attrs + '>' + opts.options.map(function (o) {
+      return '<option value="' + esc(o.value) + '"' + (o.value === v ? ' selected' : '') + '>' + esc(o.text) + '</option>'; }).join('') + '</select>';
+    else if (kind === 'check') return '<div class="field-row"><span class="field-label"></span><label class="check"><input type="checkbox" id="' + id + '" data-brq-field="' + name + '"' +
+      (v ? ' checked' : '') + a1c('Флажок', oneC) + '> ' + esc(label) + '</label></div>';
+    else if (kind === 'textarea') control = '<textarea class="textarea" rows="3"' + attrs + '>' + esc(v) + '</textarea>';
+    else if (kind === 'date') control = '<input type="date" class="input input-date"' + attrs + ' value="' + esc(v) + '">';
+    else control = '<input type="' + (kind === 'number' ? 'number' : 'text') + '" class="input' + (kind === 'number' ? ' input-num' : '') + '"' +
+      (kind === 'number' ? ' min="0" step="any"' : '') + attrs + ' value="' + esc(v) + '"' + (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>';
+    return field(label, control + (opts.hint ? '<div class="muted text-s">' + esc(opts.hint) + '</div>' : ''), { forId: id, error: err, name: oneC.replace(/^Поле/, '') });
+  }
+  var BRQ_FROM_AP = 'Из адаптационной программы';
+  var BRQ_FROM_PERSON = 'Из физического лица стажера';
+  function renderBitrixDoc(tab) {
+    var r = brqOf(tab.traineeId);
+    var t = trainee(tab.traineeId);
+    var pages = [{ id: 'sup', text: 'Поля формы заявки СУП', name: 'СтраницаПоляФормыЗаявкиСУП' }, { id: 'fes', text: 'Поля согласования ФЭС', name: 'СтраницаПоляСогласованияФЭС' },
+      { id: 'fin', text: 'Поля завершения СУП', name: 'СтраницаПоляЗавершенияСУП' }];
+    var body = tab.page === 'fin'
+      ? brqField(tab, 'Комментарий СУП', 'supFinalComment', 'ПолеКомментарийСУП', 'textarea') +
+        brqField(tab, 'Дата приема (фактическая)', 'hireDateFact', 'ПолеДатаПриемаФактическая', 'date')
+      : tab.page === 'sup'
+      ? brqField(tab, 'ФИО сотрудника', 'fullName', 'ПолеФИОСотрудника', 'ro', { title: BRQ_FROM_AP }) +
+        brqField(tab, 'Мобильный телефон', 'phone', 'ПолеМобильныйТелефон', 'ro', { title: BRQ_FROM_PERSON }) +
+        brqField(tab, 'Email сотрудника', 'email', 'ПолеEmailСотрудника', 'ro', { title: BRQ_FROM_PERSON }) +
+        brqField(tab, 'Вид занятости', 'employment', 'ПолеВидЗанятости', 'select', { options: BRQ_EMPLOYMENT }) +
+        brqField(tab, 'Дата приема (плановая)', 'hireDate', 'ПолеДатаПриемаПлановая', 'ro', { title: BRQ_FROM_AP, date: true }) +
+        brqField(tab, 'Должность', 'position', 'ПолеДолжность', 'ro', { title: BRQ_FROM_AP }) +
+        brqField(tab, 'Город проживания', 'city', 'ПолеГородПроживания', 'ro', { title: BRQ_FROM_PERSON }) +
+        brqField(tab, 'Оформление дистанционной работы', 'remote', 'ПолеОформлениеДистанционнойРаботы', 'check') +
+        brqField(tab, 'ЦФО', 'cfoId', 'ПолеЦФО', 'select', { options: deptOptions('Выберите подразделение') }) +
+        brqField(tab, 'Испытательный срок', 'probation', 'ПолеИспытательныйСрок', 'select', { options: [{ value: '', text: 'Выберите' }].concat(BRQ_PROBATION) }) +
+        brqField(tab, 'Формат работы', 'workFormat', 'ПолеФорматРаботы', 'select', { options: BRQ_FORMAT }) +
+        brqField(tab, 'Студент (очного отделения)', 'student', 'ПолеСтудентОчногоОтделения', 'check') +
+        brqField(tab, 'Испытательный срок. Уровень дохода на полную ставку (руки)', 'incomeProbation', 'ПолеДоходИспытательныйСрок', 'number') +
+        brqField(tab, 'Основной период. Уровень дохода на полную ставку (руки)', 'incomeMain', 'ПолеДоходОсновнойПериод', 'number') +
+        brqField(tab, 'Комментарий от подающего прием', 'supComment', 'ПолеКомментарийПодающегоПрием', 'textarea')
+      : brqField(tab, 'Юр. лицо', 'legalEntityId', 'ПолеЮрЛицо', 'select', { options: [{ value: '', text: 'Выберите организацию' }].concat(D.legalEntities.map(function (x) { return { value: x.id, text: x.name }; })) }) +
+        brqField(tab, 'Подразделение', 'departmentId', 'ПолеПодразделение', 'select', { options: deptOptions('Выберите подразделение') }) +
+        brqField(tab, 'Должность регламентная', 'regPosition', 'ПолеДолжностьРегламентная', 'text') +
+        brqField(tab, 'Оклад', 'salary', 'ПолеОклад', 'number') +
+        brqField(tab, 'Ставка', 'rate', 'ПолеСтавка', 'number') +
+        brqField(tab, 'Северная надбавка, %', 'northBonus', 'ПолеСевернаяНадбавка', 'number') +
+        brqField(tab, 'Районный коэффициент', 'regionalCoeff', 'ПолеРайонныйКоэффициент', 'number') +
+        brqField(tab, 'Комментарий от ФЭС', 'fesComment', 'ПолеКомментарийФЭС', 'textarea');
+    return '<div class="col gap-4 brq-doc"' + a1c('ГруппаВертикальная', 'ГруппаДокументЗаявка') + '>' +
+      '<div class="row command-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗаявки') + '>' +
+        button('Записать и закрыть', { cls: 'btn-primary', action: 'brqSave', data: { close: '1' }, name: 'КнопкаЗаписатьИЗакрыть' }) +
+        button('Записать', { action: 'brqSave', name: 'КнопкаЗаписать' }) + '</div>' +
+      '<div class="row gap-4 brq-head"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаЗаявки') + '>' +
+        '<span class="muted"' + a1c('Надпись', 'ДекорацияНомерЗаявки') + '>' + (r ? 'Номер ' + esc(r.number) + ' от ' + fmtDate(r.date) : 'Новый документ — номер присвоится при записи') + '</span>' +
+        '<span' + a1c('Надпись', 'ДекорацияСтажерЗаявки') + '>Стажер: ' + esc(t.fullName) + '</span></div>' +
+      '<div class="brq-form brq-status"' + a1c('ГруппаГоризонтальная', 'ГруппаСтатусЗаявки') + '>' + brqField(tab, 'Статус', 'status', 'ПолеСтатусЗаявки', 'select', { options: BRQ_STATUSES }) + '</div>' +
+      '<div class="tabs"' + a1c('Страницы', 'СтраницыЗаявки') + '>' + pages.map(function (x) {
+        return '<button type="button" class="tab' + (tab.page === x.id ? ' active' : '') + '" data-action="brqPage" data-tab="' + x.id + '"' + a1c('Страница', x.name) + '>' + x.text + '</button>';
+      }).join('') + '</div>' +
+      '<div class="col gap-3 brq-form"' + a1c('ГруппаВертикальная', tab.page === 'sup' ? 'ГруппаПоляФормыЗаявкиСУП' : tab.page === 'fes' ? 'ГруппаПоляСогласованияФЭС' : 'ГруппаПоляЗавершенияСУП') + '>' + body + '</div>' +
+      '</div>';
+  }
+  function brqErrors(v) {
+    var e = {};
+    Object.keys(BRQ_NUMBERS).forEach(function (k) {
+      var x = String(v[k] == null ? '' : v[k]).trim().replace(',', '.');
+      if (!x) return;
+      var n = Number(x);
+      if (!isFinite(n) || n < 0) e[k] = 'Укажите число не меньше нуля';
+      else if (BRQ_NUMBERS[k][0] != null && n > BRQ_NUMBERS[k][0]) e[k] = 'Не больше ' + BRQ_NUMBERS[k][0];
+    });
+    return e;
+  }
+  var BRQ_SUP_FIELDS = ['incomeProbation', 'incomeMain'];
+  function brqSave(tab, close) {
+    tab.errors = brqErrors(tab.values);
+    var bad = Object.keys(tab.errors);
+    if (bad.length) {
+      tab.page = BRQ_SUP_FIELDS.indexOf(bad[0]) >= 0 ? 'sup' : 'fes';   // страница с первой ошибкой
+      render();
+      toast('Не удалось записать: проверьте выделенные поля');
+      return false;
+    }
+    var r = brqOf(tab.traineeId);
+    if (!r) {
+      r = { id: 'brq-' + (++brqSeq), number: 'ЗТ-' + ('00000' + (D.bitrixRequests.length + 1)).slice(-6), date: D.TODAY, traineeId: tab.traineeId, authorId: D.CURRENT_USER_ID };
+      D.bitrixRequests.push(r);
+    }
+    r.values = JSON.parse(JSON.stringify(tab.values));
+    r.savedAt = nowStamp(); r.savedBy = D.CURRENT_USER_ID;
+    tab.dirty = false;
+    toast('Заявка записана: ' + r.number);
+    if (close) closeDocTab(tab.id, true); else render();
+    return true;
+  }
+  // Закрытие измененного документа: «Да» — записать и закрыть, «Нет» — закрыть без записи, «Отмена» — остаться
+  DIALOGS.brqUnsaved = {
+    title: 'Заявка на трудоустройство в Bitrix', form: 'ФормаВопросСохранитьИзменения', submit: 'Да', cancelText: 'Отмена',
+    init: function () { return {}; },
+    body: function () { return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияДанныеИзменены') + '>Данные были изменены. Сохранить изменения?</p>'; },
+    extraFoot: function () { return button('Нет', { action: 'brqDiscard', name: 'ФормаВопросСохранитьИзмененияКнопкаНет' }); },
+    apply: function () {
+      var tab = byId(state.shell.tabs, dlgCtx().tabId);
+      if (tab) setTimeout(function () { brqSave(tab, true); }, 0);
+    }
+  };
+
   // Задача шаблона: ctx {tplId, index} (index null — новая). Срок — число дней от даты выхода
   function tplOf(ctx) { return byId(D.templates, ctx.tplId); }
   DIALOGS.tplTask = {
@@ -4860,6 +5053,25 @@
     var cmd = TV_COMMANDS[x.type];
     return cmd.items.length ? cmd.items : [[cmd.main, byId(TV_TYPES, x.type).text, byId(TV_TYPES, x.type).name]];
   }
+  // EXP_1: «Ссылки для ознакомления» в карточке задачи — если у задачи (пункта чек-листа, задачи АП) есть ссылки; только просмотр.
+  // Ссылка — гиперссылка и кнопка «Открыть»: внутренняя открывает объект 1С в новой вкладке, внешняя — браузер
+  function tvCardLinks(x) {
+    var links = x.kind !== 'ap' && x.ref && x.ref.links ? x.ref.links.filter(function (l) { return linkById(l.linkId); }) : [];
+    if (!links.length) return '';
+    return '<div class="col gap-2 tv-card-links"' + a1c('ГруппаВертикальная', 'ГруппаСсылкиЗадачиПользователя') + '>' +
+      '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияСсылкиЗадачиПользователя') + '>Ссылки для ознакомления</div>' +
+      links.map(function (l) {
+        var lk = linkById(l.linkId);
+        var data = { url: lk.url, trainee: x.traineeId || '' };
+        return '<div class="row gap-3 tv-card-link-row"' + a1c('ГруппаГоризонтальная', 'ГруппаСсылкаЗадачиПользователя') + '>' +
+          '<div class="input row gap-1 tv-card-link" title="' + esc(lk.url) + '">' +
+            '<span class="grow ellipsis">' + link(lk.name, { action: 'openLinkUrl', data: data, title: lk.url, name: 'ТаблицаСсылкиЗадачиПользователяСсылка' }) + '</span>' +
+            button('', { cls: 'btn-icon btn-flat btn-small', icon: 'openCard', action: 'openLinkUrl', data: data,
+              title: (isInternalUrl(lk.url) ? 'Открыть в новой вкладке: ' : 'Открыть в браузере: ') + lk.name, type: 'НЕ_ПЕРЕНОСИТЬ', name: 'ТаблицаСсылкиЗадачиПользователяКнопкаОткрытия' }) + '</div>' +
+          '<div class="input tv-card-link-comment' + (l.comment ? '' : ' muted') + '"' + a1c('Надпись', 'ТаблицаСсылкиЗадачиПользователяКомментарий') + '>' + esc(l.comment || 'Комментарий') + '</div>' +
+          '</div>';
+      }).join('') + '</div>';
+  }
   DIALOGS.tvTask = {
     form: 'ФормаЗадачаПользователя', wide: true, readOnly: true, plainClose: true, noCloseButton: true,
     titleFn: function () { var x = tvTaskByKey(dlgCtx().key); return x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : 'Задача'; },
@@ -4892,6 +5104,7 @@
           (redir.comment ? field('Комментарий перенаправления', tvCardValue(esc(redir.comment), 'ДекорацияКомментарийПеренаправления', 'tv-card-text')) : '') + '</div>' : '') +
         field('Предмет', '<div class="tv-card-value">' + link(x.subjectText, { action: 'tvOpenSubject', data: { key: x.key }, name: 'ГиперссылкаПредметЗадачи',
           title: x.source === 'recruit' ? 'Открыть документ подбора персонала' : 'Открыть карточку стажера в новой вкладке' }) + '</div>') +
+        tvCardLinks(x) +   // EXP_1: ссылки задачи
         (d ? '<div class="col gap-3 tv-card-done"' + a1c('ГруппаВертикальная', 'ГруппаВыполнениеЗадачи') + '>' +
           field('Результат', tvCardValue(esc(r[1]), 'ДекорацияРезультатВыполнения')) +
           field('Выполнил', tvCardValue(esc(d.by ? personById(d.by) : '—'), 'ДекорацияВыполнилЗадачу')) +
@@ -5348,6 +5561,7 @@
       if (!state.showCancelled && state.counterFilter === 'cancelled') state.counterFilter = null;
       render();
     },
+    cancelledOpen: function (btn) { selectTrainee(btn.getAttribute('data-id')); },   // FT_32
     cancelledRestore: function (btn) {   // FT_26: вернуть отмененного кандидата в «Ожидают решения»
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || t.stage !== 'cancelled') return;
@@ -5619,7 +5833,7 @@
       state.dialog.values.observers = [];
       renderDialog();
     },
-    openLinkUrl: function (btn) { toast('Ссылка откроется в браузере: ' + btn.getAttribute('data-url')); },
+    openLinkUrl: function (btn) { openLink(btn.getAttribute('data-url'), btn.getAttribute('data-trainee')); },   // EXP_1: внутренние — объект 1С в новой вкладке
     openExecutorCard: function () {   // FT_23
       if (state.dialog.values.executorId) toast('Откроется карточка сотрудника: ' + personById(state.dialog.values.executorId));
     },
@@ -5838,6 +6052,9 @@
     tvOpenSubject: function (btn) { var x = tvTaskByKey(btn.getAttribute('data-key')); if (x) openTaskSubject(x); },
     shellTab: function (btn) { switchShell(btn.getAttribute('data-id') || null); render(); },
     shellClose: function (btn) { closeDocTab(btn.getAttribute('data-id')); },
+    brqPage: function (btn) { var tab = activeDoc(); tab.page = btn.getAttribute('data-tab'); renderCenter(); },   // EXP_1
+    brqSave: function (btn) { brqSave(activeDoc(), btn.getAttribute('data-close') === '1'); },
+    brqDiscard: function () { var id = dlgCtx().tabId; closeDialog(); closeDocTab(id, true); },
     shellCloseActive: function () { if (state.shell.active) closeDocTab(state.shell.active); },
     impAdd: function () {
       var lv = state.dialog.values.levels;
@@ -5883,7 +6100,15 @@
   });
 
   // Поле поиска: фильтрация по мере ввода
+  // EXP_1: поле документа «Заявка на трудоустройство в Bitrix» — значение в черновик вкладки, заголовок со «*» (без перерисовки формы)
+  function brqFieldInput(tgt) {
+    var tab = activeDoc();
+    if (!tab || tab.kind !== 'brq') return;
+    tab.values[tgt.getAttribute('data-brq-field')] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
+    if (!tab.dirty) { tab.dirty = true; renderShellTabs(); el('docTitle').textContent = docTitle(tab); }
+  }
   document.addEventListener('input', function (e) {
+    if (e.target.hasAttribute && e.target.hasAttribute('data-brq-field') && e.target.type !== 'checkbox') { brqFieldInput(e.target); return; }
     var f = e.target.getAttribute('data-field');
     if (f && state.dialog) {
       if (e.target.type !== 'checkbox') state.dialog.values[f] = e.target.value;
@@ -5938,6 +6163,7 @@
   });
   document.addEventListener('change', function (e) {
     var tgt = e.target;
+    if (tgt.hasAttribute('data-brq-field')) { brqFieldInput(tgt); return; }   // EXP_1
     var f = tgt.getAttribute('data-field');
     if (f && state.dialog) {
       state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
