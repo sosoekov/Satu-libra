@@ -4686,8 +4686,8 @@
   var brqSeq = 0;
   // FT_33: виды документов-заявок: команда внутренней ссылки, заголовок, префикс номера, хранилище, скрытые реквизиты
   var REQ_META = {
-    brq: { command: 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать', title: 'Заявка на трудоустройство в Bitrix', prefix: 'ЗТ-', store: function () { return D.bitrixRequests; }, hidden: [] },
-    trq: { command: 'Документ.ЗаявкаНаПеревод.Создать', title: 'Заявка на перевод', prefix: 'ЗПР-', store: function () { return D.transferRequests; }, hidden: ['phone', 'email', 'student'] }
+    brq: { command: 'Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать', title: 'Заявка на трудоустройство в Bitrix', prefix: 'ЗТ-', store: function () { return D.bitrixRequests; } },
+    trq: { command: 'Документ.ЗаявкаНаПеревод.Создать', title: 'Заявка на перевод', prefix: 'ЗПР-', store: function () { return D.transferRequests; } }   // состав страницы СУП — SUP_FIELDS.trq
   };
   function brqOf(traineeId, kind) { return REQ_META[kind || 'brq'].store().filter(function (r) { return r.traineeId === traineeId; })[0] || null; }
   function brqInitValues(traineeId, kind) {
@@ -4695,7 +4695,7 @@
     if (r) return JSON.parse(JSON.stringify(r.values));   // EXP_1: записанный документ
     var t = trainee(traineeId);
     return { fullName: t.fullName, phone: t.phone || '', email: t.email || '', employment: 'main', hireDate: t.startDate || '', position: t.position || '', city: t.city || '',
-      remote: false, cfoId: t.departmentId || '', probation: '', workFormat: 'full', student: false, incomeProbation: '', incomeMain: '', supComment: '',
+      remote: false, cfoId: t.departmentId || '', cfoCurrentId: '', probation: '', workFormat: 'full', student: false, incomeProbation: '', incomeMain: '', supComment: '',
       legalEntityId: '', departmentId: '', regPosition: '', salary: '', rate: '', northBonus: '', regionalCoeff: '', fesComment: '',
       supFinalComment: '', hireDateFact: '', status: 'new' };
   }
@@ -4716,7 +4716,6 @@
   }
   function brqField(tab, label, name, oneC, kind, opts) {
     opts = opts || {};
-    if (REQ_META[tab.kind].hidden.indexOf(name) >= 0) return '';   // FT_33: у заявки на перевод нет телефона, email и «Студент»
     var v = tab.values[name];
     var id = 'brq_' + name;
     var err = tab.errors[name];
@@ -4726,12 +4725,60 @@
     else if (kind === 'select') control = '<select class="select"' + attrs + '>' + opts.options.map(function (o) {
       return '<option value="' + esc(o.value) + '"' + (o.value === v ? ' selected' : '') + '>' + esc(o.text) + '</option>'; }).join('') + '</select>';
     else if (kind === 'check') return '<div class="field-row"><span class="field-label"></span><label class="check"><input type="checkbox" id="' + id + '" data-brq-field="' + name + '"' +
-      (v ? ' checked' : '') + a1c('Флажок', oneC) + '> ' + esc(label) + '</label></div>';
+      (v ? ' checked' : '') + a1c('Флажок', oneC) + '> ' + esc(label) + (opts.req ? '<span class="req" title="Обязательное поле"> *</span>' : '') + '</label></div>';
     else if (kind === 'textarea') control = '<textarea class="textarea" rows="3"' + attrs + '>' + esc(v) + '</textarea>';
     else if (kind === 'date') control = '<input type="date" class="input input-date"' + attrs + ' value="' + esc(v) + '">';
     else control = '<input type="' + (kind === 'number' ? 'number' : 'text') + '" class="input' + (kind === 'number' ? ' input-num' : '') + '"' +
       (kind === 'number' ? ' min="0" step="any"' : '') + attrs + ' value="' + esc(v) + '"' + (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>';
-    return field(label, control + (opts.hint ? '<div class="muted text-s">' + esc(opts.hint) + '</div>' : ''), { forId: id, error: err, name: oneC.replace(/^Поле/, '') });
+    return field(label, control + (opts.hint ? '<div class="muted text-s">' + esc(opts.hint) + '</div>' : ''), { forId: id, error: err, name: oneC.replace(/^Поле/, ''), required: !!opts.req });
+  }
+  // Страница «Поля формы заявки СУП»: [подпись, реквизит, имя элемента, вид, параметры]; req — обязательный (звездочка, проверка при записи)
+  var BRQ_PROBATION_OPTS = function () { return [{ value: '', text: 'Выберите' }].concat(BRQ_PROBATION); };
+  var SUP_FIELDS = {
+    brq: function () { return [
+      ['ФИО сотрудника', 'fullName', 'ПолеФИОСотрудника', 'ro', { title: BRQ_FROM_AP }],
+      ['Мобильный телефон', 'phone', 'ПолеМобильныйТелефон', 'ro', { title: BRQ_FROM_PERSON }],
+      ['Email сотрудника', 'email', 'ПолеEmailСотрудника', 'ro', { title: BRQ_FROM_PERSON }],
+      ['Вид занятости', 'employment', 'ПолеВидЗанятости', 'select', { options: BRQ_EMPLOYMENT }],
+      ['Дата приема (плановая)', 'hireDate', 'ПолеДатаПриемаПлановая', 'ro', { title: BRQ_FROM_AP, date: true }],
+      ['Должность', 'position', 'ПолеДолжность', 'ro', { title: BRQ_FROM_AP }],
+      ['Город проживания', 'city', 'ПолеГородПроживания', 'ro', { title: BRQ_FROM_PERSON }],
+      ['Оформление дистанционной работы', 'remote', 'ПолеОформлениеДистанционнойРаботы', 'check'],
+      ['ЦФО', 'cfoId', 'ПолеЦФО', 'select', { options: deptOptions('Выберите подразделение') }],
+      ['Испытательный срок', 'probation', 'ПолеИспытательныйСрок', 'select', { options: BRQ_PROBATION_OPTS() }],
+      ['Формат работы', 'workFormat', 'ПолеФорматРаботы', 'select', { options: BRQ_FORMAT }],
+      ['Студент (очного отделения)', 'student', 'ПолеСтудентОчногоОтделения', 'check'],
+      ['Испытательный срок. Уровень дохода на полную ставку (руки)', 'incomeProbation', 'ПолеДоходИспытательныйСрок', 'number'],
+      ['Основной период. Уровень дохода на полную ставку (руки)', 'incomeMain', 'ПолеДоходОсновнойПериод', 'number'],
+      ['Комментарий от подающего прием', 'supComment', 'ПолеКомментарийПодающегоПрием', 'textarea']]; },
+    // FT_33: заявка на перевод — список реквизитов заказчика; все, кроме ФИО, обязательные (флажки — только звездочка)
+    trq: function () { return [
+      ['ФИО', 'fullName', 'ПолеФИОСотрудника', 'ro', { title: BRQ_FROM_AP }],
+      ['Email сотрудника', 'email', 'ПолеEmailСотрудника', 'ro', { title: BRQ_FROM_PERSON, req: true }],
+      ['Вид занятости', 'employment', 'ПолеВидЗанятости', 'select', { options: BRQ_EMPLOYMENT, req: true }],
+      ['Дата перевода (плановая)', 'hireDate', 'ПолеДатаПереводаПлановая', 'ro', { title: BRQ_FROM_AP, date: true, req: true }],
+      ['Должность новая', 'position', 'ПолеДолжностьНовая', 'ro', { title: BRQ_FROM_AP, req: true }],
+      ['Город проживания', 'city', 'ПолеГородПроживания', 'ro', { title: BRQ_FROM_PERSON, req: true }],
+      ['Оформление дистанционной работы', 'remote', 'ПолеОформлениеДистанционнойРаботы', 'check', { req: true }],
+      ['ЦФО новый', 'cfoId', 'ПолеЦФОНовый', 'select', { options: deptOptions('Выберите подразделение'), req: true }],
+      ['ЦФО текущий', 'cfoCurrentId', 'ПолеЦФОТекущий', 'select', { options: deptOptions('Выберите подразделение'), req: true }],
+      ['Испытательный срок', 'probation', 'ПолеИспытательныйСрок', 'select', { options: BRQ_PROBATION_OPTS(), req: true }],
+      ['Формат работы', 'workFormat', 'ПолеФорматРаботы', 'select', { options: BRQ_FORMAT, req: true }],
+      ['Студент (очного отделения)', 'student', 'ПолеСтудентОчногоОтделения', 'check', { req: true }],
+      ['Испытательный срок. Уровень дохода на полную ставку (руки)', 'incomeProbation', 'ПолеДоходИспытательныйСрок', 'number', { req: true }],
+      ['Комментарий от подающего перевод', 'supComment', 'ПолеКомментарийПодающегоПеревод', 'textarea', { req: true }]]; }
+  };
+  function brqSupFields(tab) {
+    return SUP_FIELDS[tab.kind]().map(function (f) { return brqField(tab, f[0], f[1], f[2], f[3], f[4]); }).join('');
+  }
+  // FT_33: незаполненные обязательные реквизиты (флажки не проверяются: снятый флажок — «Нет»)
+  function brqRequiredErrors(tab) {
+    var e = {};
+    SUP_FIELDS[tab.kind]().forEach(function (f) {
+      if (f[4] && f[4].req && f[3] !== 'check' && !String(tab.values[f[1]] == null ? '' : tab.values[f[1]]).trim())
+        e[f[1]] = f[3] === 'ro' ? 'Не заполнено: ' + (f[4].title || '').toLowerCase() : 'Заполните поле «' + f[0] + '»';
+    });
+    return e;
   }
   var BRQ_FROM_AP = 'Из адаптационной программы';
   var BRQ_FROM_PERSON = 'Из физического лица стажера';
@@ -4743,22 +4790,7 @@
     var body = tab.page === 'fin'
       ? brqField(tab, 'Комментарий СУП', 'supFinalComment', 'ПолеКомментарийСУП', 'textarea') +
         brqField(tab, 'Дата приема (фактическая)', 'hireDateFact', 'ПолеДатаПриемаФактическая', 'date')
-      : tab.page === 'sup'
-      ? brqField(tab, 'ФИО сотрудника', 'fullName', 'ПолеФИОСотрудника', 'ro', { title: BRQ_FROM_AP }) +
-        brqField(tab, 'Мобильный телефон', 'phone', 'ПолеМобильныйТелефон', 'ro', { title: BRQ_FROM_PERSON }) +
-        brqField(tab, 'Email сотрудника', 'email', 'ПолеEmailСотрудника', 'ro', { title: BRQ_FROM_PERSON }) +
-        brqField(tab, 'Вид занятости', 'employment', 'ПолеВидЗанятости', 'select', { options: BRQ_EMPLOYMENT }) +
-        brqField(tab, 'Дата приема (плановая)', 'hireDate', 'ПолеДатаПриемаПлановая', 'ro', { title: BRQ_FROM_AP, date: true }) +
-        brqField(tab, 'Должность', 'position', 'ПолеДолжность', 'ro', { title: BRQ_FROM_AP }) +
-        brqField(tab, 'Город проживания', 'city', 'ПолеГородПроживания', 'ro', { title: BRQ_FROM_PERSON }) +
-        brqField(tab, 'Оформление дистанционной работы', 'remote', 'ПолеОформлениеДистанционнойРаботы', 'check') +
-        brqField(tab, 'ЦФО', 'cfoId', 'ПолеЦФО', 'select', { options: deptOptions('Выберите подразделение') }) +
-        brqField(tab, 'Испытательный срок', 'probation', 'ПолеИспытательныйСрок', 'select', { options: [{ value: '', text: 'Выберите' }].concat(BRQ_PROBATION) }) +
-        brqField(tab, 'Формат работы', 'workFormat', 'ПолеФорматРаботы', 'select', { options: BRQ_FORMAT }) +
-        brqField(tab, 'Студент (очного отделения)', 'student', 'ПолеСтудентОчногоОтделения', 'check') +
-        brqField(tab, 'Испытательный срок. Уровень дохода на полную ставку (руки)', 'incomeProbation', 'ПолеДоходИспытательныйСрок', 'number') +
-        brqField(tab, 'Основной период. Уровень дохода на полную ставку (руки)', 'incomeMain', 'ПолеДоходОсновнойПериод', 'number') +
-        brqField(tab, 'Комментарий от подающего прием', 'supComment', 'ПолеКомментарийПодающегоПрием', 'textarea')
+      : tab.page === 'sup' ? brqSupFields(tab)
       : brqField(tab, 'Юр. лицо', 'legalEntityId', 'ПолеЮрЛицо', 'select', { options: [{ value: '', text: 'Выберите организацию' }].concat(D.legalEntities.map(function (x) { return { value: x.id, text: x.name }; })) }) +
         brqField(tab, 'Подразделение', 'departmentId', 'ПолеПодразделение', 'select', { options: deptOptions('Выберите подразделение') }) +
         brqField(tab, 'Должность регламентная', 'regPosition', 'ПолеДолжностьРегламентная', 'text') +
@@ -4792,12 +4824,16 @@
     });
     return e;
   }
-  var BRQ_SUP_FIELDS = ['incomeProbation', 'incomeMain'];
   function brqSave(tab, close) {
     tab.errors = brqErrors(tab.values);
+    var reqE = brqRequiredErrors(tab);   // FT_33: обязательные реквизиты; ошибки — в порядке полей страницы СУП
+    var ordered = {};
+    SUP_FIELDS[tab.kind]().forEach(function (f) { if (reqE[f[1]] || tab.errors[f[1]]) ordered[f[1]] = reqE[f[1]] || tab.errors[f[1]]; });
+    Object.keys(tab.errors).forEach(function (k) { if (!ordered[k]) ordered[k] = tab.errors[k]; });
+    tab.errors = ordered;
     var bad = Object.keys(tab.errors);
     if (bad.length) {
-      tab.page = BRQ_SUP_FIELDS.indexOf(bad[0]) >= 0 ? 'sup' : 'fes';   // страница с первой ошибкой
+      tab.page = SUP_FIELDS[tab.kind]().some(function (f) { return f[1] === bad[0]; }) ? 'sup' : 'fes';   // страница с первой ошибкой
       render();
       toast('Не удалось записать: проверьте выделенные поля');
       return false;
