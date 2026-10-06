@@ -456,22 +456,25 @@
     { id: 'lg-portal', name: 'Корпоративный портал' },
     { id: 'lg-docs',   name: 'Регламенты и документы' },
     { id: 'lg-learn',  name: 'Обучение' },
-    { id: 'lg-ext',    name: 'Внешние системы' }
+    { id: 'lg-ext',    name: 'Внешние системы' },
+    { id: 'lg-1c',     name: 'Объекты 1С' }   // EXP_1: внутренние ссылки
   ];
   var linkLibrary = [
-    { id: 'lnk-1',  name: 'Корпоративный портал ЦАС',               groupId: 'lg-portal', url: 'portal.cas.local' },
-    { id: 'lnk-2',  name: 'Структура предприятия',                  groupId: 'lg-portal', url: 'portal.cas.local/structure' },
-    { id: 'lnk-3',  name: 'Телефонный справочник',                  groupId: 'lg-portal', url: 'portal.cas.local/phones' },
-    { id: 'lnk-4',  name: 'Регламенты на портале',                  groupId: 'lg-docs',   url: 'portal.cas.local/docs/reglamenty' },
-    { id: 'lnk-5',  name: 'Корпоративный кодекс',                   groupId: 'lg-docs',   url: 'portal.cas.local/docs/kodeks' },
-    { id: 'lnk-6',  name: 'Инструкция по охране труда',             groupId: 'lg-docs',   url: 'portal.cas.local/docs/ohrana-truda' },
-    { id: 'lnk-7',  name: 'Политика информационной безопасности',   groupId: 'lg-docs',   url: 'portal.cas.local/docs/ib-policy' },
-    { id: 'lnk-8',  name: 'Памятка стажера',                        groupId: 'lg-docs',   url: 'portal.cas.local/docs/pamyatka-stazhera' },
-    { id: 'lnk-9',  name: 'База знаний ЦАС',                        groupId: 'lg-learn',  url: 'wiki.cas.local' },
-    { id: 'lnk-10', name: 'Forus Team',                             groupId: 'lg-ext',    url: 'forus.e-queo.online' },
-    { id: 'lnk-11', name: 'Bitrix24: заявки на трудоустройство',    groupId: 'lg-ext',    url: 'bitrix.cas.local/hr/requests' },
-    { id: 'lnk-12', name: 'Сервис заявок 0911',                     groupId: 'lg-ext',    url: '0911.cas.local' },
-    { id: 'lnk-13', name: 'СИТ: заявки',                            groupId: 'lg-ext',    url: 'sit.cas.local' }
+    { id: 'lnk-1',  name: 'Корпоративный портал ЦАС',               groupId: 'lg-portal', url: 'https://portal.cas.local' },
+    { id: 'lnk-2',  name: 'Структура предприятия',                  groupId: 'lg-portal', url: 'https://portal.cas.local/structure' },
+    { id: 'lnk-3',  name: 'Телефонный справочник',                  groupId: 'lg-portal', url: 'https://portal.cas.local/phones' },
+    { id: 'lnk-4',  name: 'Регламенты на портале',                  groupId: 'lg-docs',   url: 'https://portal.cas.local/docs/reglamenty' },
+    { id: 'lnk-5',  name: 'Корпоративный кодекс',                   groupId: 'lg-docs',   url: 'https://portal.cas.local/docs/kodeks' },
+    { id: 'lnk-6',  name: 'Инструкция по охране труда',             groupId: 'lg-docs',   url: 'https://portal.cas.local/docs/ohrana-truda' },
+    { id: 'lnk-7',  name: 'Политика информационной безопасности',   groupId: 'lg-docs',   url: 'https://portal.cas.local/docs/ib-policy' },
+    { id: 'lnk-8',  name: 'Памятка стажера',                        groupId: 'lg-docs',   url: 'https://portal.cas.local/docs/pamyatka-stazhera' },
+    { id: 'lnk-9',  name: 'База знаний ЦАС',                        groupId: 'lg-learn',  url: 'https://wiki.cas.local' },
+    { id: 'lnk-10', name: 'Forus Team',                             groupId: 'lg-ext',    url: 'https://forus.e-queo.online' },
+    { id: 'lnk-11', name: 'Bitrix24: заявки на трудоустройство',    groupId: 'lg-ext',    url: 'https://bitrix.cas.local/hr/requests' },
+    { id: 'lnk-12', name: 'Сервис заявок 0911',                     groupId: 'lg-ext',    url: 'https://0911.cas.local' },
+    // EXP_1: внутренняя ссылка — команда 1С (e1cib/command/… или e1c://server/HR_Forus#e1cib/command/…): открывает объект системы в новой вкладке
+    { id: 'lnk-bitrix-doc', name: 'Заявка на трудоустройство в Bitrix',  groupId: 'lg-1c',     url: 'e1cib/command/Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать' },
+    { id: 'lnk-13', name: 'СИТ: заявки',                            groupId: 'lg-ext',    url: 'https://sit.cas.local' }
   ];
   function libLinks(ids) { return (ids || []).map(function (id) { return { linkId: id, comment: '' }; }); }
 
@@ -481,7 +484,7 @@
    */
   var checklistTemplate = [
     { name: 'Создать заявку на трудоустройство в Bitrix',       responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix',
-      description: 'Заявка на трудоустройство стажера создается в Bitrix24 по форме отдела кадров.', links: ['lnk-11'] },
+      description: 'Заявка на трудоустройство стажера оформляется документом «Заявка на трудоустройство в Bitrix» — откройте его по ссылке ниже.', links: ['lnk-bitrix-doc'] },   // EXP_1
     { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
       description: 'Заявка на выпуск пропуска создается в сервисе заявок 0911.', links: ['lnk-12'] },
     { name: 'Создать заявку на создание учетной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
@@ -619,7 +622,7 @@
     var found = linkLibrary.filter(function (l) { return l.name === title; })[0];
     if (found) return found.id;
     var id = 'lnk-c' + courseSeq;
-    linkLibrary.push({ id: id, name: title, groupId: 'lg-learn', url: 'forus.e-queo.online/' + (courseSeq++) + '/course' });
+    linkLibrary.push({ id: id, name: title, groupId: 'lg-learn', url: 'https://forus.e-queo.online/' + (courseSeq++) + '/course' });
     return id;
   }
   function taskExtras(name, block) {
@@ -895,6 +898,37 @@
       else if (v && typeof v === 'object') shiftDates(v);
     });
   }
+  /* EXP_1: контактные данные физлица стажера (тестовые) — для документа «Заявка на трудоустройство в Bitrix» */
+  var traineeContacts = {
+    't-ivanov':     { phone: '+7 900 100-00-01', email: 'ivanov.ps@example.local',     city: 'Иркутск' },
+    't-belova':     { phone: '+7 900 100-00-02', email: 'belova.ad@example.local',     city: 'Иркутск' },
+    't-sidorov':    { phone: '+7 900 100-00-03', email: 'sidorov.ai@example.local',    city: 'Ангарск' },
+    't-kuznetsova': { phone: '+7 900 100-00-04', email: 'kuznetsova.mo@example.local', city: 'Иркутск' },
+    't-smirnov':    { phone: '+7 900 100-00-05', email: 'smirnov.kv@example.local',    city: 'Шелехов' },
+    't-popova':     { phone: '+7 900 100-00-06', email: 'popova.ea@example.local',     city: 'Иркутск' },
+    't-orlova':     { phone: '+7 900 100-00-07', email: 'orlova.dp@example.local',     city: 'Улан-Удэ' },
+    't-lebedev':    { phone: '+7 900 100-00-08', email: 'lebedev.sn@example.local',    city: 'Иркутск' },
+    't-grigoriev':  { phone: '+7 900 100-00-09', email: 'grigoriev.mo@example.local',  city: 'Ангарск' },
+    't-found-1':    { phone: '+7 900 100-00-10', email: 'kovalev.ds@example.local',    city: 'Иркутск' }
+  };
+  trainees.forEach(function (t) { var c = traineeContacts[t.id] || {}; t.phone = c.phone || ''; t.email = c.email || ''; t.city = c.city || ''; });
+  // EXP_1: юридические лица группы (справочник «Организации»)
+  var legalEntities = [
+    { id: 'le-npf',    name: 'ООО НПФ' },
+    { id: 'le-rkc',    name: 'ООО РКЦ' },
+    { id: 'le-rsc',    name: 'ООО РСЦ' },
+    { id: 'le-forus',  name: 'ООО 1С Форус' },
+    { id: 'le-bo',     name: 'ООО 1С БО Форус' },
+    { id: 'le-distr',  name: 'ООО 1С Форус. Дистрибьюция' },
+    { id: 'le-buh',    name: 'ООО Бухмастер Плюс' },
+    { id: 'le-virtus', name: 'ООО Виртус ИТ' },
+    { id: 'le-umc',    name: 'ООО УМЦ ДПО Форус' },
+    { id: 'le-crv',    name: 'ООО Центр разработки и внедрения' },
+    { id: 'le-blagus', name: 'ООО Благус' }
+  ];
+  // EXP_1: документы «Заявка на трудоустройство в Bitrix» (один на стажера); создаются в прототипе
+  var bitrixRequests = [];
+
   /* FT_28: отметки о перенаправлении задач: ключ задачи → {by — кто перенаправил, to — кому, at — когда, comment}.
    * Отметка видна новому исполнителю в списке задач и в карточке задачи; повторное перенаправление ее заменяет */
   var taskRedirects = {
@@ -914,6 +948,8 @@
     userNotes: userNotes,
     formSettings: formSettings,
     taskRedirects: taskRedirects,   // FT_28
+    legalEntities: legalEntities,   // EXP_1
+    bitrixRequests: bitrixRequests,   // EXP_1
     TODAY: TODAY,
     CURRENT_USER_ID: CURRENT_USER_ID,
     LAG_THRESHOLD: LAG_THRESHOLD,
