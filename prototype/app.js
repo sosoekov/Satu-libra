@@ -638,6 +638,24 @@
     t.stage = 'pending_decision';
     delete t.cancelReason; delete t.cancelledAt; delete t.cancelledBy;
   }
+  // FT_34: отмененная стажировка возвращается на этап, с которого ее отменили (дата начала этапа сохраняется).
+  // Для отмененных до FT_34 этап не записан — берем последний пройденный до «Закрыта»
+  function stageToReturn(t) {
+    if (t.stageBeforeCancel && t.stageBeforeCancel !== 'closed') return t.stageBeforeCancel;
+    var prev = STAGES.filter(function (s) { return s.code !== 'closed' && t.stageDates[s.code]; }).pop();
+    return prev ? prev.code : 'active';
+  }
+  function restoreInternship(t) {
+    var code = stageToReturn(t);
+    var since = t.stageDates[code];
+    t.closeKind = null; t.closedAt = null;
+    setStage(t, code);
+    if (since) t.stageDates[code] = since;
+    delete t.cancelReason; delete t.cancelledAt; delete t.cancelledBy; delete t.stageBeforeCancel;
+    var program = programOf(t);
+    if (program) addHistory(program, 'Стажировка возвращена в работу, этап «' + stageMeta(code).title + '»');
+    return code;
+  }
   // Переход к найденному из уведомления: вкладка «Адаптация персонала», карточка подсвечивается на пару секунд.
   // После старта стажировки — карточка стажера; после отмены — оповещение
   var FLASH_MS = 2500;
@@ -1069,8 +1087,10 @@
     Array.prototype.forEach.call(root.querySelectorAll('table[data-resize]'), function (tb) {
       var w = state.colWidths[tb.getAttribute('data-resize')];
       var cols = tb.querySelectorAll('col[data-col]');
-      if (w) layoutCols(tb, Array.prototype.slice.call(cols), w);
       var ths = tb.querySelectorAll('thead th');
+      // FT_34: колонка, включенная в настройке формы после изменения ширины, — в текущей ширине
+      if (w) Array.prototype.forEach.call(cols, function (c, i) { var id = c.getAttribute('data-col'); var px = !w[id] && ths[i] ? Math.round(ths[i].getBoundingClientRect().width) : 0; if (px) w[id] = px; });
+      if (w) layoutCols(tb, Array.prototype.slice.call(cols), w);
       Array.prototype.forEach.call(ths, function (th, i) {
         if (i === ths.length - 1) return;   // у последней колонки границы нет
         th.classList.add('th-resizable');
@@ -1101,7 +1121,7 @@
     var extra = Math.max(0, tb.parentNode.clientWidth - sum);
     cols.forEach(function (c) {
       var id = c.getAttribute('data-col');
-      c.style.width = ((widths[id] || COL_MIN) + (id === 'name' ? extra : 0)) + 'px';
+      c.style.width = ((widths[id] || COL_MIN) + (id === 'name' || c.hasAttribute('data-fill') ? extra : 0)) + 'px';
     });
     tb.style.width = (sum + extra) + 'px';
   }
@@ -1119,7 +1139,7 @@
   });
   function resetColWidths(h) {
     delete state.colWidths[h.closest('table').getAttribute('data-resize')];
-    renderCenter();
+    if (h.closest('#tasksCenter')) renderTasksPage(); else renderCenter();   // FT_34: таблицы вкладки «Задачи и уведомления»
   }
 
   // Текущая строка сводной таблицы: подсветка и фокус из state.summaryCurrent.
@@ -1340,7 +1360,9 @@
       (t.cancelReason ? '<div class="text-s clamp2" title="' + esc(t.cancelReason) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПричина') + '>Причина: ' + esc(t.cancelReason) + '</div>' : '') +
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОтмененныеДействия', 'high') + '>' +
         // FT_32: выход уже подтвержден, стажировка отменена после старта — только открыть карточку (только просмотр)
-        (isCancelledInternship(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) :
+        (isCancelledInternship(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) +
+          // FT_34: отменили по ошибке — вернуть на этап, с которого отменили
+          button('Вернуть в работу', { action: 'cancelledReturn', data: { id: t.id }, title: 'Вернуть стажировку на этап «' + stageMeta(stageToReturn(t)).title + '»', name: 'ТаблицаОтмененныеВернутьВРаботу' }) :
         button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Отмена была ошибкой — сразу подтвердить выход стажера', name: 'ТаблицаОтмененныеПодтвердитьВыход' }) +
         button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' })) +
       '</div></div>';
@@ -2252,7 +2274,8 @@
     var arrow = button('', { cls: 'btn-icon split-arrow', icon: 'chevronDown', action: 'toggleMenu', data: { menu: id }, disabled: !!why,
       title: why || 'Другие действия', type: 'Подменю', name: P + 'ВыполнитьМеню' });
     var menu = state.openMenu === id ? '<div class="menu menu-float"' + a1c('Подменю', P + 'ВыполнитьМенюСписок') + '>' +
-      menuItemIf('Взять в работу', 'itemAct', { kind: kind, id: c.id, act: 'work' }, P + 'ВзятьВРаботу', c.inWork ? 'Задача уже в работе' : '') + '</div>' : '';
+      menuItemIf('Взять в работу', 'itemAct', { kind: kind, id: c.id, act: 'work' }, P + 'ВзятьВРаботу', c.inWork ? 'Задача уже в работе' : '') +
+      menuItemIf('Выполнить', 'itemAct', { kind: kind, id: c.id, act: 'done' }, P + 'МенюВыполнить', '') + '</div>' : '';   // FT_34: все варианты, как на вкладке задач
     return '<td><div class="menu-host tv-action cl-action"' + (why ? ' title="' + esc(why) + '"' : '') + a1c('ГруппаГоризонтальная', P + 'ГруппаДействие', 'high') + '>' +
       '<div class="split">' + main + arrow + '</div>' + menu + '</div></td>';
   }
@@ -2369,7 +2392,7 @@
   }
   function approvalTask(t, program, a, i) {
     var st = a.steps[i];
-    return traineeTask(t, { key: 'ap:' + program.id, kind: 'ap', type: 'approve', ref: program, page: 'program',
+    return traineeTask(t, { key: 'ap:' + program.id, kind: 'ap', type: 'approve', ref: program, page: 'program', approval: a, stepIndex: i,
       subject: 'АП стажера ' + t.fullName, context: '',   // FT_14: шаг маршрута в списке не показывается (он — в описании карточки)
       deadline: routeDeadlines(a.startedAt, a.steps)[i], authorId: approvalSender(program, t),
       createdAt: i > 0 && a.steps[i - 1].doneAt ? a.steps[i - 1].doneAt : a.startedAt,
@@ -2693,7 +2716,10 @@
     return cfg && cfg.title ? cfg.title : doneMode && c.doneTitle ? c.doneTitle : state.tv.filter === 'observed' && c.obsTitle ? c.obsTitle : c.title;
   }
   function colGroup(table, lead) {
-    return '<colgroup>' + (lead || '') + visibleCols(table).map(function (c) { return '<col' + (c.w ? ' class="' + c.w + '"' : '') + '>'; }).join('') + '</colgroup>';
+    // FT_34: data-col — ширина колонки меняется перетаскиванием границы; остаток ширины — колонке «Задача» / «Уведомление» (data-fill)
+    return '<colgroup>' + (lead || '') + visibleCols(table).map(function (c) {
+      return '<col' + (c.w ? ' class="' + c.w + '"' : '') + ' data-col="' + c.id + '"' + (c.id === 'task' || c.id === 'text' ? ' data-fill="1"' : '') + '>';
+    }).join('') + '</colgroup>';
   }
   // Заголовок колонки; у сортируемой — кнопка: ▲ по возрастанию, ▼ по убыванию, повторный щелчок меняет направление
   function colHeader(table, c, doneMode) {
@@ -2745,6 +2771,7 @@
       '</div>' +
       (state.tv.sub === 'notes' ? renderNotesList(notes) : renderTaskList(all)) + '</div>';
     Array.prototype.forEach.call(el('tasksCenter').querySelectorAll('[data-indeterminate]'), function (x) { x.indeterminate = true; });
+    applyColWidths(el('tasksCenter'));   // FT_34: ширина колонок задач и уведомлений
     if (key === 'tvSearch' || key === 'noteSearch') {
       var input = el('tasksCenter').querySelector('[data-input="' + key + '"]');
       if (input) { input.focus(); input.setSelectionRange(selStart, selEnd); }
@@ -2890,8 +2917,8 @@
     }
     var keys = roMode ? [] : list.map(function (x) { return x.key; });
     var selVisible = keys.filter(function (k) { return state.tv.selected[k]; }).length;
-    return bar + '<div class="table-box"><table class="grid tv-table"' + a1c('ТаблицаФормы', 'ТаблицаМоиЗадачи') + '>' +
-      colGroup('tasks', '<col class="w-check">') +
+    return bar + '<div class="table-box"><table class="grid tv-table" data-resize="tv-tasks"' + a1c('ТаблицаФормы', 'ТаблицаМоиЗадачи') + '>' +
+      colGroup('tasks', '<col class="w-check" data-col="check">') +
       '<thead><tr><th><input type="checkbox" data-tv-select-all="1" title="Выбрать все видимые задачи"' +
         (keys.length && selVisible === keys.length ? ' checked' : '') + (keys.length ? '' : ' disabled') +
         (selVisible && selVisible < keys.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаМоиЗадачиВыбратьВсе') + '></th>' +
@@ -3020,7 +3047,7 @@
           visibleCols('notes').map(function (c) { return cells[c.id]; }).join('') + '</tr>';
       }).join('');
     }
-    return bar + '<div class="table-box"><table class="grid tv-table tv-notes"' + a1c('ТаблицаФормы', 'ТаблицаУведомления') + '>' +
+    return bar + '<div class="table-box"><table class="grid tv-table tv-notes" data-resize="tv-notes"' + a1c('ТаблицаФормы', 'ТаблицаУведомления') + '>' +
       colGroup('notes') +
       '<thead><tr>' + visibleCols('notes').map(function (c) { return colHeader('notes', c); }).join('') + '</tr></thead>' +
       '<tbody>' + body + '</tbody></table></div>';
@@ -3038,6 +3065,7 @@
     if (x.kind === 'rt') {
       if (act === 'work') r.status = 'in_progress';
       else { r.status = 'done'; r.result = act; r.comment = required(comment) ? comment.trim() : null; r.doneBy = me; r.doneAt = nowStamp(); }
+      logTask(r, act, comment);   // FT_34: история выполнения
     } else if (x.kind === 'ap') {
       var res = routeResult(t, act === 'approve' ? 'approved' : 'rejected', comment);
       if (res !== 'next') msg = null;   // «АП согласована» / «АП возвращена на доработку» — оповещение уже показано
@@ -3087,6 +3115,9 @@
     var program = t ? programOf(t) : null;
     // FT_28: отметка о перенаправлении — у задачи; повторное перенаправление заменяет ее
     D.taskRedirects[x.markKey || x.key] = { by: D.CURRENT_USER_ID, to: uid, at: nowStamp(), comment: required(comment) ? comment.trim() : '' };
+    // FT_34: перенаправление — в историю выполнения задачи (у согласования — в историю маршрута)
+    var role = x.kind === 'ap' ? 'согласующий' : x.kind === 'rv' || x.kind === 'rc' ? 'проверяющий' : 'исполнитель';
+    logTask(x.kind === 'ap' ? x.ref.approval : x.ref, 'redirect', comment, role + ' ' + personById(D.CURRENT_USER_ID) + ' → ' + personById(uid));
     if (x.kind === 'rt') x.ref.assigneeId = uid;
     else if (x.kind === 'ap') {
       x.ref.approval.steps[currentStepIndex(x.ref)].userId = uid;
@@ -3545,6 +3576,7 @@
         t.closeKind = 'cancelled';
         t.closedAt = D.TODAY;
         t.cancelReason = v.reason.trim(); t.cancelledAt = nowStamp(); t.cancelledBy = D.CURRENT_USER_ID;   // FT_32: для карточки в «Отмененных»
+        t.stageBeforeCancel = t.stage;   // FT_34: этап, на который вернет «Вернуть в работу»
         setStage(t, 'closed');
         var program = programOf(t);
         if (program) addHistory(program, 'Стажировка отменена. Причина: «' + v.reason.trim() + '»');
@@ -5117,8 +5149,63 @@
           '</div>';
       }).join('') + '</div>';
   }
+  // FT_34: исполнитель задачи пользователя (по объекту-источнику) и права на ее выполнение — исполнитель или администратор
+  function tvExecutorOf(x) {
+    var r = x.ref;
+    if (x.kind === 'rt') return r.assigneeId;
+    if (x.kind === 'ap') return x.approval.steps[x.stepIndex].userId;
+    if (x.kind === 'cl' || x.kind === 'cc') return r.responsibleId;
+    if (x.kind === 'rc' || x.kind === 'rv') return r.reviewerId;
+    return x.traineeId;   // tr — стажер
+  }
+  function tvExecLock(x) {
+    var who = tvExecutorOf(x);
+    if (who === D.CURRENT_USER_ID || isAdmin()) return null;
+    return 'Только просмотр. Выполнить задачу может только исполнитель' + (who ? ': ' + personById(who) : '') + ' или администратор';
+  }
+  // FT_34: история выполнения задачи пользователя — до и после него (из объекта-источника)
+  function tvExecLog(x) {
+    var r = x.ref;
+    var log;
+    if (x.kind === 'ap') {   // согласование: отправка и решения шагов маршрута
+      var a = x.approval;
+      log = [{ at: a.startedAt, by: approvalSender(r, trainee(x.traineeId)), ev: 'sent' }];
+      a.steps.forEach(function (st) {
+        if (st.status === 'approved' || st.status === 'rejected')
+          log.push({ at: st.doneTime || st.doneAt, by: st.userId, ev: st.status === 'approved' ? 'approve' : 'reject', comment: st.comment, text: ROUTE_TITLES[st.role] });
+      });
+      log = log.concat(a.log || []);
+    } else {
+      log = (r.log || []).slice();
+      if (x.kind === 'rt') {   // задача подбора: создание и результат из данных подбора
+        if (r.createdAt) log.unshift({ at: r.createdAt, by: r.authorId, ev: 'created' });
+        if (r.status === 'done' && !log.some(function (h) { return ['done', 'approve', 'reject', 'acquaint'].indexOf(h.ev) >= 0; }))
+          log.push({ at: r.doneAt || '', by: r.doneBy, ev: r.result || 'done', comment: r.comment });
+      }
+    }
+    var rd = D.taskRedirects[x.markKey || x.key];   // перенаправление из данных, еще не записанное в историю
+    if (rd && !log.some(function (h) { return h.ev === 'redirect' && h.at === rd.at; }))
+      log.push({ at: rd.at, by: rd.by, ev: 'redirect', comment: rd.comment, text: personById(rd.by) + ' → ' + personById(rd.to) });
+    // по времени; запись только с датой (без времени) в тот же день остается на своем месте
+    return log.filter(function (h) { return h.at; }).sort(function (p, q) {
+      var a = p.at.slice(0, 10), b = q.at.slice(0, 10);
+      if (a !== b) return a < b ? -1 : 1;
+      if (p.at.length <= 10 || q.at.length <= 10) return 0;
+      return p.at < q.at ? -1 : p.at > q.at ? 1 : 0;
+    });
+  }
+  function tvExecBody(x) {
+    var who = x.done ? x.done.by : tvExecutorOf(x);
+    return '<div class="col gap-3 task-exec"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаПользователяВыполнение') + '>' +
+      tfField(x.done ? 'Выполнил' : 'Исполнитель', '<input type="text" class="input" id="f_tvExecBy" readonly tabindex="-1" value="' + esc(who ? personById(who) : '') + '"' +
+        ' placeholder="Не назначен"' + a1c('ПолеВвода', 'ПолеИсполнительЗадачиПользователя') + '>', { forId: 'f_tvExecBy' }) +
+      tfField('Фактическая дата выполнения', '<input type="text" class="input exec-date" id="f_tvExecDate" readonly tabindex="-1" value="' +
+        (x.done && x.done.at ? fmtStamp(x.done.at) : '') + '" placeholder="Задача еще не выполнена"' + a1c('ПолеВвода', 'ПолеДатаВыполненияЗадачиПользователя') + '>', { forId: 'f_tvExecDate' }) +
+      execHistory(tvExecLog(x)) + '</div>';
+  }
   DIALOGS.tvTask = {
     form: 'ФормаЗадачаПользователя', wide: true, readOnly: true, plainClose: true, noCloseButton: true,
+    init: function () { return { tab: 'task' }; },
     titleFn: function () { var x = tvTaskByKey(dlgCtx().key); return x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : 'Задача'; },
     body: function () {
       var x = tvTaskByKey(dlgCtx().key);
@@ -5131,7 +5218,13 @@
       var redir = tvRedirectOf(x);   // FT_28
       var d = x.done;
       var r = d ? DONE_RESULT[d.result] || DONE_RESULT.done : null;
-      return '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачи') + '>' +
+      // FT_34: страницы «Задача» и «Выполнение» (история выполнения до и после пользователя), как у задач АП и чек-листов
+      var tabs = '<div class="tabs dlg-tabs"' + a1c('Страницы', 'СтраницыЗадачаПользователя') + '>' +
+        [{ id: 'task', text: 'Задача', name: 'СтраницаЗадачаПользователяПараметры' }, { id: 'exec', text: 'Выполнение', name: 'СтраницаЗадачаПользователяВыполнение' }].map(function (p) {
+          return '<button type="button" class="tab' + (dlgValue('tab') === p.id ? ' active' : '') + '" data-action="taskCardTab" data-tab="' + p.id + '"' + a1c('Страница', p.name) + '>' + p.text + '</button>';
+        }).join('') + '</div>';
+      if (dlgValue('tab') === 'exec') return tabs + tvExecBody(x);
+      return tabs + '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачи') + '>' +
           sourceBadge(x.source, 'ДекорацияИсточникЗадачи') + badge(tm.tone, tm.text, 'ДекорацияТипЗадачи') +
           (x.inWork ? badge('info', 'В работе', 'ДекорацияЗадачаВРаботе') : '') +
           (d ? badge(r[0], r[1], 'ДекорацияРезультатЗадачи') : '') +
@@ -5159,7 +5252,7 @@
     },
     extraFoot: function () {
       var x = tvTaskByKey(dlgCtx().key);
-      if (!x || x.done) return '';
+      if (!x || x.done || tvExecLock(x)) return '';   // FT_34: чужую задачу выполняет только администратор
       var imp = importanceOf();
       var cmd = TV_COMMANDS[x.type];
       return '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаКомандыЗадачи') + '>' +
@@ -5514,7 +5607,9 @@
   // FT_10: «Выполнено» стажера у задачи с проверяющим — «На проверке» (у проверяющего появляется задача «Проверить»), без проверяющего — «Выполнена»
   // FT_14: история выполнения задачи АП — x.log [{at, by, ev, comment}]
   var LOG_EVENTS = { work: 'Взята в работу', done: 'Выполнена', review: 'Выполнена, отправлена на проверку', checked: 'Проверена',
-    'return': 'Возвращена на доработку', status: 'Изменен статус', executor: 'Изменен исполнитель' };
+    'return': 'Возвращена на доработку', status: 'Изменен статус', executor: 'Изменен исполнитель',
+    // FT_34: события задач вкладки «Задачи и уведомления»
+    created: 'Создана', sent: 'Отправлена на согласование', approve: 'Согласовано', reject: 'Не согласовано', acquaint: 'Ознакомление отмечено', redirect: 'Перенаправлена' };
   function logTask(x, ev, comment, extra) {
     (x.log = x.log || []).push({ at: nowStamp(), by: D.CURRENT_USER_ID, ev: ev, comment: required(comment) ? comment.trim() : null, text: extra || null });
   }
@@ -5607,6 +5702,13 @@
       render();
     },
     cancelledOpen: function (btn) { selectTrainee(btn.getAttribute('data-id')); },   // FT_32
+    cancelledReturn: function (btn) {   // FT_34: вернуть отмененную стажировку в работу
+      var t = trainee(btn.getAttribute('data-id'));
+      if (!t || !isCancelledInternship(t)) return;
+      var code = restoreInternship(t);
+      render();
+      toast('Стажировка ' + t.fullName + ' возвращена в работу, этап «' + stageMeta(code).title + '»');
+    },
     cancelledRestore: function (btn) {   // FT_26: вернуть отмененного кандидата в «Ожидают решения»
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || t.stage !== 'cancelled') return;
@@ -6007,6 +6109,7 @@
       var act = btn.getAttribute('data-act');
       if (!x) return;
       state.openMenu = null;
+      if (tvExecLock(x)) { toast(tvExecLock(x)); return; }   // FT_34
       var inCard = !!state.dialog && state.dialog.type === 'tvTask';   // FT_11: команда из карточки задачи
       if (act === 'reject' || act === 'return') { openDialog('tvComment', null, { key: x.key, act: act }, { stack: inCard }); return; }
       if (x.kind === 'tr' && act === 'done') { openDialog('traineeDone', x.traineeId, { taskId: x.ref.id }, { stack: inCard }); return; }   // FT_14: комментарий стажера
