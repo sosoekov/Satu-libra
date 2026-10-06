@@ -1344,7 +1344,7 @@
         '<span class="muted text-s"' + a1c('Надпись', 'ДекорацияОжидаютРешенияПояснение') + '>— HR завершил подбор, нужно начать стажировку или отменить</span></div>') +
       '<div class="row wrap pending-cards"' + a1c('ТаблицаФормы', 'ТаблицаОжидаютРешения', 'check') + '>' + list.map(pendingCard).join('') + '</div></div>';
   }
-  // FT_26: карточка отмененного кандидата — кто, когда и почему отменил; «Подтвердить выход» и «Вернуть» (в «Ожидают решения»)
+  // FT_26: карточка отмененного кандидата — кто, когда и почему отменил; FT_35: «Открыть карточку» (если есть АП) и «Вернуть»
   function cancelledCard(t) {
     var r = requisitionOf(t);
     var lock = decideLockText(t);
@@ -1359,12 +1359,12 @@
         (t.cancelledBy ? ' · ' + esc(personById(t.cancelledBy)) : '') + '</div>' +
       (t.cancelReason ? '<div class="text-s clamp2" title="' + esc(t.cancelReason) + '"' + a1c('Надпись', 'ТаблицаОтмененныеПричина') + '>Причина: ' + esc(t.cancelReason) + '</div>' : '') +
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОтмененныеДействия', 'high') + '>' +
-        // FT_32: выход уже подтвержден, стажировка отменена после старта — только открыть карточку (только просмотр)
-        (isCancelledInternship(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) +
-          // FT_34: отменили по ошибке — вернуть на этап, с которого отменили
-          button('Вернуть в работу', { action: 'cancelledReturn', data: { id: t.id }, title: 'Вернуть стажировку на этап «' + stageMeta(stageToReturn(t)).title + '»', name: 'ТаблицаОтмененныеВернутьВРаботу' }) :
-        button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Отмена была ошибкой — сразу подтвердить выход стажера', name: 'ТаблицаОтмененныеПодтвердитьВыход' }) +
-        button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' })) +
+        // FT_35: кнопки единообразны — «Открыть карточку» (только просмотр; если есть АП) и «Вернуть»:
+        // стажировку — на этап, с которого ее отменили (FT_34), кандидата — в «Ожидают решения»
+        (isCancelledInternship(t) && programOf(t) ? button('Открыть карточку', { action: 'cancelledOpen', data: { id: t.id }, title: 'Карточка стажера — только просмотр', name: 'ТаблицаОтмененныеОткрытьКарточку' }) : '') +
+        (isCancelledInternship(t)
+          ? button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, title: 'Вернуть стажировку на этап «' + stageMeta(stageToReturn(t)).title + '»', name: 'ТаблицаОтмененныеВернуть' })
+          : button('Вернуть', { action: 'cancelledRestore', data: { id: t.id }, disabled: !!lock, title: lock || 'Вернуть кандидата в «Ожидают решения»', name: 'ТаблицаОтмененныеВернуть' })) +
       '</div></div>';
   }
   // ASSUMPTION (ТЗ 11.2): в карточке — ФИО, должность, подразделение, заявка, дата завершения подбора (FT_24: ожидаемая дата выхода не показывается)
@@ -5702,15 +5702,15 @@
       render();
     },
     cancelledOpen: function (btn) { selectTrainee(btn.getAttribute('data-id')); },   // FT_32
-    cancelledReturn: function (btn) {   // FT_34: вернуть отмененную стажировку в работу
+    // FT_26: вернуть отмененного кандидата в «Ожидают решения»; FT_34, FT_35: отмененную стажировку — на этап, с которого ее отменили
+    cancelledRestore: function (btn) {
       var t = trainee(btn.getAttribute('data-id'));
-      if (!t || !isCancelledInternship(t)) return;
-      var code = restoreInternship(t);
-      render();
-      toast('Стажировка ' + t.fullName + ' возвращена в работу, этап «' + stageMeta(code).title + '»');
-    },
-    cancelledRestore: function (btn) {   // FT_26: вернуть отмененного кандидата в «Ожидают решения»
-      var t = trainee(btn.getAttribute('data-id'));
+      if (t && isCancelledInternship(t)) {
+        var code = restoreInternship(t);
+        render();
+        toast('Стажировка ' + t.fullName + ' возвращена в работу, этап «' + stageMeta(code).title + '»');
+        return;
+      }
       if (!t || t.stage !== 'cancelled') return;
       if (!canDecidePending(t)) { toast(decideLockText(t)); return; }
       restoreCandidate(t);
