@@ -5224,10 +5224,7 @@
           return '<button type="button" class="tab' + (dlgValue('tab') === p.id ? ' active' : '') + '" data-action="taskCardTab" data-tab="' + p.id + '"' + a1c('Страница', p.name) + '>' + p.text + '</button>';
         }).join('') + '</div>';
       if (dlgValue('tab') === 'exec') return tabs + tvExecBody(x);
-      var lock = d ? null : tvExecLock(x);
-      return tabs + (lock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаЗадачаПользователяТолькоПросмотр') + '><span class="tone-info">' + icon('info') + '</span>' +
-          '<span' + a1c('Надпись', 'ДекорацияЗадачаПользователяТолькоПросмотр') + '>' + esc(lock) + '</span></div>' : '') +
-        '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачи') + '>' +
+      return tabs + '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачи') + '>' +
           sourceBadge(x.source, 'ДекорацияИсточникЗадачи') + badge(tm.tone, tm.text, 'ДекорацияТипЗадачи') +
           (x.inWork ? badge('info', 'В работе', 'ДекорацияЗадачаВРаботе') : '') +
           (d ? badge(r[0], r[1], 'ДекорацияРезультатЗадачи') : '') +
