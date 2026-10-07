@@ -4856,7 +4856,7 @@
     });
     return e;
   }
-  function brqSave(tab, close) {
+  function brqSave(tab, close, confirmed) {
     tab.errors = brqErrors(tab.values);
     var reqE = brqRequiredErrors(tab);   // FT_33: обязательные реквизиты; ошибки — в порядке полей страницы СУП
     var ordered = {};
@@ -4871,6 +4871,9 @@
       return false;
     }
     var r = brqOf(tab.traineeId, tab.kind);
+    // FT_36: при первой записи — вопрос об отправке на согласование в Bitrix; «Нет» — не записывать, форма остается открытой
+    if (!r && !confirmed) { openDialog('brqConfirm', tab.traineeId, { tabId: tab.id, close: !!close }); return false; }
+    var created = !r;
     if (!r) {
       var store = REQ_META[tab.kind].store();
       r = { id: tab.kind + '-' + (++brqSeq), number: REQ_META[tab.kind].prefix + ('00000' + (store.length + 1)).slice(-6), date: D.TODAY, traineeId: tab.traineeId, authorId: D.CURRENT_USER_ID };
@@ -4879,7 +4882,7 @@
     r.values = JSON.parse(JSON.stringify(tab.values));
     r.savedAt = nowStamp(); r.savedBy = D.CURRENT_USER_ID;
     tab.dirty = false;
-    toast('Заявка записана: ' + r.number);
+    toast((created ? 'Заявка записана и отправлена на согласование в Bitrix: ' : 'Заявка записана: ') + r.number);
     if (close) closeDocTab(tab.id, true); else render();
     return true;
   }
@@ -4892,6 +4895,19 @@
     apply: function () {
       var tab = byId(state.shell.tabs, dlgCtx().tabId);
       if (tab) setTimeout(function () { brqSave(tab, true); }, 0);
+    }
+  };
+
+  // FT_36: вопрос перед первой записью заявки: «Да» — записать (и закрыть, если запись была с закрытием), «Нет» — остаться в форме
+  DIALOGS.brqConfirm = {
+    titleFn: function () { var tab = byId(state.shell.tabs, dlgCtx().tabId); return tab ? REQ_META[tab.kind].title : 'Отправка на согласование'; },
+    form: 'ФормаВопросОтправитьЗаявкуНаСогласование', submit: 'Да', cancelText: 'Нет',
+    init: function () { return {}; },
+    body: function () { return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияОтправкаНаСогласованиеВBitrix') + '>Ваша заявка будет отправлена на согласование в Bitrix. Продолжить?</p>'; },
+    apply: function () {
+      var ctx = dlgCtx();
+      var tab = byId(state.shell.tabs, ctx.tabId);
+      if (tab) setTimeout(function () { brqSave(tab, ctx.close, true); }, 0);
     }
   };
 
