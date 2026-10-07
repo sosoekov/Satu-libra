@@ -427,12 +427,14 @@ th.num, td.num { text-align: right; }
 .task-table { table-layout: fixed; }
 .task-table .w-check { width: 36px; }
 .task-table .w-status { width: 104px; }
+.task-table .w-type { width: 96px; }   /* FT_41: «Тип задачи» */
 .task-table .w-deadline { width: 124px; }
-.task-table .w-person { width: 20%; }
-.task-table .w-observers { width: 20%; }
+.task-table .w-person { width: 15%; }   /* FT_41: было 20% — место под «Тип задачи» */
+.task-table .w-observers { width: 15%; }
 .task-table .w-result { width: 120px; }   /* FT_14: «Комментарий к выполнению» */
 .task-table th.th-wrap { white-space: normal; line-height: 1.2; }
 .task-table .w-menu { width: 40px; }
+.task-table thead th:not(.th-wrap) { white-space: nowrap; text-overflow: ellipsis; }   /* FT_41: узкая колонка — заголовок с многоточием (полностью — в подсказке) */
 table.grid.task-table td { vertical-align: middle; }
 .task-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--c-primary); cursor: pointer; }
 .task-row.selected td { background: var(--c-bg-selected); }
@@ -606,7 +608,11 @@ body.markup-1c table[data-1c]::before {
 .filter-line { padding: 0 0 0 var(--sp-2); min-height: 28px; background: var(--c-bg-selected); border-radius: var(--radius-s); }
 .task-bar { border-bottom: none; padding-bottom: 0; }
 .task-table thead th { padding-top: 5px; padding-bottom: 5px; }
-@media (max-width: 1500px) { .task-table .w-person, .task-table .w-observers { width: 13%; } }
+@media (max-width: 1500px) {
+  .task-table .w-person, .task-table .w-observers { width: 11%; }   /* FT_41: было 13% — место под «Тип задачи» */
+  .task-table .w-type { width: 80px; }
+  .task-table .w-result { width: 96px; }
+}
 .lock-note { min-height: 24px; gap: var(--sp-2); flex-wrap: nowrap; }
 
 /* ================= Фаза 10.1: карточка и размещение действий ================= */

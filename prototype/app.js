@@ -1847,7 +1847,7 @@
     var lock = editLock(t);
     var selectable = !lock && !isTraineeUser();
     var list = visibleTasks(t);
-    var cols = selectable ? 8 : 7;
+    var cols = selectable ? 9 : 8;   // FT_41: + «Тип задачи»
     var body;
 
     if (!all.length) {
@@ -1885,14 +1885,14 @@
     }
     return '<div class="table-box">' +
       '<table class="grid task-table" data-resize="tasks"' + a1c('ТаблицаФормы', 'ТаблицаЗадачАП') + '>' +
-      '<colgroup>' + (selectable ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-status" data-col="status"><col class="w-deadline" data-col="deadline">' +
+      '<colgroup>' + (selectable ? '<col class="w-check" data-col="check">' : '') + '<col data-col="name"><col class="w-status" data-col="status"><col class="w-type" data-col="type"><col class="w-deadline" data-col="deadline">' +
         '<col class="w-person" data-col="reviewer"><col class="w-observers" data-col="observers"><col class="w-result" data-col="result"><col class="w-menu" data-col="menu"></colgroup>' +
       '<thead><tr>' +
         (selectable ? '<th><input type="checkbox" data-select-all="1" title="Выбрать все видимые задачи"' +
           (ids.length && selCount === ids.length ? ' checked' : '') + (ids.length ? '' : ' disabled') +
           (selCount && selCount < ids.length ? ' data-indeterminate="1"' : '') + a1c('Флажок', 'ТаблицаЗадачАПВыбратьВсе') + '></th>' : '') +
-        '<th>Задача</th>' + thSort('Статус', 'status') + thSort('Срок', 'deadline') +
-        '<th>Проверяющий</th><th>Наблюдатели</th><th class="th-wrap" title="Комментарий стажера к выполнению">Комментарий к выполнению</th><th></th>' +
+        '<th>Задача</th>' + thSort('Статус', 'status') + '<th>Тип задачи</th>' + thSort('Срок', 'deadline') +   // FT_41: тип задачи — после статуса
+        '<th title="Проверяющий">Проверяющий</th><th title="Наблюдатели">Наблюдатели</th><th class="th-wrap" title="Комментарий стажера к выполнению">Комментарий к выполнению</th><th></th>' +
       '</tr></thead><tbody>' + body + '</tbody></table></div>';
   }
 
@@ -1912,6 +1912,7 @@
         ' title="Выбрать задачу" aria-label="Выбрать задачу «' + esc(x.name) + '»"' + a1c('Флажок', 'ТаблицаЗадачАПВыбрана') + '></td>' : '') +
       '<td><div class="ellipsis" title="' + esc(x.name) + '">' + esc(x.name) + '</div></td>' +
       '<td>' + badge(sm.tone, sm.text, 'ТаблицаЗадачАПСтатус') + '</td>' +
+      '<td>' + taskTypeBadge(x.type, 'ТаблицаЗадачАПТип') + '</td>' +   // FT_41: цветная плашка типа, как в шаблоне АП (FT_25)
       '<td class="nowrap">' + (late ? '<span class="danger-text" title="' + esc('Просрочена на ' + pluralN(late, ['день', 'дня', 'дней'])) + '">' + fmtDate(x.deadline) + ' (−' + late + ' дн.)</span>' : fmtDate(x.deadline)) + '</td>' +
       '<td><div class="ellipsis">' + rev + '</div></td>' +
       '<td><div class="ellipsis">' + obs + '</div></td>' +
