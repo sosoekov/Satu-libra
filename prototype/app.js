@@ -120,7 +120,16 @@
   }
 
   // FT_13: без даты выхода срок пункта не определен (null), просрочки нет
-  function checklistDate(item) { var s = trainee(item.traineeId).startDate; return s ? addDays(s, item.offsetDays) : null; }
+  // FT_38: у пункта нового чек-листа срок задан датой (dueDate = дата создания чек-листа dueFrom + срок выполнения), от даты выхода не зависит;
+  // у пунктов существующих (демо) чек-листов — как раньше, от даты выхода (offsetDays)
+  function checklistDate(item) {
+    if (item.dueDate) return item.dueDate;
+    var s = trainee(item.traineeId).startDate; return s ? addDays(s, item.offsetDays) : null;
+  }
+  function dueFromText(item) { var n = diffDays(item.dueFrom, item.dueDate); return n === 0 ? 'в день создания' : n + ' дн. от создания'; }
+  function checklistOffsetText(item) { return item.dueDate && item.dueFrom ? dueFromText(item) : offsetText(item.offsetDays); }
+  // FT_38: чек-лист создан по новому правилу — новые пункты тоже получают срок датой
+  function dueDatedChecklist(t) { return !!t.checklistFrom; }
   function checklistOverdue(item) { var d = checklistDate(item); return !item.done && item.status !== 'review' && !!d && d < D.TODAY; }   // FT_20: на проверке — не просрочен
   // Чек-лист закрытия (фаза 10, 5.2): срок — от даты окончания стажировки
   function closureOf(t) { return D.closureChecklist.filter(function (c) { return c.traineeId === t.id; }); }
@@ -2296,7 +2305,7 @@
         (c.optional ? '<div class="muted text-s"' + a1c('Надпись', P + 'Необязательно') + '>необязательно</div>' : '') + '</td>' +
       itemStatusCell(kind, c) +
       whoCell(c.doneBy, c.responsibleId, c.done, P, kind === 'cl' ? userName : personById) +
-      dueCell(itemDate(kind, c), itemOverdue(kind, c), kind === 'cl' ? offsetText(c.offsetDays) : closureOffsetText(c.offsetDays), P) +
+      dueCell(itemDate(kind, c), itemOverdue(kind, c), kind === 'cl' ? checklistOffsetText(c) : closureOffsetText(c.offsetDays), P) +
       factCell(c, P) + itemActionCell(kind, t, c) + '</tr>';
   }
   function closureRow(t, c) { return itemRow('cc', t, c); }
@@ -2414,7 +2423,7 @@
       deadline: prep ? checklistDate(c) : closureDate(c), authorId: checklistAuthor(t, c),
       createdAt: (prep ? t.stageDates.found : t.stageDates.closing) || '',
       description: (prep
-        ? 'Пункт чек-листа подготовки к выходу стажера ' + t.fullName + '. Дата выхода — ' + (t.startDate ? fmtDate(t.startDate) : 'не назначена') + ', срок пункта — ' + offsetText(c.offsetDays) + '.'
+        ? 'Пункт чек-листа подготовки к выходу стажера ' + t.fullName + '. Дата выхода — ' + (t.startDate ? fmtDate(t.startDate) : 'не назначена') + ', срок пункта — ' + checklistOffsetText(c) + '.'
         : 'Пункт чек-листа закрытия стажировки ' + t.fullName + (c.optional ? ' (необязательный)' : '') + '. Окончание стажировки — ' + fmtDate(t.endDate) +
           ', срок пункта — ' + closureOffsetText(c.offsetDays) + '.') + (c.description ? ' ' + c.description : '') });
   }
@@ -4062,8 +4071,9 @@
       var note = lock ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', state.dialog.observerOnly ? 'ГруппаЗадачаНаблюдатель' : 'ГруппаЗадачаТолькоПросмотр') + '>' +
         '<span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', state.dialog.observerOnly ? 'ДекорацияЗадачаНаблюдатель' : 'ДекорацияЗадачаТолькоПросмотр') + '>' + esc(lock) + '</span></div>' : '';
       var auto = c.linkedDocType === 'program';
-      var noBase = ctx.kind === 'cl' && !t.startDate;
-      var base = ctx.kind === 'cl' ? 'Срок считается от даты выхода' + (t.startDate ? ' ' + fmtDate(t.startDate) : '') : 'Срок считается от даты окончания стажировки ' + fmtDate(t.endDate);
+      var noBase = ctx.kind === 'cl' && !t.startDate && !c.dueDate;
+      var base = ctx.kind === 'cl' && c.dueDate ? (c.dueFrom ? 'Срок считается от даты создания чек-листа ' + fmtDate(c.dueFrom) : 'Срок задан датой')   // FT_38
+        : ctx.kind === 'cl' ? 'Срок считается от даты выхода' + (t.startDate ? ' ' + fmtDate(t.startDate) : '') : 'Срок считается от даты окончания стажировки ' + fmtDate(t.endDate);
       var executorId = dlgValue('executorId');
       var deadline = noBase
         ? '<input type="text" class="input" id="f_deadline" disabled value="" placeholder="После назначения даты выхода"' + a1c('ПолеВвода', 'ПолеСрокВыполнения') + '>'
@@ -4112,7 +4122,8 @@
       c.observerIds = v.observers.slice();
       c.description = (v.description || '').trim();
       c.links = linksFromRows(v.links);
-      if (base && v.deadline) c.offsetDays = diffDays(base, v.deadline);
+      if (ctx.kind === 'cl' && c.dueDate) { if (v.deadline) c.dueDate = v.deadline; }   // FT_38: срок задан датой
+      else if (base && v.deadline) c.offsetDays = diffDays(base, v.deadline);
       var st = itemStatus(c);
       if (v.status !== st) {   // статус меняется вручную — как у задачи АП (FT_14), с записью в историю выполнения
         logTask(c, 'status', null, STATUS_META[st].text + ' → ' + STATUS_META[v.status].text);
@@ -5058,12 +5069,16 @@
 
   DIALOGS.checklistItem = {
     title: 'Добавить пункт', form: 'ФормаПунктЧекЛиста', submit: 'Добавить пункт',
-    init: function (t) { return { name: '', role: 'head', userId: t.headId || '', date: laterOf(addDays(t.startDate, -1), D.TODAY) }; },   // FT_31: не в прошлом
+    init: function (t) {   // FT_31: не в прошлом; FT_38: в новом чек-листе — завтра
+      return { name: '', role: 'head', userId: t.headId || '', date: dueDatedChecklist(t) ? addDays(D.TODAY, 1) : laterOf(addDays(t.startDate, -1), D.TODAY) };
+    },
     onChange: function (f, v) { if (f === 'role') v.userId = roleDefaultUser(trainee(state.dialog.traineeId), v.role) || ''; },   // FT_23: сотрудник роли
     body: function (t) {
       var e = state.dialog.errors;
       var v = state.dialog.values;
-      var hint = v.date ? '<div class="muted text-s">' + offsetText(diffDays(t.startDate, v.date)) + ' (выход ' + fmtDate(t.startDate) + ')</div>' : '';
+      var hint = !v.date ? '' : dueDatedChecklist(t)   // FT_38: срок — от даты создания чек-листа
+        ? '<div class="muted text-s">' + dueFromText({ dueFrom: t.checklistFrom, dueDate: v.date }) + ' чек-листа (' + fmtDate(t.checklistFrom) + ')</div>'
+        : '<div class="muted text-s">' + offsetText(diffDays(t.startDate, v.date)) + ' (выход ' + fmtDate(t.startDate) + ')</div>';
       return field('Пункт', inputText('name', 'ПолеНаименованиеПункта'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПункта' }) +
         field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', ['head', 'hr', 'mentor', 'fin', 'personnel', 'ksh'].map(function (r) {
           return { value: r, text: D.ROLE_TITLES[r] }; }), ' data-rerender="1"'), { forId: 'f_role' }) +
@@ -5080,7 +5095,8 @@
     apply: function (t, v) {
       D.checklist.push(newItemFields({
         id: 'cl-new-' + Date.now(), traineeId: t.id, name: v.name.trim(), responsibleRole: v.role, responsibleId: v.userId || null,
-        offsetDays: diffDays(t.startDate, v.date), done: false, doneBy: null, doneAt: null, linkedDocType: null, linkedDocNumber: null
+        offsetDays: t.startDate ? diffDays(t.startDate, v.date) : 0, done: false, doneBy: null, doneAt: null, linkedDocType: null, linkedDocNumber: null,
+        dueFrom: dueDatedChecklist(t) ? t.checklistFrom : undefined, dueDate: dueDatedChecklist(t) ? v.date : undefined   // FT_38
       }));
       toast('Пункт добавлен');
     }
@@ -5120,11 +5136,13 @@
   // Стандартный чек-лист подготовки к выходу из шаблона (не зависит от должности). FT_17: и при старте стажировки
   function createStandardChecklist(t) {
     var hasProgram = !!programOf(t);
+    t.checklistFrom = D.TODAY;   // FT_38: срок пунктов — от даты создания чек-листа
     D.checklistTemplate.forEach(function (c, i) {
       var item = newItemFields({
         id: 'cl-tpl-' + Date.now() + '-' + i, traineeId: t.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: roleDefaultUser(t, c.responsibleRole), offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
-        linkedDocType: c.linkedDocType, linkedDocNumber: null
+        linkedDocType: c.linkedDocType, linkedDocNumber: null,
+        dueFrom: D.TODAY, dueDate: addDays(D.TODAY, c.dueDays)   // FT_38: сегодня + срок выполнения
       }, c);
       if (c.linkedDocType === 'program' && hasProgram) markChecklistDone(item, true, 'автоматически: АП уже создана');
       D.checklist.push(item);
@@ -6340,7 +6358,12 @@
     if (f && state.dialog) {
       state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
       var odef = DIALOGS[state.dialog.type];
-      if (odef.onChange) { odef.onChange(f, state.dialog.values); renderDialog(); var fe = topModal().querySelector('#f_' + f); if (fe) fe.focus(); return; }   // FT_17
+      if (odef.onChange) {   // FT_17
+        odef.onChange(f, state.dialog.values);
+        // FT_38: текстовое поле форму не перерисовывает — иначе щелчок по кнопке сразу после ввода терялся (change приходит при уходе из поля)
+        if (tgt.type === 'text' || tgt.tagName === 'TEXTAREA') return;
+        renderDialog(); var fe = topModal().querySelector('#f_' + f); if (fe) fe.focus(); return;
+      }
       if (tgt.hasAttribute('data-rerender') || (state.dialog.type === 'checklistItem' && f === 'date') ||
           (state.dialog.type === 'task' && f === 'reviewerId')) {
         if (f === 'template') state.dialog.values.picked = [];

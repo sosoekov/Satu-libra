@@ -483,26 +483,27 @@
    * FT_20: пункт чек-листа — задача: status (как у задачи АП), description, links, reviewerId, observerIds, log.
    * Проверяющий и наблюдатели по умолчанию пустые. done / inWork — производные от status.
    */
+  // FT_38: dueDays — срок выполнения в днях от даты создания чек-листа (новые чек-листы); offsetDays — от даты выхода (демо-данные)
   var checklistTemplate = [
     // FT_33: заявка на прием (трудоустройство) или на перевод — внутренние ссылки на оба документа
-    { name: 'Создать заявку в Bitrix',                          responsibleRole: 'head',   offsetDays: -7, linkedDocType: 'bitrix',
+    { name: 'Создать заявку в Bitrix',                          responsibleRole: 'head',   offsetDays: -7, dueDays: 7, linkedDocType: 'bitrix',
       description: 'Требуется создать заявку на прием или заявку на перевод в Bitrix. Заявка на прием создается, если найден новый сотрудник. Заявка на перевод, если заявка закрыта действующим сотрудником ГК Форус.',
       links: ['lnk-bitrix-doc', 'lnk-transfer-doc'] },
-    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
+    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, dueDays: 5, linkedDocType: 'request0911',
       description: 'Заявка на выпуск пропуска создается в сервисе заявок 0911 после сдачи сотрудником экзамена СИТ.', links: ['lnk-12'] },   // FT_33
-    { name: 'Создать заявку на создание учетной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, linkedDocType: 'request0911',
+    { name: 'Создать заявку на создание учетной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, dueDays: 5, linkedDocType: 'request0911',
       description: 'Заявка на создание учетной записи создается в сервисе заявок 0911.', links: ['lnk-12'] },
-    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, linkedDocType: null,
+    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, dueDays: 3, linkedDocType: null,
       description: 'Стол и кресло рядом с наставником, доступ в помещение.', links: [] },
-    { name: 'Подготовить технику',                              responsibleRole: 'head',   offsetDays: -3, linkedDocType: null,
+    { name: 'Подготовить технику',                              responsibleRole: 'head',   offsetDays: -3, dueDays: 3, linkedDocType: null,
       description: 'Ноутбук, монитор, гарнитура.', links: ['lnk-12'] },
-    { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, linkedDocType: 'program',
+    { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, dueDays: 3, linkedDocType: 'program',
       description: 'Отмечается автоматически, когда для стажера создана адаптационная программа.', links: [] },
     // FT_33: переименован (было «Подготовить ПО и доступ к ресурсам, порталам»)
-    { name: 'Подготовить ПО и доступ к внутренним ресурсам подразделения', responsibleRole: 'head', offsetDays: -1, linkedDocType: null,
+    { name: 'Подготовить ПО и доступ к внутренним ресурсам подразделения', responsibleRole: 'head', offsetDays: -1, dueDays: 1, linkedDocType: null,
       description: 'Учетные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] },
     // FT_23: пункт службы вне ЦАС — исполнитель закреплен за ролью (ROLE_USERS); FT_33: пункты ФЭС и СУП убраны из шаблона
-    { name: 'Открыть доступ стажеру к охране труда, локальным нормативным актам, положению по ДМС', responsibleRole: 'ksh', offsetDays: -1, linkedDocType: null,
+    { name: 'Открыть доступ стажеру к охране труда, локальным нормативным актам, положению по ДМС', responsibleRole: 'ksh', offsetDays: -1, dueDays: 1, linkedDocType: null,
       description: 'Доступ к курсам и документам на портале.', links: ['lnk-6', 'lnk-4'] }
   ];
   var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажер', ksh: 'КШ',
