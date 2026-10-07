@@ -149,7 +149,7 @@
   var STAGES = [
     { code: 'found',    title: 'Подготовка к выходу' },
     { code: 'draft',    title: 'Черновик АП' },
-    { code: 'approval', title: 'Согласование' },
+    { code: 'approval', title: 'На согласовании' },   // FT_40: было «Согласование»
     { code: 'active',   title: 'Стажировка' },
     { code: 'closing',  title: 'Закрытие' },
     { code: 'closed',   title: 'Закрыта' }
@@ -331,7 +331,7 @@
     changed_after_approval: 'ИзмененаПослеСогласования', tasks_overdue: 'ПросроченыЗадачи', lag: 'ОтставаниеОтГрафика',
     close_soon: 'СкороОкончание', closure_overdue: 'ПросроченоЗакрытие', closure_ready: 'ЗакрытиеГотово',
     done: 'Выполнено', progress: 'ВРаботе', overdue: 'Просрочено', todo: 'НеНачато',
-    stage: 'Этап', deadline: 'Срок', status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
+    stage: 'СтатусАП', deadline: 'Срок',   // FT_40: колонка «Статус АП» (было «Этап») status: 'Статус', action: 'ТребуетДействия', tasks: 'Задачи'
   };
   function n1c(key) { return NAME_1C[key] || key; }
 
@@ -344,9 +344,10 @@
   }
   function stageBadge(t, name) {
     var m = stageMeta(t.stage);
+    if (!m) return '';   // FT_40: у кандидата до подтверждения выхода (свою карточку видит стажер) статуса АП нет
     var text = m.title;
     if (t.stage === 'closed' && t.closeKind === 'cancelled') text = 'Отменена';
-    // Цвет бейджа означает только этап (фаза 7, раздел 4): классы badge-stage-*
+    // Цвет бейджа означает только этап (фаза 7, раздел 4): классы badge-stage-*; FT_40: выводится как «Статус АП»
     return badge('stage-' + t.stage, text, name || 'ДекорацияЭтапСтажировки');
   }
   function indicator(pct, name, tone) {
@@ -1273,7 +1274,7 @@
         '<td>' + link(t.fullName, { cls: 'fio-link', action: 'selectTrainee', data: { id: t.id }, title: 'Открыть карточку стажера', name: 'ТаблицаСтажеровФИО' }).replace("data-1c-name=\"ТаблицаСтажеровФИО\"", "data-1c-name=\"ТаблицаСтажеровФИО\" data-1c-risk=\"check\"") +
           '<div class="muted text-s"' + a1c('Надпись', 'ТаблицаСтажеровДолжность') + '>' + esc(formatPosition(t)) + '</div></td>' +
         (flat ? '<td><div title="' + esc(deptPath(t)) + '"' + a1c('Надпись', 'ТаблицаСтажеровПодразделение') + '>' + esc(dept(t.departmentId).name) + '</div></td>' : '') +
-        '<td>' + stageBadge(t, 'ТаблицаСтажеровЭтап') + '</td>' +
+        '<td>' + stageBadge(t, 'ТаблицаСтажеровСтатусАП') + '</td>' +   // FT_40
         '<td class="col-action">' + actionCell(t) + '</td>' +
         '<td>' + tasksCell(t) + '</td>' +
         '<td>' + dateCell(t) + '</td>' +
@@ -1335,7 +1336,7 @@
       (pendingOnly ? (pending.length ? pendingBlock(pending, true) : emptyFilterState('Сводка')) : list.length ?
         '<div class="table-box">' +
         '<table class="grid summary-table"' + a1c('ТаблицаФормы', 'ТаблицаСтажеров') + '>' +
-        '<thead><tr>' + th('Стажер') + (flat ? th('Подразделение') : '') + th('Этап', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
+        '<thead><tr>' + th('Стажер') + (flat ? th('Подразделение') : '') + th('Статус АП', 'stage') + th('Требует действия', 'action') + th('Задачи', 'tasks') + th('Срок', 'deadline') +
         '</tr></thead><tbody>' + rows + '</tbody></table></div>'
         : emptyFilterState('Сводка')) +
       '</div>';
@@ -1492,7 +1493,9 @@
       '<div class="row gap-3 tcard-part tcard-who"' + a1c('ГруппаГоризонтальная', 'ГруппаСтажер') + '>' +
         '<div class="avatar"' + a1c('Картинка', 'КартинкаАватар', 'check') + ' title="' + esc(t.fullName) + '">' + esc(initials(t.fullName)) + '</div>' +
         '<div class="col gap-0 tcard-who-text"' + a1c('ГруппаВертикальная', 'ГруппаФИО') + '>' +
-          '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' +
+          // FT_40: рядом с ФИО — статус АП (как в колонке «Статус АП» таблицы стажеров)
+          '<div class="row gap-2 tcard-name-row"' + a1c('ГруппаГоризонтальная', 'ГруппаФИОСтатусАП') + '>' +
+            '<div class="bold tcard-name"' + a1c('Надпись', 'ДекорацияФИО') + '>' + esc(t.fullName) + '</div>' + stageBadge(t, 'ДекорацияСтатусАП') + '</div>' +
           '<div class="tcard-line tcard-dept">' + (isTraineeUser() ? '<span class="tcard-dept-text" title="' + esc(dep ? dep.name : '') + '"' + a1c('Надпись', 'ГиперссылкаПодразделение') + '>' + esc(dep ? dep.name : '') + '</span>'
             : link(dep ? dep.name : '', { action: 'openDeptCard', title: 'Открыть карточку подразделения «' + (dep ? dep.name : '') + '»', name: 'ГиперссылкаПодразделение' })) + '</div>' +
           '<div class="muted tcard-line"' + a1c('Надпись', 'ДекорацияДолжность') + '>' + esc(formatPosition(t)) + '</div>' +
