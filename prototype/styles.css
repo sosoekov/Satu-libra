@@ -578,6 +578,9 @@ body.markup-1c table[data-1c]::before {
 .tcard { display: flex; flex-direction: row; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); flex-wrap: nowrap; }
 .tcard-who { flex: 0 0 auto; align-items: center; }
 .tcard-name { font-size: var(--fs-xl); line-height: 26px; white-space: nowrap; }
+.tcard-name-row { align-items: center; flex-wrap: nowrap; min-width: 0; }   /* FT_40: ФИО и статус АП */
+.tcard-name-row .tcard-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tcard-name-row .badge { flex: none; }
 .tcard-line { line-height: 20px; white-space: nowrap; }
 /* Узкое окно: наставник и руководитель сжимаются (многоточие, полное ФИО — в подсказке), полосы переносятся третьей строкой */
 /* Фаза 10: при узком окне даты и действие карточки переносятся второй строкой карточки, ФИО не обрезаются */
