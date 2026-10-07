@@ -4220,7 +4220,7 @@
       var st = ROUTE_ICONS[x.status];
       var name = userName(x.userId) + ' (' + userPlace(x.userId) + ')';
       var late = x.status === 'current' && dues[i] < D.TODAY;
-      return '<tr class="route-row' + (sel === i ? ' selected' : '') + '" data-action="routeSelect" data-index="' + i + '"' + a1c('ТаблицаФормы', 'ТаблицаМаршрутСтрока') + '>' +
+      return '<tr class="route-row' + (sel === i ? ' selected' : '') + '" data-action="routeSelect" data-index="' + i + '" title="Двойной клик — открыть задачу согласования"' + a1c('ТаблицаФормы', 'ТаблицаМаршрутСтрока') + '>' +
         '<td><input type="checkbox" data-action="routeSelect" data-index="' + i + '"' + (sel === i ? ' checked' : '') + ' aria-label="Выбрать шаг ' + (i + 1) + '"' + a1c('Флажок', 'ТаблицаМаршрутВыбран') + '></td>' +
         '<td class="route-status">' + (st ? '<span class="route-ico ' + st.cls + '" title="' + esc(st.title + (x.doneAt ? ' ' + fmtDate(x.doneAt) : '')) + '"' + a1c('Картинка', 'ТаблицаМаршрутСостояние', 'check') + '>' + icon(st.icon) + '</span>' : '') + '</td>' +
         '<td class="route-action"' + a1c('Надпись', 'ТаблицаМаршрутДействие') + '>' + (i + 1) + '. ' + esc(ROUTE_TITLES[x.role]) + '</td>' +
@@ -4325,6 +4325,98 @@
       }
     }
   };
+  // FT_39: карточка задачи согласования — двойной клик по шагу листа согласования. Как карточка задачи на вкладке «Задачи и уведомления»:
+  // страницы «Задача» | «Выполнение»; шаг, до которого очередь не дошла, — «Не начата». Маршрут — из формы листа (с добавленными согласующими).
+  // Текущий согласующий (и администратор) принимает решение из карточки: «Согласовано» / «Не согласовано»
+  var ROUTE_STEP_STATE = {
+    pending:  ['neutral', 'Не начата'], current: ['info', 'На согласовании'],
+    approved: ['success', 'Согласовано'], rejected: ['danger', 'Не согласовано'], skipped: ['neutral', 'Шаг пропущен']
+  };
+  // Форма листа (или отправки на согласование), из которой открыта карточка, — в стеке под ней (над карточкой может быть форма комментария)
+  function routeSheet() { return state.dialogStack.filter(function (d) { return d.type === 'approvalSheet' || d.type === 'sendToApproval'; })[0]; }
+  function routeStepState(v, x) { return !v.startedAt || !ROUTE_STEP_STATE[x.status] ? 'pending' : x.status; }
+  function routeCanDecide(t, v, x) {
+    return t.stage === 'approval' && !!v.startedAt && x.status === 'current' && (x.userId === D.CURRENT_USER_ID || isAdmin());
+  }
+  DIALOGS.routeTask = {
+    form: 'ФормаЗадачаСогласования', wide: true, readOnly: true, plainClose: true, noCloseButton: true,
+    titleFn: function () { return 'Согласовать: АП стажера ' + trainee(state.dialog.traineeId).fullName; },
+    init: function () { return { tab: 'task' }; },
+    body: function (t) {
+      var v = routeSheet().values;
+      var i = dlgCtx().index;
+      var x = v.steps[i];
+      var program = programOf(t);
+      var dues = routeDeadlines(v.startedAt, v.steps);
+      var st = routeStepState(v, x);
+      var meta = ROUTE_STEP_STATE[st];
+      var done = st === 'approved' || st === 'rejected' || st === 'skipped';
+      var tabs = '<div class="tabs dlg-tabs"' + a1c('Страницы', 'СтраницыЗадачаСогласования') + '>' +
+        [{ id: 'task', text: 'Задача', name: 'СтраницаЗадачаСогласованияПараметры' }, { id: 'exec', text: 'Выполнение', name: 'СтраницаЗадачаСогласованияВыполнение' }].map(function (pg) {
+          return '<button type="button" class="tab' + (dlgValue('tab') === pg.id ? ' active' : '') + '" data-action="taskCardTab" data-tab="' + pg.id + '"' + a1c('Страница', pg.name) + '>' + pg.text + '</button>';
+        }).join('') + '</div>';
+      if (dlgValue('tab') === 'exec') {
+        var log = tvExecLog({ kind: 'ap', key: 'ap:' + program.id, ref: program, traineeId: t.id,
+          approval: { startedAt: v.startedAt, steps: v.steps, log: (program.approval && program.approval.startedAt === v.startedAt && program.approval.log) || [] } });
+        return tabs + '<div class="col gap-3 task-exec"' + a1c('ГруппаВертикальная', 'ГруппаЗадачаСогласованияВыполнение') + '>' +
+          tfField(done ? 'Выполнил' : 'Исполнитель', '<input type="text" class="input" id="f_routeExecBy" readonly tabindex="-1" value="' + esc(personById(x.userId)) + '"' +
+            a1c('ПолеВвода', 'ПолеИсполнительЗадачиСогласования') + '>', { forId: 'f_routeExecBy' }) +
+          tfField('Фактическая дата выполнения', '<input type="text" class="input exec-date" id="f_routeExecDate" readonly tabindex="-1" value="' +
+            (done && (x.doneTime || x.doneAt) ? fmtStamp(x.doneTime || x.doneAt) : '') + '" placeholder="' + (st === 'pending' ? 'Задача не начата' : 'Задача еще не выполнена') + '"' +
+            a1c('ПолеВвода', 'ПолеДатаВыполненияЗадачиСогласования') + '>', { forId: 'f_routeExecDate' }) +
+          execHistory(log) + '</div>';
+      }
+      var prev = i > 0 ? v.steps[i - 1] : null;
+      var created = st === 'pending' ? '' : i === 0 ? v.startedAt : prev && (prev.doneTime || prev.doneAt) || '';
+      var author = v.startedAt ? approvalSender(program, t) : t.headId;
+      var dept_ = author ? authorDept(author) : '';
+      return tabs +
+        '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаПризнакиЗадачиСогласования') + '>' +
+          sourceBadge('adaptation', 'ДекорацияИсточникЗадачи') + badge(byId(TV_TYPES, 'approve').tone, byId(TV_TYPES, 'approve').text, 'ДекорацияТипЗадачи') +
+          badge(meta[0], meta[1], 'ДекорацияСтатусЗадачи') + '</div>' +
+        field('Наименование', tvCardValue('<b>Согласовать:</b> АП стажера ' + esc(t.fullName), 'ДекорацияНаименованиеЗадачи')) +
+        field('Описание', tvCardValue(esc('Согласуйте адаптационную программу стажера ' + t.fullName + ' (' + t.position + ', ' + dept(t.departmentId).name + '). ' +
+          'Выход — ' + (t.startDate ? fmtDate(t.startDate) : 'не назначен') + ', задач в программе: ' + tasksOf(program).length + '. Шаг маршрута: ' + (i + 1) + '. «' + ROUTE_TITLES[x.role] + '».'),
+          'ДекорацияОписаниеЗадачи', 'tv-card-text')) +
+        field('Исполнитель', tvCardValue(esc(personInfo(x.userId)), 'ДекорацияИсполнительЗадачи')) +
+        field('Статус', tvCardValue(esc(meta[1]), 'ДекорацияСтатусЗадачиТекст')) +
+        field('Автор', tvCardValue(esc(author ? personById(author) : '—'), 'ДекорацияАвторЗадачи', author ? '' : 'muted')) +
+        field('Подразделение автора', tvCardValue(esc(dept_ || '—'), 'ДекорацияПодразделениеАвтораЗадачи', dept_ ? '' : 'muted')) +
+        field('Дата создания', tvCardValue(created ? fmtStamp(created) : '—', 'ДекорацияДатаСозданияЗадачи', created ? '' : 'muted')) +
+        field('Срок выполнения', tvCardValue(x.status === 'skipped' ? '—' : fmtDate(dues[i]) + (st === 'current' && dues[i] < D.TODAY ? ' <span class="text-s danger-text">просрочено</span>' : ''),
+          'ДекорацияСрокЗадачи')) +
+        field('Предмет', tvCardValue(esc('Адаптационная программа (' + t.fullName + ')'), 'ДекорацияПредметЗадачи')) +
+        (done ? '<div class="col gap-3 tv-card-done"' + a1c('ГруппаВертикальная', 'ГруппаВыполнениеЗадачи') + '>' +
+          field('Результат', tvCardValue(esc(meta[1]), 'ДекорацияРезультатВыполнения')) +
+          field('Выполнил', tvCardValue(esc(personById(x.userId)), 'ДекорацияВыполнилЗадачу')) +
+          field('Дата выполнения', tvCardValue(x.doneTime || x.doneAt ? fmtStamp(x.doneTime || x.doneAt) : '—', 'ДекорацияДатаВыполненияЗадачи')) +
+          (x.comment ? field('Комментарий', tvCardValue(esc(x.comment), 'ДекорацияКомментарийВыполнения', 'tv-card-text')) : '') + '</div>' : '');
+    },
+    extraFoot: function (t) {
+      var v = routeSheet().values;
+      if (!routeCanDecide(t, v, v.steps[dlgCtx().index])) return '';
+      return '<span class="row gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаКомандыЗадачиСогласования') + '>' +
+        button('Согласовано', { cls: 'btn-primary', action: 'routeTaskAct', data: { act: 'approve' }, name: 'ФормаЗадачаСогласованияКнопкаСогласовано' }) +
+        button('Не согласовано', { action: 'routeTaskAct', data: { act: 'reject' }, name: 'ФормаЗадачаСогласованияКнопкаНеСогласовано' }) + '</span>';
+    }
+  };
+  // FT_39: решение по текущему шагу из карточки задачи согласования. Маршрут формы листа (с добавленными согласующими) записывается в АП,
+  // затем — результат шага. АП согласована или возвращена — лист закрывается; иначе — карточка закрывается, лист обновляется
+  function routeTaskDecide(t, result, comment) {
+    var program = programOf(t);
+    var sheet = state.dialogStack.filter(function (d) { return d.type === 'approvalSheet'; })[0];
+    if (!sheet) return;
+    var v = sheet.values;
+    program.approval.steps = cloneSteps(v.steps).map(function (x) { delete x.added; return x; });
+    var res = routeResult(t, result, comment);
+    if (res !== 'next') { state.dialog = null; state.dialogStack = []; render(); return; }
+    v.steps = cloneSteps(program.approval.steps);
+    state.dialogStack = state.dialogStack.slice(0, state.dialogStack.indexOf(sheet));
+    state.dialog = sheet;
+    render();
+    toast('Шаг согласован');
+  }
+
   // Выбор согласующего: добавляется в конец маршрута формы-владельца
   DIALOGS.approverPicker = {
     title: 'Добавить согласующего', form: 'ФормаВыборСогласующего', submit: 'Добавить',
@@ -5211,7 +5303,7 @@
     var log;
     if (x.kind === 'ap') {   // согласование: отправка и решения шагов маршрута
       var a = x.approval;
-      log = [{ at: a.startedAt, by: approvalSender(r, trainee(x.traineeId)), ev: 'sent' }];
+      log = a.startedAt ? [{ at: a.startedAt, by: approvalSender(r, trainee(x.traineeId)), ev: 'sent' }] : [];   // FT_39: маршрут еще не запущен — событий нет
       a.steps.forEach(function (st) {
         if (st.status === 'approved' || st.status === 'rejected')
           log.push({ at: st.doneTime || st.doneAt, by: st.userId, ev: st.status === 'approved' ? 'approve' : 'reject', comment: st.comment, text: ROUTE_TITLES[st.role] });
@@ -5338,12 +5430,14 @@
     submitFn: function () { return dlgCtx().act === 'reject' ? 'Не согласовать' : 'Вернуть на доработку'; },
     init: function () { return { comment: '' }; },
     body: function () {
-      var x = tvTaskByKey(dlgCtx().key);
-      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияЗадачаРешения') + '>' + esc(x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : '') + '</p>' +
+      var x = dlgCtx().route ? null : tvTaskByKey(dlgCtx().key);
+      var subj = dlgCtx().route ? 'Согласовать: АП стажера ' + trainee(state.dialog.traineeId).fullName : x ? byId(TV_TYPES, x.type).text + ': ' + x.subject : '';   // FT_39
+      return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияЗадачаРешения') + '>' + esc(subj) + '</p>' +
         field('Комментарий', textarea('comment', 'ПолеКомментарийРешения'), { required: true, error: state.dialog.errors.comment, forId: 'f_comment', name: 'КомментарийРешения' });
     },
     validate: function (t, v) { return required(v.comment) ? {} : { comment: 'Укажите комментарий' }; },
     apply: function (t, v) {
+      if (dlgCtx().route) { routeTaskDecide(t, 'rejected', v.comment); state.dialogStack = []; return; }   // FT_39: из карточки задачи согласования
       var x = tvTaskByKey(dlgCtx().key);
       state.dialogStack = [];   // FT_11: карточка задачи под формой закрывается вместе с ней
       if (x) tvPerform(x, dlgCtx().act, v.comment);
@@ -5834,6 +5928,8 @@
     // Лист согласования: выбор строки маршрута и перемещение добавленного согласующего
     routeSelect: function (el, e) {
       var v = state.dialog.values; var i = Number(el.getAttribute('data-index'));
+      // FT_39: второй щелчок двойного клика по строке — карточка задачи согласования (первый щелчок перерисовывает лист, событие dblclick теряется)
+      if (e && e.detail >= 2 && el.tagName === 'TR') { openDialog('routeTask', state.dialog.traineeId, { index: i }, { stack: true }); return; }
       v.sel = v.sel === i && el.type === 'checkbox' ? null : i;
       renderDialog();
     },
@@ -5844,6 +5940,13 @@
       renderDialog();
     },
     // НЕ_ПЕРЕНОСИТЬ: демо-результат текущего шага согласования
+    routeTaskAct: function (btn) {   // FT_39: «Согласовано» / «Не согласовано» в карточке задачи согласования
+      var t = trainee(state.dialog.traineeId);
+      var v = routeSheet().values;
+      if (!routeCanDecide(t, v, v.steps[dlgCtx().index])) return;
+      if (btn.getAttribute('data-act') === 'reject') { openDialog('tvComment', t.id, { route: true, act: 'reject' }, { stack: true }); return; }
+      routeTaskDecide(t, 'approved');
+    },
     routeDemo: function (btn) {
       var t = trainee(state.selectedTraineeId);
       var program = programOf(t);
