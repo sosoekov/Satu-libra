@@ -446,12 +446,14 @@
    * FT_9: демо-пользователи и видимость. НЕ_ПЕРЕНОСИТЬ — список вариантов; в 1С видимость задается ролями
    * и правами на уровне записей (RLS) по подразделению, руководителю стажировки и стажеру.
    * scope: 'all' — все стажеры; 'dept' — стажеры подразделения dept и подчиненных; 'head' — где пользователь руководитель
-   * стажировки; 'ksh' — пустая страница (свой кабинет позже); 'trainee' — только свои задачи АП.
+   * или наставник стажировки; 'ksh' — пустая страница (свой кабинет позже); 'trainee' — только свои задачи АП.
+   * FT_37: любой пользователь (кроме стажера), назначенный руководителем или наставником стажировки, видит этого стажера и его АП;
+   * у сотрудника КШ с такими стажерами вкладка «Адаптация персонала» — как у руководителя стажировки.
    * --------------------------------------------------------------------- */
   var DEMO_USERS = [
     { id: 'u-strygin',     label: 'Стрыгин К.М. (заместитель руководителя ЦАС)', role: 'Заместитель руководителя ЦАС', scope: 'all', name: 'ЗамРуководителяЦАС' },
     { id: 'u-kladova',     label: 'Кладова Я.С. (руководитель отдела)',           role: 'Руководитель отдела',          scope: 'dept', dept: 'd-corp', name: 'РуководительОтдела' },
-    { id: 'u-sizova',      label: 'Сизова А.В. (руководитель стажировки)',        role: 'Руководитель стажировки',      scope: 'head', name: 'РуководительСтажировки' },
+    { id: 'u-sizova',      label: 'Сизова А.В. (рук./наставник стажировки)',      role: 'Рук./наставник стажировки',    scope: 'head', name: 'РуководительНаставникСтажировки' },   // FT_37
     { id: 'u-sudomoykina', label: 'Судомойкина А.Н. (HR-менеджер)',               role: 'HR-менеджер',                  scope: 'all', name: 'HRМенеджер' },
     { id: 'u-baeva',       label: 'Баева Д.В. (Сотрудник КШ)',                    role: 'Сотрудник КШ',                 scope: 'ksh', name: 'СотрудникКШ' },
     { id: 't-found-1',     label: 'Ковалев Д.С. (Стажер)',                        role: 'Стажер',                       scope: 'trainee', name: 'Стажер' },   // FT_26: было Иванов П.С.
@@ -467,7 +469,13 @@
   // FT_26: администратор — без ограничений по правам (видит всех, создает и меняет все, выполняет задачи за всех)
   function isAdmin() { return demoUser().scope === 'admin'; }
   function isTraineeUser() { return demoUser().scope === 'trainee'; }
-  function isKshUser() { return demoUser().scope === 'ksh'; }
+  // FT_37: сотрудник КШ, назначенный руководителем или наставником стажировки, работает с этими стажерами как руководитель стажировки
+  function isKshUser() { return isKshScope() && !leadsInternship(); }
+  function isKshScope() { return demoUser().scope === 'ksh'; }
+  function leadsInternship() {
+    var me = D.CURRENT_USER_ID;
+    return D.trainees.some(function (t) { return isStarted(t) && (t.headId === me || t.mentorId === me); });
+  }
   // Стажеры, доступные текущему пользователю
   function myTrainees() {
     return D.trainees.filter(function (t) { return isStarted(t) && seesByScope(t); });   // FT_17: найденные до старта стажировки — отдельно (myPending)
@@ -476,8 +484,8 @@
   function seesByScope(t) {
     var u = demoUser();
     if (u.scope === 'all' || u.scope === 'admin') return true;   // FT_26: администратор
+    if (u.scope !== 'trainee' && (t.headId === u.id || t.mentorId === u.id)) return true;   // FT_37: руководитель или наставник стажировки
     if (u.scope === 'dept') return deptChain(t.departmentId).some(function (d) { return d.id === u.dept; });
-    if (u.scope === 'head') return t.headId === u.id;
     if (u.scope === 'trainee') return t.id === u.id;
     return false;
   }
@@ -832,7 +840,7 @@
     var tabTitle = [staff ? pluralN(staff, W_TRAINEES) + ' ' + (plural(staff, [0, 1, 1]) === 0 ? 'требует' : 'требуют') + ' действия' : '',
       waiting ? pluralN(waiting, ['кандидат', 'кандидата', 'кандидатов']) + ' ' + (plural(waiting, [0, 1, 1]) === 0 ? 'ожидает' : 'ожидают') + ' решения' : '']
       .filter(Boolean).join(', ');
-    var noRecruit = isTraineeUser() || isKshUser();   // FT_26: у стажера и сотрудника КШ подбора нет
+    var noRecruit = isTraineeUser() || isKshScope();   // FT_26: у стажера и сотрудника КШ подбора нет
     if (noRecruit && state.topTab === 'recruiting') state.topTab = 'adaptation';
     var tabs = [
       { id: 'tasks',      text: 'Задачи и уведомления', name: 'СтраницаЗадачиИУведомления' },
