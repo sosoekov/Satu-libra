@@ -1065,3 +1065,16 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .vrq-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
 .vrq-req { color: var(--c-danger); }
 .vrq-pick .w-check { width: 40px; }
+
+/* FT_47: «Дополнить по шаблону» и шаблон чек-листа */
+.cltpl-list .w-check { width: 36px; }
+.cltpl-list .w-num { width: 70px; }
+.cltpl-list .w-menu { width: 44px; }
+.cltpl-list td { vertical-align: middle; }
+.cltpl-list td.num { text-align: center; }
+.cltpl-edit .w-role { width: 210px; }
+.cltpl-edit .w-days { width: 100px; }
+.cltpl-edit .w-menu { width: 44px; }
+.cltpl-edit td { vertical-align: middle; padding: 4px var(--sp-2); }
+.cltpl-edit .input, .cltpl-edit .select { width: 100%; }
+.cltpl-preview td.nowrap { white-space: nowrap; }

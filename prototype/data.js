@@ -101,6 +101,7 @@
     // FT_23: исполнители пунктов чек-листа подготовки (по данным заказчика)
     { id: 'u-golovko',      fullName: 'Головко Лариса Васильевна',       role: 'Финансовый директор', departmentId: 'd-fes' },
     { id: 'u-ivanova-ia',   fullName: 'Иванова Ирина Александровна',     role: 'Заместитель директора по персоналу по кадровым вопросам', departmentId: 'd-sup' },
+    { id: 'u-ermolenko',     fullName: 'Ермоленко Анастасия',             role: 'Офис-менеджер', departmentId: 'd-admin' },   // FT_47: офис-менеджер ЦАС
     // FT_17: сотрудники по списку заказчика (должность — в role)
     { id: 'u-veselov-ae', fullName: 'Веселов Андрей Евгеньевич', role: 'Системный аналитик', departmentId: 'd-doc-mid' },
     { id: 'u-veselov-sv', fullName: 'Веселов Сергей Владимирович', role: 'Руководитель проектов', departmentId: 'd-fpm' },
@@ -491,27 +492,42 @@
     { name: 'Создать заявку в Bitrix',                          responsibleRole: 'head',   offsetDays: -7, dueDays: 7, linkedDocType: 'bitrix',
       description: 'Требуется создать заявку на прием или заявку на перевод в Bitrix. Заявка на прием создается, если найден новый сотрудник. Заявка на перевод, если заявка закрыта действующим сотрудником ГК Форус.',
       links: ['lnk-bitrix-doc', 'lnk-transfer-doc'] },
-    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     offsetDays: -5, dueDays: 5, linkedDocType: 'request0911',
+    // FT_47: formats — пункт создается только для этих форматов работы (office — в офисе, mixed — смешанный, remote — удаленно)
+    { name: 'Создать заявку на выпуск пропуска (0911)',         responsibleRole: 'hr',     formats: ['office', 'mixed'], offsetDays: -5, dueDays: 5, linkedDocType: 'request0911',
       description: 'Заявка на выпуск пропуска создается в сервисе заявок 0911 после сдачи сотрудником экзамена СИТ.', links: ['lnk-12'] },   // FT_33
     { name: 'Создать заявку на создание учетной записи (0911)', responsibleRole: 'hr',     offsetDays: -5, dueDays: 5, linkedDocType: 'request0911',
       description: 'Заявка на создание учетной записи создается в сервисе заявок 0911.', links: ['lnk-12'] },
-    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   offsetDays: -3, dueDays: 3, linkedDocType: null,
+    { name: 'Подготовить рабочее место',                        responsibleRole: 'head',   formats: ['office'], offsetDays: -3, dueDays: 3, linkedDocType: null,
       description: 'Стол и кресло рядом с наставником, доступ в помещение.', links: [] },
     { name: 'Подготовить технику',                              responsibleRole: 'head',   offsetDays: -3, dueDays: 3, linkedDocType: null,
       description: 'Ноутбук, монитор, гарнитура.', links: ['lnk-12'] },
     { name: 'Создать АП',                                       responsibleRole: 'mentor', offsetDays: -3, dueDays: 3, linkedDocType: 'program',
       description: 'Отмечается автоматически, когда для стажера создана адаптационная программа.', links: [] },
-    // FT_33: переименован (было «Подготовить ПО и доступ к ресурсам, порталам»)
-    { name: 'Подготовить ПО и доступ к внутренним ресурсам подразделения', responsibleRole: 'head', offsetDays: -1, dueDays: 1, linkedDocType: null,
-      description: 'Учетные записи в 1С, Forus Team и на корпоративном портале.', links: ['lnk-1', 'lnk-10'] },
+    // FT_47: пункт «Подготовить ПО и доступ к внутренним ресурсам подразделения» убран
     // FT_23: пункт службы вне ЦАС — исполнитель закреплен за ролью (ROLE_USERS); FT_33: пункты ФЭС и СУП убраны из шаблона
     { name: 'Открыть доступ стажеру к охране труда, локальным нормативным актам, положению по ДМС', responsibleRole: 'ksh', offsetDays: -1, dueDays: 1, linkedDocType: null,
       description: 'Доступ к курсам и документам на портале.', links: ['lnk-6', 'lnk-4'] }
   ];
-  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажер', ksh: 'КШ',
+  var ROLE_TITLES = { head: 'Руководитель стажировки', hr: 'HR-менеджер', mentor: 'Наставник стажировки', trainee: 'Стажер', ksh: 'КШ', office: 'Офис-менеджер',
     fin: 'ФЭС (финансовый директор)', personnel: 'СУП (кадровые вопросы)' };
   // FT_23: роли, закрепленные за сотрудником (не зависят от стажера)
-  var ROLE_USERS = { ksh: 'u-baeva', fin: 'u-golovko', personnel: 'u-ivanova-ia' };
+  var ROLE_USERS = { ksh: 'u-baeva', fin: 'u-golovko', personnel: 'u-ivanova-ia', office: 'u-ermolenko' };   // FT_47: офис-менеджер
+
+  /* ---------- FT_47: шаблоны дополнения чек-листа подготовки («Дополнить по шаблону») ----------
+   * clTemplates: id, name, deptId (шаблон доступен стажерам этого подразделения и подчиненных), editorIds (редактируют и удаляют),
+   * items: [{ name, role (роль ответственного), dueDays (срок — дней от даты дополнения), description }].
+   * CL_TPL_CREATORS — кто создает шаблоны (и Администратор).
+   */
+  var CL_TPL_CREATORS = ['u-strygin', 'u-kladova', 'u-sizova'];
+  var CAS_ITEMS = [
+    { name: 'Создать учетную запись ИСУП', role: 'office', dueDays: 3, description: '' },
+    { name: 'Добавить сотрудника в чаты (Болталка ЦАС, чаты проектов и т.д.)', role: 'head', dueDays: 3, description: '' }
+  ];
+  var clTemplates = [
+    { id: 'clt-cas',  name: 'Чеклист ЦАС (общий)', deptId: 'd-cas', editorIds: CL_TPL_CREATORS.slice(), items: CAS_ITEMS.map(function (x) { return Object.assign({}, x); }) },
+    { id: 'clt-orfp', name: 'Чеклист ОРФП',        deptId: 'd-fed', editorIds: CL_TPL_CREATORS.slice(),
+      items: CAS_ITEMS.map(function (x) { return Object.assign({}, x); }).concat([{ name: 'Создать УЗ во внутренней системе ОРФП', role: 'head', dueDays: 3, description: '' }]) }
+  ];
 
   /* ---------- ТЧ ЧекЛистЗакрытия (фаза 10, 5.2) ----------
    * closureChecklist: id, traineeId, name, responsibleRole, responsibleId, offsetDays (от endDate: отрицательное — до окончания,
@@ -558,7 +574,8 @@
       var responsibleId = ROLE_USERS[c.responsibleRole] || (c.responsibleRole === 'head' ? tr.headId : c.responsibleRole === 'hr' ? tr.hrId : tr.mentorId);
       var item = {
         // FT_23: у пунктов служб — свой номер, номера прежних пунктов не меняются
-        id: i < 7 ? 'cl-' + (clSeq++) : 'cl-s' + (svcSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
+        // FT_47: пункт «ПО и доступ» (7-й) убран — у пункта КШ прежний номер cl-s
+        id: i < 6 ? 'cl-' + (clSeq++) : 'cl-s' + (svcSeq++), traineeId: tr.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: responsibleId, offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
         linkedDocType: c.linkedDocType, linkedDocNumber: null,
         status: 'not_started', description: c.description || '', links: libLinks(c.links), reviewerId: null, observerIds: [], log: []
@@ -574,6 +591,7 @@
       if (item.done) item.status = 'done';
       checklist.push(item);
     });
+    clSeq++;   // FT_47: номер убранного пункта «ПО и доступ» не занимается — номера пунктов стажеров прежние
   });
 
   /* ---------- Маршрут согласования АП (FT_8, п. 5) ----------
@@ -974,6 +992,7 @@
     topDepartment: topDepartment,
     ROLE_TITLES: ROLE_TITLES,
     ROLE_USERS: ROLE_USERS,
+    clTemplates: clTemplates, CL_TPL_CREATORS: CL_TPL_CREATORS,   // FT_47
     departments: departments,
     users: users,
     trainees: trainees,
