@@ -1047,3 +1047,21 @@ table.grid[data-resize] td, table.grid[data-resize] th { overflow: hidden; }
 .tv-card-links { margin-top: var(--sp-1); }
 .tv-card-link-row > .input { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: 32px; height: auto; }
 .tv-card-link-comment { white-space: normal; }
+
+/* ================= FT_44: форма документа «Заявка на подбор персонала» (имитация формы 1С) ================= */
+.vrq-doc { min-height: 0; }
+.vrq-bar { align-items: center; }
+.vrq-view { font-size: var(--fs-l); }
+.vrq-body { align-items: stretch; gap: var(--sp-4); min-height: 420px; }
+.vrq-nav { flex: 0 0 200px; gap: var(--sp-1); border-right: 1px solid var(--c-border); padding-right: var(--sp-3); }
+.vrq-nav-item { padding: 6px 0; color: var(--c-text-secondary); }
+.vrq-nav-item.active { color: var(--c-text); box-shadow: inset -3px 0 0 #F2C200; }
+.vrq-main { min-width: 0; }
+.vrq-tbar { align-items: center; background: #F2F3F5; border-radius: var(--radius); padding: var(--sp-1) var(--sp-2); }
+.vrq-table .w-check { width: 36px; }
+.vrq-table .w-n { width: 48px; }
+.vrq-table .w-date { width: 30%; }
+.vrq-side { flex: 0 0 320px; border-left: 1px solid var(--c-border); padding-left: var(--sp-4); }
+.vrq-label { font-size: var(--fs-s); color: var(--c-text-secondary); }
+.vrq-req { color: var(--c-danger); }
+.vrq-pick .w-check { width: 40px; }
