@@ -851,8 +851,8 @@ table.grid.exec-table td { vertical-align: middle; }
 .rc-left { flex: 0 0 340px; width: 340px; gap: var(--sp-3); overflow: auto; min-height: 0; }
 /* Карточки счетчиков — цветные градиенты по макету */
 .rc-card { border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); flex: 0 0 auto; }
-.rc-card-vacancy { background: linear-gradient(135deg, #7B61C9 0%, #C06BC0 55%, #F08BB0 100%); color: #FFFFFF; }
-.rc-card-plan { background: linear-gradient(135deg, #F6D86B 0%, #CFE07A 55%, #9ED28C 100%); color: var(--c-text); }
+.rc-card-vacancy { background: linear-gradient(180deg, rgb(216, 200, 255) 0%, rgb(253, 228, 255) 100%); color: var(--c-text); }   /* FT_42: вертикальный, вверху фиолетовый, внизу розовый; фон светлый — текст темный */
+.rc-card-plan { background: linear-gradient(180deg, rgb(248, 255, 153) 0%, rgb(208, 255, 132) 100%); color: var(--c-text); }     /* FT_42: вертикальный, вверху желтый, внизу зеленый */
 .rc-card-title { font-size: var(--fs-l); font-weight: var(--fw-bold); }
 .rc-metrics { align-items: flex-start; gap: var(--sp-2); }
 .rc-metric { flex: 1 1 0; min-width: 0; align-items: flex-start; }
@@ -873,6 +873,7 @@ table.grid.exec-table td { vertical-align: middle; }
 .rc-table col.w-state { width: 130px; }   /* FT_42: было 140px — место под «Найденные сотрудники» */
 .rc-table col.w-num { width: 96px; }       /* FT_42: было 110px */
 .rc-table col.w-num-l { width: 110px; }    /* FT_42: было 130px */
+table.grid.rc-table th.num, table.grid.rc-table td.num { text-align: center; }   /* FT_42: количества — по центру */
 .rc-table col.w-people { width: 190px; }   /* FT_42: «Найденные сотрудники» */
 .rc-table .rc-people > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.grid.rc-table th { white-space: normal; vertical-align: bottom; }
