@@ -853,9 +853,10 @@ table.grid.exec-table td { vertical-align: middle; }
 .rc-card { border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); gap: var(--sp-2); flex: 0 0 auto; }
 .rc-card-vacancy { background: linear-gradient(180deg, rgb(216, 200, 255) 0%, rgb(253, 228, 255) 100%); color: var(--c-text); }   /* FT_42: вертикальный, вверху фиолетовый, внизу розовый; фон светлый — текст темный */
 .rc-card-plan { background: linear-gradient(180deg, rgb(248, 255, 153) 0%, rgb(208, 255, 132) 100%); color: var(--c-text); }     /* FT_42: вертикальный, вверху желтый, внизу зеленый */
-.rc-card-title { font-size: var(--fs-l); font-weight: var(--fw-bold); }
+.rc-card-title { font-size: var(--fs-l); font-weight: var(--fw-bold); text-align: center; }   /* FT_42: по центру */
 .rc-metrics { align-items: flex-start; gap: var(--sp-2); }
-.rc-metric { flex: 1 1 0; min-width: 0; align-items: flex-start; }
+.rc-metric { flex: 1 1 0; min-width: 0; align-items: center; text-align: center; }   /* FT_42: число и подпись — по центру своей трети */
+.rc-card-foot { justify-content: center; }
 .rc-card .link { color: inherit; }
 .rc-card .rc-num { font-size: 28px; font-weight: var(--fw-bold); line-height: 1.15; }
 .rc-label { font-size: var(--fs-s); opacity: 0.92; }

@@ -3261,7 +3261,7 @@
     var st = rcStats();
     var left = '<div class="col rc-left"' + a1c('ГруппаВертикальная', 'ГруппаПодборЛеваяКолонка') + '>' +
       rcCard('rc-card-vacancy', 'ГруппаВакансииВРаботе', 'Вакансии в работе', rcCounterItems(st.vacancies, 'Вакансии', 'Вакансии'),
-        '<div class="row rc-card-foot"><span class="grow"></span>' +
+        '<div class="row rc-card-foot">' +   // FT_42: «Показать все» — по центру карточки
           link('Показать все (' + st.total + ')', { cls: 'rc-all', action: 'rcStub', name: 'ГиперссылкаПоказатьВсеВакансии', title: 'Открыть список всех заявок на подбор' }) + '</div>') +
       rcCard('rc-card-vacancy', 'ГруппаСотрудниковВПодборе', 'Сотрудников в подборе', rcCounterItems(st.people, 'СотрудниковВПодборе', 'Сотрудники')) +
       button('Создать заявку на подбор вне плана', { cls: 'rc-btn', action: 'rcStub', name: 'КнопкаСоздатьЗаявкуВнеПлана' }) +
