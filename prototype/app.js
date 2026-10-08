@@ -538,7 +538,8 @@
     D.trainees.push(t);
     r.found += 1;
     if (r.candidates > 0) r.candidates -= 1;
-    if (r.found >= r.qty) { r.state = 'closed'; r.closedAt = D.TODAY; }
+    if (r.found >= r.qty) r.state = 'awaiting';   // FT_42: найдено требуемое количество — «Ожидает выхода» (было — закрывалась)
+    delete r.hidden;   // FT_42: заявка с найденным сотрудником — в таблице «Заявки в работе»
     D.recruitNotes.push({ id: 'rn-' + t.id, userId: r.authorId, severity: 'info', at: t.foundAt, candidateId: t.id,
       text: 'Кандидат на должность «' + r.position + '» принял предложение о работе: ' + t.fullName });
     return t;
@@ -621,6 +622,9 @@
     createStandardChecklist(t);
     t.checklistCreated = true;
     notifyAssigned(t);
+    // FT_42: выход подтвержден — заявка «Ожидает выхода» закрывается, когда по ней не осталось кандидатов, ожидающих решения
+    var r = requisitionOf(t);
+    if (r && r.state === 'awaiting' && !vrFoundPeople(r).some(isPendingDecision)) { r.state = 'closed'; r.closedAt = D.TODAY; }
   }
   // Уведомления «Адаптация» руководителю стажировки и наставнику; ASSUMPTION (ТЗ 11.8): совпадающему с текущим пользователем — не создается
   function notifyAssigned(t) {
@@ -3202,6 +3206,7 @@
     { id: 'approval', title: 'На согласовании', name: 'НаСогласовании' },
     { id: 'approved', title: 'Согласована',     name: 'Согласована' },
     { id: 'progress', title: 'Выполняется',     name: 'Выполняется' },
+    { id: 'awaiting', title: 'Ожидает выхода',  name: 'ОжидаетВыхода' },   // FT_42: сотрудник найден, ждем решения о выходе
     { id: 'new',      title: 'Новая',           name: 'Новая' },
     { id: 'closed',   title: 'Закрыта',         name: 'Закрыта' }
   ];
@@ -3216,8 +3221,12 @@
   }
   function vrYear(r) { return r.date.slice(0, 4) === String(D.resourcePlan.year); }
   function sumQty(list) { return list.reduce(function (s, r) { return s + r.qty; }, 0); }
+  // FT_42: в таблице и счетчиках — заявки без признака hidden (остальные открываются из задач подбора)
+  function listedRequests() { return D.vacancyRequests.filter(function (r) { return !r.hidden; }); }
+  // FT_42: найденные по заявке сотрудники до подтверждения выхода (ожидают решения или отменены)
+  function vrFoundPeople(r) { return D.trainees.filter(function (t) { return t.requisitionId === r.id && !isStarted(t); }); }
   function rcStats() {
-    var all = D.vacancyRequests;
+    var all = listedRequests();
     var approval = all.filter(function (r) { return r.state === 'approval'; });
     var expiring = all.filter(vrExpiring);
     var work = all.filter(vrInWork);
@@ -3252,7 +3261,7 @@
     var st = rcStats();
     var left = '<div class="col rc-left"' + a1c('ГруппаВертикальная', 'ГруппаПодборЛеваяКолонка') + '>' +
       rcCard('rc-card-vacancy', 'ГруппаВакансииВРаботе', 'Вакансии в работе', rcCounterItems(st.vacancies, 'Вакансии', 'Вакансии'),
-        '<div class="row rc-card-foot"><span class="grow"></span>' +
+        '<div class="row rc-card-foot">' +   // FT_42: «Показать все» — по центру карточки
           link('Показать все (' + st.total + ')', { cls: 'rc-all', action: 'rcStub', name: 'ГиперссылкаПоказатьВсеВакансии', title: 'Открыть список всех заявок на подбор' }) + '</div>') +
       rcCard('rc-card-vacancy', 'ГруппаСотрудниковВПодборе', 'Сотрудников в подборе', rcCounterItems(st.people, 'СотрудниковВПодборе', 'Сотрудники')) +
       button('Создать заявку на подбор вне плана', { cls: 'rc-btn', action: 'rcStub', name: 'КнопкаСоздатьЗаявкуВнеПлана' }) +
@@ -3283,26 +3292,32 @@
       '<td><span class="ellipsis"' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеВакансия', 'check') + '>' + esc(r.position) + '</span></td>' +
       '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеТребуемоеКоличество') + '>' + rcNum(r.qty) + '</span></td>' +
       '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеКандидатовВПроработке') + '>' + rcNum(r.candidates) + '</span></td>' +
-      '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеНайдено') + '>' + rcNum(r.found) + '</span></td></tr>';
+      '<td class="num"><span' + a1c('Надпись', 'ТаблицаЗаявкиВРаботеНайдено') + '>' + rcNum(r.found) + '</span></td>' +
+      // FT_42: найденные сотрудники — только у «Ожидает выхода»; ФИО — переход к карточке в «Ожидают решения»
+      '<td><div class="col gap-0 rc-people"' + a1c('ГруппаВертикальная', 'ТаблицаЗаявкиВРаботеНайденныеСотрудники') + '>' + (r.state === 'awaiting' ? vrFoundPeople(r).map(function (t) {
+        return '<span>' + link(t.fullName, { action: 'vrGoCandidate', data: { id: t.id }, name: 'ТаблицаЗаявкиВРаботеНайденныйСотрудник',
+          title: t.fullName + (t.stage === 'cancelled' ? ' — стажировка кандидата отменена' : ' — открыть карточку в «Ожидают решения»') }) +
+          (t.stage === 'cancelled' ? ' <span class="muted text-s">отменен</span>' : '') + '</span>';
+      }).join('') : '') + '</div></td></tr>';
   }
   function renderRequestsPanel() {
     var groups = VR_STATES.filter(function (g) { return g.id !== 'closed' || state.rc.showClosed; });
     var body = groups.map(function (g) {
-      var rows = D.vacancyRequests.filter(function (r) { return r.state === g.id; });
+      var rows = listedRequests().filter(function (r) { return r.state === g.id; });
       if (!rows.length) return '';
       var open = !state.rc.collapsed[g.id];
       return '<tr class="group-row rc-group" tabindex="0" data-action="rcToggleGroup" data-group="' + g.id + '" title="' + (open ? 'Свернуть группу' : 'Развернуть группу') + '"' +
         a1c('ТаблицаФормы', 'ТаблицаЗаявкиВРаботеГруппа' + g.name, 'check') + '>' +
-        '<td colspan="6"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') + '<b>' + esc(g.title) + '</b></span></td></tr>' +
+        '<td colspan="7"><span class="row gap-1">' + icon(open ? 'chevronDown' : 'chevronRight') + '<b>' + esc(g.title) + '</b></span></td></tr>' +
         (open ? rows.map(vrRow).join('') : '');
     }).join('');
-    if (!body) body = '<tr><td colspan="6"><div class="empty"' + a1c('Надпись', 'ДекорацияЗаявокНет') + '>Заявок нет</div></td></tr>';
+    if (!body) body = '<tr><td colspan="7"><div class="empty"' + a1c('Надпись', 'ДекорацияЗаявокНет') + '>Заявок нет</div></td></tr>';
     return '<div class="col rc-panel"' + a1c('ГруппаВертикальная', 'ГруппаЗаявкиВРаботе') + '>' +
       '<div class="rc-panel-title"' + a1c('Надпись', 'ДекорацияЗаявкиВРаботеЗаголовок') + '>Заявки в работе</div>' +
       '<div class="table-box rc-table-box"><table class="grid rc-table"' + a1c('ТаблицаФормы', 'ТаблицаЗаявкиВРаботе', 'check') + '>' +
-        '<colgroup><col class="w-mark"><col class="w-state"><col><col class="w-num"><col class="w-num-l"><col class="w-num"></colgroup>' +
+        '<colgroup><col class="w-mark"><col class="w-state"><col><col class="w-num"><col class="w-num-l"><col class="w-num"><col class="w-people"></colgroup>' +
         '<thead><tr><th title="Признаки заявки: «!» — внеплановая, стрелки — замена сотрудника"></th><th>Состояние</th><th>Вакансия</th>' +
-          '<th class="num">Требуемое количество</th><th class="num">Кандидатов в проработке</th><th class="num">Найдено</th></tr></thead>' +
+          '<th class="num">Требуемое количество</th><th class="num">Кандидатов в проработке</th><th class="num">Найдено</th><th>Найденные сотрудники</th></tr></thead>' +
         '<tbody>' + body + '</tbody></table></div>' +
       '<div class="row rc-panel-foot"' + a1c('ГруппаГоризонтальная', 'ГруппаЗаявкиВРаботеПодвал') + '>' +
         '<label class="check"><input type="checkbox" data-rc-closed="1"' + (state.rc.showClosed ? ' checked' : '') +
@@ -6198,6 +6213,7 @@
     },
     // FT_15: вкладка «Подбор персонала»
     rcStub: function () { toast(RC_STUB); },
+    vrGoCandidate: function (a) { goToCandidate(a.getAttribute('data-id')); },   // FT_42: найденный сотрудник заявки
     demoHrFound: function () { demoHrFound(); },
     // FT_17: найденные кандидаты (фаза 1 — кнопки без действий)
     pendingOpenRequest: function (btn) { var r = requisitionOf(trainee(btn.getAttribute('data-id'))); if (r) openRequest(r); },
