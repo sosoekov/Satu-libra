@@ -125,6 +125,8 @@
     { id: 'u-nam', fullName: 'Нам Артем Игоревич', role: 'Инженер-программист', departmentId: 'd-ffhd' }
   ];
   var HR_IDS = ['u-sudomoykina', 'u-kondurova', 'u-andreeva', 'u-samsonova'];   // HR-менеджеры (FT_8: у стажера — свой, hrId)
+  // FT_43: подразделения, которые курирует HR-менеджер (вместе с подчиненными): решение о выходе кандидата в эти подразделения
+  var HR_CURATED = { 'u-sudomoykina': ['d-cas'] };
   var CAS_HEAD_ID = 'u-strygin';  // заместитель руководителя ЦАС — шаг «Утверждение» маршрута согласования АП (FT_8, FT_9)
   var KSH_ID = 'u-baeva';         // сотрудник КШ — ответственный за пункт «Подготовить документы для оформления ДМС» (фаза 10, 5.2)
 
@@ -963,6 +965,7 @@
     QUALIFICATION_NAMES: QUALIFICATION_NAMES,
     POSITION_FAMILIES: POSITION_FAMILIES,
     HR_IDS: HR_IDS,
+    HR_CURATED: HR_CURATED,   // FT_43
     CAS_HEAD_ID: CAS_HEAD_ID,
     defaultRoute: defaultRoute,
     topDepartment: topDepartment,
