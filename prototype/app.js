@@ -527,11 +527,14 @@
   }
   function decideLockText(t) { return canDecidePending(t) ? '' : 'Решение принимает автор заявки: ' + userName(requisitionAuthorId(t)); }
   // Найденные, ожидающие решения, видимые текущему пользователю; порядок — по дате «Исполнено» (сначала давние)
-  // FT_44: кандидат по заявке с формой документа (ЗП-000040) ждет HR: в «Ожидают решения» — только после того, как HR добавил его
-  // в «Трудоустроенные» и нажал «Пропустить» (при «Подтвердить» он сразу на этапе «Подготовка к выходу»)
+  // FT_44, FT_45: кандидат по заявке с формой документа (ЗП-000040) ждет HR: в «Ожидают решения» — только после того, как HR в заявке
+  // открыл подтверждение выхода и нажал «Пропустить» (при «Подтвердить» он сразу на этапе «Подготовка к выходу»)
+  function vrqRow(r, t) { return (r.hired || []).filter(function (h) { return h.traineeId === t.id; })[0] || null; }
   function awaitsHr(t) {
     var r = requisitionOf(t);
-    return !!(r && r.docForm && !(r.hired || []).some(function (h) { return h.traineeId === t.id; }));
+    if (!r || !r.docForm) return false;
+    var h = vrqRow(r, t);
+    return !(h && h.hrDone);
   }
   function myPending() {
     return D.trainees.filter(function (t) { return isPendingDecision(t) && canSeePending(t) && !awaitsHr(t); })
@@ -1098,7 +1101,7 @@
     if (doc && doc.kind === 'tpl') { el('docCenter').innerHTML = renderTemplateDoc(byId(D.templates, doc.templateId)); applyColWidths(el('docCenter')); return; }   // FT_22
     if (doc && doc.kind === 'apv') { el('docCenter').innerHTML = renderProgramView(trainee(doc.traineeId)); return; }
     if (doc && REQ_META[doc.kind]) { el('docCenter').innerHTML = renderBitrixDoc(doc); return; }   // EXP_1; FT_33
-    if (doc && doc.kind === 'vrq') { el('docCenter').innerHTML = renderRequestDoc(byId(D.vacancyRequests, doc.requestId)); return; }   // FT_44
+    if (doc && doc.kind === 'vrq') { el('docCenter').innerHTML = renderRequestDoc(byId(D.vacancyRequests, doc.requestId), doc); return; }   // FT_44
     if (isKshUser() && !activeDoc()) {   // FT_9: у сотрудника КШ — пустая вкладка, свой кабинет будет реализован позже
       el('centerZone').innerHTML = '<div class="empty ksh-empty"' + a1c('Надпись', 'ДекорацияКабинетКШ') + '>Здесь пока ничего нет</div>';
       return;
@@ -3352,26 +3355,17 @@
   }
 
   /* ---------- FT_44: форма документа «Заявка на подбор персонала» (docs/ft44-hr-request-confirm.md) ----------
-   * Имитация формы 1С: почти все элементы только для просмотра. Работает «+ Добавить» на странице «Трудоустроенные»:
-   * выбор сотрудника (найденные по заявке кандидаты, ожидающие решения) → форма подтверждения выхода от HR («Подтвердить» / «Пропустить»).
-   * Добавляют HR-менеджер, курирующий подразделение заявки, и Администратор.
+   * Имитация формы 1С: почти все элементы только для просмотра. FT_45: на странице «Трудоустроенные» сразу строка найденного сотрудника;
+   * флажок строки — у HR-менеджера, курирующего подразделение заявки (и Администратора), появляется «Подтвердить выход» → форма подтверждения
+   * выхода от HR («Подтвердить» / «Пропустить»). «+ Добавить» и форма выбора сотрудника (FT_44) убраны.
    */
   var VRQ_SECTIONS = [['Основная', 'Основная'], ['Реквизиты', 'Реквизиты'], ['Финансы', 'Финансы'], ['Требования к кандидату', 'ТребованияККандидату'],
     ['Компетенции', 'Компетенции'], ['Трудоустроенные', 'Трудоустроенные'], ['Согласование заявки', 'СогласованиеЗаявки']];
   var VRQ_OFF = 'Недоступно в прототипе';
   var vrqStarted = false;   // выход подтвержден из заявки — окно «Стажировка оформлена» не показывается
-  function vrqCanAdd(r) { return isAdmin() || curatesDept(D.CURRENT_USER_ID, r.deptId); }
-  // Кандидаты для выбора: найдены по заявке, ожидают решения и еще не добавлены в «Трудоустроенные»
-  function vrqCandidates(r) {
-    var added = (r.hired || []).map(function (h) { return h.traineeId; });
-    return D.trainees.filter(function (t) { return t.requisitionId === r.id && isPendingDecision(t) && added.indexOf(t.id) < 0; });
-  }
-  function vrqAddLock(r) {
-    if (!vrqCanAdd(r)) return 'Добавляет HR-менеджер, курирующий подразделение заявки';
-    if (r.state !== 'awaiting') return 'Добавить сотрудника можно в заявке «Ожидает выхода»';
-    if (!vrqCandidates(r).length) return 'Нет найденных сотрудников, ожидающих решения';
-    return '';
-  }
+  function vrqIsHr(r) { return isAdmin() || curatesDept(D.CURRENT_USER_ID, r.deptId); }
+  // «Подтвердить выход» — у HR, когда отмечена строка кандидата, ожидающего решения
+  function vrqCanConfirm(r, sel) { var t = sel ? trainee(sel) : null; return !!(t && vrqIsHr(r) && isPendingDecision(t) && vrqRow(r, t)); }
   function vrqHireDate(h) { var t = trainee(h.traineeId); return t && isStarted(t) && t.startDate ? t.startDate : ''; }
   function vrqField(label, value, name, opts) {
     opts = opts || {};
@@ -3379,14 +3373,16 @@
       '<label class="vrq-label" for="vrq_' + name + '">' + (opts.req ? '<span class="vrq-req">*</span>' : '') + esc(label) + '</label>' +
       '<input type="text" class="input" id="vrq_' + name + '" disabled value="' + esc(value || '') + '"' + a1c('ПолеВвода', 'Поле' + name) + '></div>';
   }
-  function renderRequestDoc(r) {
-    var lock = vrqAddLock(r);
+  function renderRequestDoc(r, tab) {
+    var sel = tab.sel || null;
     var st = byId(VR_STATES, r.state);
     var off = function (text, name, ic) { return button(text, { icon: ic, disabled: true, title: VRQ_OFF, name: name, cls: text ? '' : 'btn-icon' }); };
     var first = (r.hired || []).map(vrqHireDate).filter(Boolean)[0] || '';
     var rows = (r.hired || []).map(function (h, i) {
       var t = trainee(h.traineeId);
-      return '<tr' + a1c('ТаблицаФормы', 'ТаблицаТрудоустроенныеСтрока') + '><td><input type="checkbox" disabled aria-label="Выбрать строку"' + a1c('Флажок', 'ТаблицаТрудоустроенныеВыбрана') + '></td>' +
+      var on = sel === h.traineeId;   // FT_45: флажок строки — отметка сотрудника
+      return '<tr class="' + (on ? 'selected' : '') + '"' + a1c('ТаблицаФормы', 'ТаблицаТрудоустроенныеСтрока') + '><td><input type="checkbox" data-action="vrqSel" data-id="' + h.traineeId + '"' + (on ? ' checked' : '') +
+        ' aria-label="' + esc('Выбрать: ' + (t ? t.fullName : '')) + '"' + a1c('Флажок', 'ТаблицаТрудоустроенныеВыбрана') + '></td>' +
         '<td class="num"' + a1c('Надпись', 'ТаблицаТрудоустроенныеНомерСтроки') + '>' + (i + 1) + '</td>' +
         '<td' + a1c('Надпись', 'ТаблицаТрудоустроенныеСотрудник') + '>' + esc(t ? t.fullName : '') + '</td>' +
         '<td' + a1c('Надпись', 'ТаблицаТрудоустроенныеДатаНайма') + '>' + (vrqHireDate(h) ? fmtDate(vrqHireDate(h)) : '') + '</td></tr>';
@@ -3402,7 +3398,8 @@
         }).join('') + '</div>' +
         '<div class="col gap-3 grow vrq-main"' + a1c('ГруппаВертикальная', 'ГруппаТрудоустроенные') + '>' +
           '<div class="row gap-2 vrq-tbar"' + a1c('КоманднаяПанель', 'КоманднаяПанельТрудоустроенные') + '>' +
-            button('Добавить', { icon: 'plus', action: 'vrqAdd', data: { id: r.id }, disabled: !!lock, title: lock || 'Добавить трудоустроенного сотрудника', name: 'КнопкаДобавитьТрудоустроенного' }) +
+            // FT_45: «+ Добавить» убрана; «Подтвердить выход» — у HR, когда отмечен сотрудник, ожидающий решения
+            (vrqCanConfirm(r, sel) ? button('Подтвердить выход', { cls: 'btn-primary', action: 'vrqConfirm', data: { id: r.id }, title: 'Подтвердить выход отмеченного сотрудника', name: 'КнопкаПодтвердитьВыходТрудоустроенного' }) : '') +
             off('', 'КнопкаТрудоустроенныеВыше', 'arrowUp') + off('', 'КнопкаТрудоустроенныеНиже', 'arrowDown') + '<span class="grow"></span>' +
             off('Поиск', 'КнопкаПоискТрудоустроенные', 'search') + off('', 'КнопкаЕщеТрудоустроенные', 'more') + '</div>' +
           '<div class="table-box"><table class="grid vrq-table"' + a1c('ТаблицаФормы', 'ТаблицаТрудоустроенные') + '>' +
@@ -5740,7 +5737,9 @@
     apply: function (t, v) {
       startInternship(t, v);
       // FT_44: из заявки на подбор — остаемся в заявке; стажер появится у руководителей и наставника в «Подготовке к выходу»
-      if (dlgCtx().fromRequest) { vrqStarted = true; toast('Выход подтвержден: ' + t.fullName + ' — этап «Подготовка к выходу»'); return; }
+      if (dlgCtx().fromRequest) {
+        var row = vrqRow(byId(D.vacancyRequests, dlgCtx().fromRequest), t); if (row) row.hrDone = true;   // FT_45
+        vrqStarted = true; toast('Выход подтвержден: ' + t.fullName + ' — этап «Подготовка к выходу»'); return; }
       if (canOpenTrainee(t)) selectTrainee(t.id);   // FT_23: под окном «Стажировка оформлена» — карточка стажера, при любом выборе в окне
     },
     afterApply: function (t) {
@@ -5802,35 +5801,6 @@
       return '<p class="dlg-text"' + a1c('НЕ_ПЕРЕНОСИТЬ', 'ДекорацияФормаЗаявкиВРазработке') + '>Форма заявки на подбор персонала еще не реализована в прототипе' +
         (r ? ': «' + esc(r.position) + '», ' + esc(byId(VR_STATES, r.state).title.toLowerCase()) : '') + '.</p>';
     }
-  };
-
-  // FT_44: Выбор сотрудника: список найденных по заявке, флажок у строки (один сотрудник), «Выбрать»
-  DIALOGS.vrqPick = {
-    title: 'Сотрудники', form: 'ФормаВыбораСотрудника', submit: 'Выбрать',
-    init: function (t, ctx) { return { pick: '', requestId: ctx.requestId }; },
-    body: function () {
-      var r = byId(D.vacancyRequests, dlgCtx().requestId);
-      var list = vrqCandidates(r);
-      var e = state.dialog.errors;
-      return '<div class="row gap-2 command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельСотрудники') + '>' +
-          button('Создать', { icon: 'plus', disabled: true, title: VRQ_OFF, name: 'КнопкаСоздатьСотрудника' }) + '<span class="grow"></span>' +
-          button('Поиск', { icon: 'search', disabled: true, title: VRQ_OFF, name: 'КнопкаПоискСотрудника' }) + '</div>' +
-        '<div class="table-box dlg-table"><table class="grid vrq-pick"' + a1c('ТаблицаФормы', 'ТаблицаСотрудники') + '>' +
-          '<colgroup><col class="w-check"><col></colgroup><thead><tr><th></th><th>ФИО ↓</th></tr></thead><tbody>' +
-          list.map(function (t) {
-            var on = dlgValue('pick') === t.id;
-            return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="vrqPickRow" data-id="' + t.id + '"' + a1c('ТаблицаФормы', 'ТаблицаСотрудникиСтрока') + '>' +
-              '<td><input type="checkbox" data-action="vrqPickRow" data-id="' + t.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc('Выбрать: ' + t.fullName) + '"' + a1c('Флажок', 'ТаблицаСотрудникиВыбран') + '></td>' +
-              '<td' + a1c('Надпись', 'ТаблицаСотрудникиФИО') + '>' + esc(t.fullName) + '</td></tr>';
-          }).join('') + '</tbody></table></div>' +
-        (e.pick ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаВыбораСотрудника') + '>' + esc(e.pick) + '</div>' : '');
-    },
-    validate: function (t, v) { return v.pick ? {} : { pick: 'Выберите сотрудника' }; },
-    apply: function (t, v) {
-      var r = byId(D.vacancyRequests, dlgCtx().requestId);
-      (r.hired = r.hired || []).push({ traineeId: v.pick });   // строка «Трудоустроенные» — сразу; дата найма — после подтверждения выхода
-    },
-    afterApply: function (t, v) { openDialog('pendingStart', v.pick, { fromRequest: v.requestId }); }   // форма подтверждения выхода от HR
   };
 
   // Диалоги, которые меняют задачи АП и недоступны при запрете редактирования
@@ -6294,14 +6264,22 @@
     dialogCancel: function () {
       var d = state.dialog;
       closeDialog();
-      if (d && d.type === 'pendingStart' && d.ctx.fromRequest) toast(trainee(d.traineeId).fullName + ' добавлен в заявку. Выход подтвердит руководитель — кандидат в «Ожидают решения»');   // FT_44
+      if (d && d.type === 'pendingStart' && d.ctx.fromRequest) {   // FT_44: «Пропустить» — кандидат появляется в «Ожидают решения» у руководителя
+        var rq = byId(D.vacancyRequests, d.ctx.fromRequest);
+        var row = rq && vrqRow(rq, trainee(d.traineeId));
+        if (row) row.hrDone = true;
+        render();
+        toast('Выход подтвердит руководитель: ' + trainee(d.traineeId).fullName + ' — в «Ожидают решения»');
+      }
     },
-    vrqAdd: function (btn) {   // FT_44: «+ Добавить» в «Трудоустроенные»
+    // FT_45: флажок строки «Трудоустроенные» — один отмеченный сотрудник; повторный щелчок снимает
+    vrqSel: function (el) { var tab = activeDoc(); var id = el.getAttribute('data-id'); tab.sel = tab.sel === id ? null : id; renderCenter(); },
+    vrqConfirm: function (btn) {   // FT_45: «Подтвердить выход» — форма подтверждения выхода от HR
       var r = byId(D.vacancyRequests, btn.getAttribute('data-id'));
-      if (!r || vrqAddLock(r)) return;
-      openDialog('vrqPick', null, { requestId: r.id });
+      var tab = activeDoc();
+      if (!r || !vrqCanConfirm(r, tab.sel)) return;
+      openDialog('pendingStart', tab.sel, { fromRequest: r.id });
     },
-    vrqPickRow: function (el) { state.dialog.values.pick = el.getAttribute('data-id'); delete state.dialog.errors.pick; renderDialog(); },
     dlgChoose: function (btn) {
       state.dialog.values[btn.getAttribute('data-field')] = btn.getAttribute('data-value');
       delete state.dialog.errors[btn.getAttribute('data-field')];
