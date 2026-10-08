@@ -5923,7 +5923,7 @@
         field('Наставник стажировки', selectOptions('mentorId', 'ПолеНаставникСтарт', opts('Не выбран'), ' data-rerender="1"'),
           { error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
         // FT_47: формат работы — под наставником, по умолчанию «В офисе»
-        field('Формат работы', toggle('ТумблерФорматРаботы', 'pendingWorkFormat', WORK_FORMATS, v.workFormat), { name: 'ФорматРаботы' }) +
+        field('Формат работы', toggle('ТумблерФорматРаботы', 'pendingWorkFormat', WORK_FORMATS, v.workFormat)) +
         field('Дата старта стажировки', inputDate('startDate', 'ПолеДатаСтарта', D.TODAY), { required: true, error: se, forId: 'f_startDate', name: 'ДатаСтарта' }) +
         field('Длительность стажировки', toggle('ТумблерДлительностьСтажировки', 'pendingDuration', DURATION_MODES.map(function (m) {
           return { value: m.value, text: m.text, name: m.name };
