@@ -780,7 +780,9 @@
     { id: 'vr-38', hidden: true, num: 'ЗП-000038', date: '2026-07-10', state: 'progress', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 3, found: 0, deadline: '2026-07-20' },
     // FT_17: подбор по заявке завершен (HR нажал «Исполнено») — найденный кандидат ждет решения руководителя на вкладке «Адаптация персонала»;
     // FT_42: состояние «Ожидает выхода» (было «Закрыта»), найденный сотрудник — Ковалев Д.С.
-    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'awaiting', position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 1, deadline: '2026-09-15' },
+    // FT_44: docForm — открывается формой документа (вкладка окна); hired — строки ТЧ «Трудоустроенные» (traineeId; дата найма — дата старта стажировки)
+    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'awaiting', position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 1, deadline: '2026-09-15',
+      docForm: true, hired: [], period: 'квартал', termDays: 20 },
     // Новая
     { id: 'vr-45', num: 'ЗП-000045', date: '2026-07-24', state: 'new',      position: 'Специалист по кадрам',          deptId: 'd-gpay',   authorId: 'u-gorbunova',    qty: 1, candidates: 0, found: 0, deadline: '2026-10-01', unplanned: true },
     { id: 'vr-46', hidden: true, num: 'ЗП-000046', date: '2026-07-24', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-15' },
