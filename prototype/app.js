@@ -525,7 +525,15 @@
   function canDecidePending(t) {
     return isAdmin() || D.CURRENT_USER_ID === requisitionAuthorId(t) || D.CURRENT_USER_ID === D.CAS_HEAD_ID || curatesDept(D.CURRENT_USER_ID, t.departmentId);
   }
+  // FT_45: подтвердить выход кандидата (в «Ожидают решения» и в заявке на подбор) — только HR-менеджер, курирующий подразделение, и Администратор;
+  // «Отменить» и «Вернуть» — как раньше (canDecidePending)
+  var CONFIRM_HR_TEXT = 'Выход подтверждает HR-менеджер, курирующий подразделение';
+  function canConfirmExit(t) { return isAdmin() || curatesDept(D.CURRENT_USER_ID, t.departmentId); }
   function decideLockText(t) { return canDecidePending(t) ? '' : 'Решение принимает автор заявки: ' + userName(requisitionAuthorId(t)); }
+  // FT_45: подтвердить выход кандидата (в «Ожидают решения» и в заявке на подбор) — только HR-менеджер, курирующий подразделение,
+  // и Администратор; «Отменить» и «Вернуть» — как раньше (canDecidePending)
+  function canConfirmExit(t) { return isAdmin() || curatesDept(D.CURRENT_USER_ID, t.departmentId); }
+  function confirmLockText(t) { return canConfirmExit(t) ? '' : 'Выход подтверждает HR-менеджер, курирующий подразделение'; }
   // Найденные, ожидающие решения, видимые текущему пользователю; порядок — по дате «Исполнено» (сначала давние)
   // FT_44, FT_45: кандидат по заявке с формой документа (ЗП-000040) ждет HR: в «Ожидают решения» — только после того, как HR в заявке
   // открыл подтверждение выхода и нажал «Пропустить» (при «Подтвердить» он сразу на этапе «Подготовка к выходу»)
@@ -1423,7 +1431,8 @@
       (r ? '<div>' + link(vrTitle(r), { action: 'pendingOpenRequest', data: { id: t.id }, cls: 'text-s', title: 'Открыть заявку на подбор', name: 'ТаблицаОжидаютРешенияЗаявка' }) + '</div>' : '') +
       '<div class="text-s muted"' + a1c('Надпись', 'ТаблицаОжидаютРешенияДаты') + '>Подбор завершен ' + fmtDate(t.foundAt.slice(0, 10)) + '</div>' +   // FT_24: без ожидаемой даты выхода
       '<div class="row gap-2 pending-actions"' + a1c('ГруппаГоризонтальная', 'ТаблицаОжидаютРешенияДействия', 'high') + '>' +
-        button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!lock, title: lock || 'Подтвердить выход стажера: даты стажировки, руководитель и наставник', name: 'ТаблицаОжидаютРешенияСтарт' }) +
+        // FT_45: подтверждает выход только HR-куратор (и Администратор)
+        button('Подтвердить выход', { cls: 'btn-accent', action: 'pendingStart', data: { id: t.id }, disabled: !!confirmLockText(t), title: confirmLockText(t) || 'Подтвердить выход стажера: даты стажировки, руководитель и наставник', name: 'ТаблицаОжидаютРешенияСтарт' }) +
         button('Отменить', { action: 'pendingCancel', data: { id: t.id }, disabled: !!lock, title: lock || 'Человек не выйдет на стажировку — указать причину', name: 'ТаблицаОжидаютРешенияОтменить' }) +
       '</div></div>';
   }
@@ -6264,12 +6273,12 @@
     dialogCancel: function () {
       var d = state.dialog;
       closeDialog();
-      if (d && d.type === 'pendingStart' && d.ctx.fromRequest) {   // FT_44: «Пропустить» — кандидат появляется в «Ожидают решения» у руководителя
+      if (d && d.type === 'pendingStart' && d.ctx.fromRequest) {   // FT_44: «Пропустить» — кандидат появляется в «Ожидают решения»
         var rq = byId(D.vacancyRequests, d.ctx.fromRequest);
         var row = rq && vrqRow(rq, trainee(d.traineeId));
         if (row) row.hrDone = true;
         render();
-        toast('Выход подтвердит руководитель: ' + trainee(d.traineeId).fullName + ' — в «Ожидают решения»');
+        toast('Выход отложен: ' + trainee(d.traineeId).fullName + ' — в «Ожидают решения»');   // FT_45: подтверждает HR (было — «Выход подтвердит руководитель»)
       }
     },
     // FT_45: флажок строки «Трудоустроенные» — один отмеченный сотрудник; повторный щелчок снимает
@@ -6346,7 +6355,7 @@
     pendingStart: function (btn) {
       var t = trainee(btn.getAttribute('data-id'));
       if (!t || (!isPendingDecision(t) && t.stage !== 'cancelled')) return;   // FT_26: и из «Отмененные»
-      if (!canDecidePending(t)) { toast(decideLockText(t)); return; }
+      if (!canConfirmExit(t)) { toast(confirmLockText(t)); return; }   // FT_45: только HR-куратор и Администратор
       openDialog('pendingStart', t.id);
     },
     startAp: function (btn) { startApCreation(state.selectedTraineeId, btn.getAttribute('data-mode')); },
