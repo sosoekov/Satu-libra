@@ -579,6 +579,15 @@
     { value: 'custom', text: 'Произвольная дата', months: null, name: 'ПроизвольнаяДата' }
   ];
   var DURATION_DEFAULT = '3m';
+  // FT_47: формат работы стажера — выбирается при подтверждении выхода (по умолчанию «В офисе»), определяет пункты чек-листа
+  // (formats у пункта шаблона): в офисе — пропуск и рабочее место, смешанный — только пропуск, удаленно — ни того, ни другого
+  var WORK_FORMATS = [
+    { value: 'office', text: 'В офисе', name: 'ВОфисе' },
+    { value: 'remote', text: 'Удаленно', name: 'Удаленно' },
+    { value: 'mixed',  text: 'Смешанный', name: 'Смешанный' }
+  ];
+  function workFormatOf(t) { return t.workFormat || 'office'; }   // у демо-стажеров формат не записан — «В офисе»
+  function workFormatText(t) { return byId(WORK_FORMATS.map(function (x) { return { id: x.value, text: x.text }; }), workFormatOf(t)).text; }
   // ASSUMPTION (ТЗ 11.5): окончание = старт + N календарных месяцев (нет такого числа — последний день месяца) − 1 день.
   // 15.10.2026 + 3 мес. → 14.01.2027; 31.01.2027 + 1 мес. → 27.02.2027
   function addMonthsClamped(iso, n) {
@@ -642,6 +651,7 @@
     t.startDate = v.startDate;
     t.endDate = v.endDate;
     t.durationMode = v.durationMode;
+    t.workFormat = v.workFormat || 'office';   // FT_47
     t.stage = 'found';
     t.stageDates = { found: D.TODAY };
     D.checklist = D.checklist.filter(function (c) { return c.traineeId !== t.id; });
@@ -1549,6 +1559,10 @@
           '<span' + a1c('Надпись', 'ДекорацияДатыСтажировки') + '>' + (t.startDate ? fmtDate(t.startDate) + ' – ' + fmtDate(t.endDate) : 'не назначены') + '</span></div>' +
         '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаСрок') + '><span class="tcard-ico"' + a1c('Картинка', 'КартинкаСрок') + '>' + icon('clock') + '</span>' + line2 + '</div>' +
         line3 +
+        // FT_47: формат работы (задан при подтверждении выхода; у демо-стажеров — «В офисе»)
+        (isStarted(t) ? '<div class="row tcard-line tcard-term"' + a1c('ГруппаГоризонтальная', 'ГруппаФорматРаботы') + '><span class="tcard-ico"' + a1c('Картинка', 'КартинкаФорматРаботы') + '>' + icon('user') + '</span>' +
+          '<span class="muted"' + a1c('Надпись', 'ДекорацияЗаголовокФорматРаботы') + '>Формат работы</span>' +
+          '<span' + a1c('Надпись', 'ДекорацияФорматРаботы') + '>' + esc(workFormatText(t).toLowerCase()) + '</span></div>' : '') +
       '</div>' +
       '</div>';
   }
@@ -2142,7 +2156,8 @@
     var bar = (lock ? '' : '<div class="row wrap command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельЧекЛиста') + '>' +
         button('Добавить пункт', { icon: 'plus', action: 'openDialog', data: { dialog: 'checklistItem' }, name: 'КнопкаДобавитьПункт',
           disabled: !t.startDate, title: t.startDate ? '' : 'Срок пункта задается от даты выхода — она еще не назначена' }) +
-        button('Заполнить по шаблону', { action: 'openDialog', data: { dialog: 'checklistFill' }, name: 'КнопкаЗаполнитьПоШаблону' }) +
+        // FT_47: было «Заполнить по шаблону» (замена списка) — теперь пункты шаблона добавляются к чек-листу
+        button('Дополнить по шаблону', { action: 'openDialog', data: { dialog: 'clTplPick' }, name: 'КнопкаДополнитьПоШаблону' }) +
       '</div>') +
       '<div class="row toggle-row"' + a1c('ГруппаГоризонтальная', 'ГруппаТумблерМоиПункты') + '>' +
       toggle('ТумблерМоиПункты', 'clMode', [
@@ -4174,6 +4189,12 @@
   }
   DIALOGS.clTask = {
     form: 'ФормаЗадачаЧекЛиста', submit: 'Сохранить', xl: true, noCloseButton: true,
+    extraFoot: function () {   // FT_47: пункт, добавленный по шаблону, удаляется; пункты стандартного чек-листа — нет
+      var ctx = dlgCtx();
+      var c = itemById(ctx.kind, ctx.itemId);
+      return ctx.kind === 'cl' && c && c.fromTemplate && !state.dialog.readOnly && !state.dialog.traineeMode ?
+        button('Удалить пункт', { cls: 'btn-danger-text', icon: 'trash', action: 'clItemDelete', name: 'ФормаЗадачаЧекЛистаКнопкаУдалитьПункт', title: 'Пункт добавлен по шаблону — его можно удалить' }) : '';
+    },
     titleFn: function () { return ITEM_KINDS[dlgCtx().kind].card; },
     init: function (t, ctx) {
       var c = itemById(ctx.kind, ctx.itemId);
@@ -5295,7 +5316,7 @@
         ? '<div class="muted text-s">' + dueFromText({ dueFrom: t.checklistFrom, dueDate: v.date }) + ' чек-листа (' + fmtDate(t.checklistFrom) + ')</div>'
         : '<div class="muted text-s">' + offsetText(diffDays(t.startDate, v.date)) + ' (выход ' + fmtDate(t.startDate) + ')</div>';
       return field('Пункт', inputText('name', 'ПолеНаименованиеПункта'), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеПункта' }) +
-        field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', ['head', 'hr', 'mentor', 'fin', 'personnel', 'ksh'].map(function (r) {
+        field('Ответственный', selectOptions('role', 'ПолеРольОтветственного', ['head', 'hr', 'mentor', 'fin', 'personnel', 'ksh', 'office'].map(function (r) {
           return { value: r, text: D.ROLE_TITLES[r] }; }), ' data-rerender="1"'), { forId: 'f_role' }) +
         field('Сотрудник', selectOptions('userId', 'ПолеОтветственный', userOptions('Не назначен')), { forId: 'f_userId' }) +
         field('Срок', inputDate('date', 'ПолеСрокПункта', D.TODAY) + hint, { required: true, error: e.date, forId: 'f_date', name: 'СрокПункта' });
@@ -5353,6 +5374,7 @@
     var hasProgram = !!programOf(t);
     t.checklistFrom = D.TODAY;   // FT_38: срок пунктов — от даты создания чек-листа
     D.checklistTemplate.forEach(function (c, i) {
+      if (c.formats && c.formats.indexOf(workFormatOf(t)) < 0) return;   // FT_47: пункт не для этого формата работы
       var item = newItemFields({
         id: 'cl-tpl-' + Date.now() + '-' + i, traineeId: t.id, name: c.name, responsibleRole: c.responsibleRole,
         responsibleId: roleDefaultUser(t, c.responsibleRole), offsetDays: c.offsetDays, done: false, doneBy: null, doneAt: null,
@@ -5364,17 +5386,181 @@
     });
   }
 
-  DIALOGS.checklistFill = {
-    title: 'Заполнить по шаблону', form: 'ФормаЗаполнитьЧекЛист', submit: 'Заполнить по шаблону', danger: true,
+  /* ---------- FT_47: «Дополнить по шаблону» — шаблоны дополнения чек-листа подготовки (docs/ft47-work-format-cl-templates.md) ----------
+   * Шаблон доступен стажерам своего подразделения и подчиненных. Пункты шаблона добавляются к чек-листу (пункт с тем же названием —
+   * пропускается); срок — дата дополнения + срок задачи, ответственный — по роли. Такие пункты можно удалить (fromTemplate).
+   * Шаблоны создают CL_TPL_CREATORS и Администратор; меняют и удаляют — группа редакторов шаблона и Администратор.
+   */
+  function clTplAvailable(t) {
+    var chain = deptChain(t.departmentId).map(function (d) { return d.id; });
+    return D.clTemplates.filter(function (tp) { return chain.indexOf(tp.deptId) >= 0; });
+  }
+  function clTplCanCreate() { return isAdmin() || D.CL_TPL_CREATORS.indexOf(D.CURRENT_USER_ID) >= 0; }
+  function clTplCanEdit(tp) { return isAdmin() || tp.editorIds.indexOf(D.CURRENT_USER_ID) >= 0; }
+  var CL_TPL_ROLES = ['head', 'mentor', 'hr', 'office', 'ksh', 'fin', 'personnel'];
+  function addFromClTemplate(t, tp) {
+    var have = checklistOf(t).map(function (c) { return c.name; });
+    var res = { added: 0, skipped: 0 };
+    tp.items.forEach(function (x, i) {
+      if (have.indexOf(x.name) >= 0) { res.skipped++; return; }
+      var due = addDays(D.TODAY, Number(x.dueDays) || 0);
+      D.checklist.push(newItemFields({
+        id: 'cl-tp-' + Date.now() + '-' + i, traineeId: t.id, name: x.name, responsibleRole: x.role, responsibleId: roleDefaultUser(t, x.role),
+        offsetDays: t.startDate ? diffDays(t.startDate, due) : 0, done: false, doneBy: null, doneAt: null, linkedDocType: null, linkedDocNumber: null,
+        dueFrom: D.TODAY, dueDate: due, fromTemplate: tp.id
+      }, { description: x.description || '' }));
+      res.added++;
+    });
+    return res;
+  }
+  function clTplTasksTable(items, name) {
+    return '<div class="table-box dlg-table"><table class="grid cltpl-preview"' + a1c('ТаблицаФормы', name) + '>' +
+      '<thead><tr><th>Задача</th><th>Ответственный</th><th>Срок</th></tr></thead><tbody>' + items.map(function (x) {
+        return '<tr><td' + a1c('Надпись', name + 'Задача') + '>' + esc(x.name) + '</td><td' + a1c('Надпись', name + 'Ответственный') + '>' + esc(D.ROLE_TITLES[x.role] || '') + '</td>' +
+          '<td class="nowrap"' + a1c('Надпись', name + 'Срок') + '>' + esc(pluralN(Number(x.dueDays) || 0, W_DAYS)) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  DIALOGS.clTplPick = {
+    title: 'Дополнить по шаблону', form: 'ФормаДополнитьЧекЛистПоШаблону', submit: 'Дополнить', wide: true,
+    init: function (t) { var a = clTplAvailable(t); return { tplId: a.length ? a[0].id : '' }; },
     body: function (t) {
-      return '<div class="note note-warning"' + a1c('ГруппаГоризонтальная', 'ГруппаПредупреждениеЗаполнение') + '><span class="tone-warning">' + icon('alert') + '</span>' +
-        '<span class="grow">Текущий список будет заменен. Отметки о выполнении, проверяющие, наблюдатели и история выполнения будут удалены.</span></div>' +
-        '<p class="dlg-text">В шаблоне ' + pluralN(D.checklistTemplate.length, ['пункт', 'пункта', 'пунктов']) + '.</p>';
+      var list = clTplAvailable(t);
+      var v = state.dialog.values;
+      if (v.tplId && !byId(list, v.tplId)) v.tplId = list.length ? list[0].id : '';   // шаблон удален или больше не доступен
+      var cur = byId(list, v.tplId);
+      return '<div class="row command-bar command-bar-flat"' + a1c('КоманднаяПанель', 'КоманднаяПанельШаблоныЧекЛиста') + '>' +
+          button('Создать шаблон', { icon: 'plus', action: 'clTplNew', disabled: !clTplCanCreate(), name: 'КнопкаСоздатьШаблонЧекЛиста',
+            title: clTplCanCreate() ? 'Новый шаблон: наименование, подразделение, редакторы и задачи' : 'Шаблоны создают Стрыгин К.М., Кладова Я.С., Сизова А.В. и Администратор' }) + '</div>' +
+        (list.length ? '<div class="table-box dlg-table"><table class="grid cltpl-list"' + a1c('ТаблицаФормы', 'ТаблицаШаблоныЧекЛиста') + '>' +
+          '<colgroup><col class="w-check"><col><col><col class="w-num"><col class="w-menu"></colgroup>' +
+          '<thead><tr><th></th><th>Шаблон</th><th>Подразделение</th><th>Задач</th><th></th></tr></thead><tbody>' + list.map(function (tp) {
+            var on = tp.id === v.tplId;
+            return '<tr class="clickable' + (on ? ' selected' : '') + '" data-action="clTplChoose" data-id="' + tp.id + '"' + a1c('ТаблицаФормы', 'ТаблицаШаблоныЧекЛистаСтрока') + '>' +
+              '<td><input type="radio" name="cltpl" data-action="clTplChoose" data-id="' + tp.id + '"' + (on ? ' checked' : '') + ' aria-label="' + esc('Выбрать шаблон ' + tp.name) + '"' + a1c('Переключатель', 'ТаблицаШаблоныЧекЛистаВыбран') + '></td>' +
+              '<td' + a1c('Надпись', 'ТаблицаШаблоныЧекЛистаНаименование') + '>' + esc(tp.name) + '</td>' +
+              '<td' + a1c('Надпись', 'ТаблицаШаблоныЧекЛистаПодразделение') + '>' + esc(dept(tp.deptId).name) + '</td>' +
+              '<td class="num"' + a1c('Надпись', 'ТаблицаШаблоныЧекЛистаЗадач') + '>' + tp.items.length + '</td>' +
+              '<td>' + button('', { cls: 'btn-icon btn-flat btn-small', icon: 'openCard', action: 'clTplOpen', data: { id: tp.id }, name: 'ТаблицаШаблоныЧекЛистаОткрыть',
+                title: clTplCanEdit(tp) ? 'Открыть шаблон: задачи, изменение' : 'Открыть шаблон (только просмотр)' }) + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+          : '<p class="dlg-text muted"' + a1c('Надпись', 'ДекорацияШаблоновЧекЛистаНет') + '>Для подразделения стажера шаблонов нет</p>') +
+        (cur ? '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияЗадачиШаблонаЧекЛиста') + '>Задачи шаблона «' + esc(cur.name) + '»</div>' + clTplTasksTable(cur.items, 'ТаблицаЗадачиВыбранногоШаблона') : '') +
+        (state.dialog.errors.tplId ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаВыбораШаблона') + '>' + esc(state.dialog.errors.tplId) + '</div>' : '');
     },
+    validate: function (t, v) { return v.tplId ? {} : { tplId: 'Выберите шаблон' }; },
+    apply: function (t, v) {
+      var tp = byId(D.clTemplates, v.tplId);
+      var r = addFromClTemplate(t, tp);
+      toast(r.added ? 'Чек-лист дополнен по шаблону «' + tp.name + '»: ' + pluralN(r.added, ['пункт', 'пункта', 'пунктов']) + (r.skipped ? ' (уже были: ' + r.skipped + ')' : '')
+        : 'Все задачи шаблона «' + tp.name + '» уже есть в чек-листе');
+    }
+  };
+  // Шаблон: просмотр (не редактор) или изменение; новый — ctx.isNew. Поверх формы «Дополнить по шаблону»
+  DIALOGS.clTpl = {
+    form: 'ФормаШаблонЧекЛиста', submit: 'Сохранить', wide: true,
+    titleFn: function () { var c = dlgCtx(); return c.isNew ? 'Новый шаблон чек-листа' : 'Шаблон чек-листа: ' + byId(D.clTemplates, c.id).name; },
+    init: function (t, ctx) {
+      var tp = ctx.isNew ? { name: '', deptId: t ? t.departmentId : 'd-cas', editorIds: [D.CURRENT_USER_ID], items: [{ name: '', role: 'head', dueDays: 3, description: '' }] } : byId(D.clTemplates, ctx.id);
+      state.dialog.readOnly = !ctx.isNew && !clTplCanEdit(tp);
+      return { name: tp.name, deptId: tp.deptId, editorIds: tp.editorIds.slice(), addEditor: '',
+        items: tp.items.map(function (x) { return { name: x.name, role: x.role, dueDays: String(x.dueDays), description: x.description || '' }; }) };
+    },
+    onChange: function (f, v) {
+      if (f === 'addEditor' && v.addEditor) { if (v.editorIds.indexOf(v.addEditor) < 0) v.editorIds.push(v.addEditor); v.addEditor = ''; delete state.dialog.errors.editorIds; }
+    },
+    body: function () {
+      var v = state.dialog.values;
+      var e = state.dialog.errors;
+      var ro = state.dialog.readOnly;
+      var dis = ro ? ' disabled' : '';
+      var note = ro ? '<div class="note note-info"' + a1c('ГруппаГоризонтальная', 'ГруппаШаблонЧекЛистаПросмотр') + '><span class="tone-info">' + icon('info') + '</span><span' + a1c('Надпись', 'ДекорацияШаблонЧекЛистаПросмотр') + '>' +
+        esc('Только просмотр. Шаблон меняют и удаляют: ' + v.editorIds.map(userName).join(', ')) + '</span></div>' : '';
+      var editors = '<div class="col gap-2"' + a1c('ГруппаВертикальная', 'ГруппаРедакторыШаблона') + '>' +
+        '<div class="row wrap gap-2"' + a1c('ГруппаГоризонтальная', 'ГруппаРедакторыШаблонаСписок') + '>' + v.editorIds.map(function (id, i) {
+          return '<span class="chip"' + a1c('Надпись', 'ДекорацияРедакторШаблона') + '>' + esc(userName(id)) +
+            (ro ? '' : button('', { cls: 'btn-icon btn-flat btn-small', icon: 'close', action: 'clTplEditorDel', data: { idx: i }, title: 'Убрать из редакторов', name: 'КнопкаУбратьРедактораШаблона' })) + '</span>';
+        }).join('') + '</div>' +
+        (ro ? '' : selectOptions('addEditor', 'ПолеДобавитьРедактораШаблона', [{ value: '', text: 'Добавить редактора…' }].concat(D.users.filter(function (u) { return v.editorIds.indexOf(u.id) < 0 && u.id !== 'u-admin'; })
+          .map(function (u) { return { value: u.id, text: u.fullName + ' — ' + u.role }; })))) + '</div>';
+      var rows = v.items.map(function (x, i) {
+        return '<tr' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблонаЧекЛистаСтрока') + '>' +
+          '<td><input type="text" class="input" data-cltpl-i="' + i + '" data-cltpl-k="name" value="' + esc(x.name) + '"' + dis + ' aria-label="Задача"' + (e['item' + i] ? ' aria-invalid="true"' : '') + a1c('ПолеВвода', 'ТаблицаЗадачиШаблонаЧекЛистаЗадача') + '></td>' +
+          '<td><select class="select" data-cltpl-i="' + i + '" data-cltpl-k="role"' + dis + ' aria-label="Ответственный"' + a1c('ПолеВвода', 'ТаблицаЗадачиШаблонаЧекЛистаОтветственный') + '>' + CL_TPL_ROLES.map(function (r) {
+            return '<option value="' + r + '"' + (x.role === r ? ' selected' : '') + '>' + esc(D.ROLE_TITLES[r]) + '</option>'; }).join('') + '</select></td>' +
+          '<td><input type="number" min="0" step="1" class="input" data-cltpl-i="' + i + '" data-cltpl-k="dueDays" value="' + esc(x.dueDays) + '"' + dis + ' aria-label="Срок, дней"' + a1c('ПолеВвода', 'ТаблицаЗадачиШаблонаЧекЛистаСрок') + '></td>' +
+          '<td>' + (ro ? '' : button('', { cls: 'btn-icon btn-flat btn-small', icon: 'trash', action: 'clTplItemDel', data: { idx: i }, title: 'Удалить задачу из шаблона', name: 'ТаблицаЗадачиШаблонаЧекЛистаУдалить' })) + '</td></tr>';
+      }).join('');
+      return note +
+        field('Наименование', inputText('name', 'ПолеНаименованиеШаблонаЧекЛиста', dis), { required: true, error: e.name, forId: 'f_name', name: 'НаименованиеШаблонаЧекЛиста' }) +
+        field('Подразделение', selectOptions('deptId', 'ПолеПодразделениеШаблонаЧекЛиста', deptOptions('Выберите подразделение')), { required: true, error: e.deptId, forId: 'f_deptId', name: 'ПодразделениеШаблонаЧекЛиста' }) +
+        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияПодразделениеШаблонаПодсказка') + '>Шаблон доступен стажерам этого подразделения и подчиненных</p>' +
+        field('Редакторы', editors, { required: true, error: e.editorIds, name: 'РедакторыШаблонаЧекЛиста' }) +
+        '<p class="muted text-s dlg-hint"' + a1c('Надпись', 'ДекорацияРедакторыШаблонаПодсказка') + '>Меняют и удаляют шаблон</p>' +
+        '<div class="tf-links-title"' + a1c('Надпись', 'ДекорацияЗадачиШаблонаЧекЛистаРедактор') + '>Задачи</div>' +
+        '<div class="table-box dlg-table"><table class="grid cltpl-edit"' + a1c('ТаблицаФормы', 'ТаблицаЗадачиШаблонаЧекЛиста') + '>' +
+          '<colgroup><col><col class="w-role"><col class="w-days"><col class="w-menu"></colgroup>' +
+          '<thead><tr><th>Задача</th><th>Ответственный</th><th>Срок, дней</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        (e.items ? '<div class="field-error"' + a1c('Надпись', 'ДекорацияОшибкаЗадачШаблона') + '>' + esc(e.items) + '</div>' : '') +
+        (ro ? '' : '<div class="row">' + button('Добавить задачу', { icon: 'plus', action: 'clTplItemAdd', name: 'КнопкаДобавитьЗадачуШаблонаЧекЛиста' }) + '</div>');
+    },
+    extraFoot: function () {
+      var c = dlgCtx();
+      if (c.isNew || state.dialog.readOnly) return '';
+      return button('Удалить шаблон', { cls: 'btn-danger-text', action: 'clTplDelete', name: 'ФормаШаблонЧекЛистаКнопкаУдалить' });
+    },
+    validate: function (t, v) {
+      var e = {};
+      if (!required(v.name)) e.name = 'Укажите наименование шаблона';
+      if (!v.deptId) e.deptId = 'Выберите подразделение';
+      if (!v.editorIds.length) e.editorIds = 'Укажите хотя бы одного редактора';
+      var named = v.items.filter(function (x) { return required(x.name); });
+      if (!named.length) e.items = 'Добавьте хотя бы одну задачу';
+      v.items.forEach(function (x, i) {
+        var n = Number(x.dueDays);
+        if (required(x.name) && (String(x.dueDays).trim() === '' || !isFinite(n) || n < 0 || Math.round(n) !== n)) { e['item' + i] = true; e.items = 'Срок задачи — целое число дней: 0 и больше'; }
+      });
+      return e;
+    },
+    apply: function (t, v) {
+      var c = dlgCtx();
+      var items = v.items.filter(function (x) { return required(x.name); }).map(function (x) { return { name: x.name.trim(), role: x.role, dueDays: Number(x.dueDays), description: x.description || '' }; });
+      if (c.isNew) {
+        var tp = { id: 'clt-' + Date.now(), name: v.name.trim(), deptId: v.deptId, editorIds: v.editorIds.slice(), items: items };
+        D.clTemplates.push(tp);
+        var pick = state.dialogStack[state.dialogStack.length - 1];
+        if (pick && pick.type === 'clTplPick') pick.values.tplId = tp.id;
+        toast('Шаблон «' + tp.name + '» создан');
+      } else {
+        var cur = byId(D.clTemplates, c.id);
+        cur.name = v.name.trim(); cur.deptId = v.deptId; cur.editorIds = v.editorIds.slice(); cur.items = items;
+        toast('Шаблон «' + cur.name + '» сохранен');
+      }
+    }
+  };
+  // Ввод в строке задач шаблона — без перерисовки формы
+  function cltplInput(inp) {
+    var x = state.dialog.values.items[Number(inp.getAttribute('data-cltpl-i'))];
+    if (x) x[inp.getAttribute('data-cltpl-k')] = inp.value;
+  }
+  DIALOGS.clTplDelete = {
+    title: 'Удалить шаблон', form: 'ФормаУдалитьШаблонЧекЛиста', submit: 'Удалить', danger: true,
+    body: function () { return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияУдалитьШаблонЧекЛиста') + '>Удалить шаблон «' + esc(byId(D.clTemplates, dlgCtx().id).name) + '»? Пункты, уже добавленные в чек-листы, останутся.</p>'; },
     apply: function (t) {
-      D.checklist = D.checklist.filter(function (c) { return c.traineeId !== t.id; });
-      createStandardChecklist(t);
-      toast('Чек-лист заполнен по шаблону');
+      var tp = byId(D.clTemplates, dlgCtx().id);
+      D.clTemplates = D.clTemplates.filter(function (x) { return x !== tp; });
+      state.dialogStack.pop();   // форма шаблона закрывается вместе с вопросом — возврат к «Дополнить по шаблону»
+      toast('Шаблон «' + tp.name + '» удален');
+    }
+  };
+  // FT_47: пункт, добавленный по шаблону, можно удалить (пункты стандартного чек-листа и добавленные вручную — нельзя)
+  DIALOGS.clItemDelete = {
+    title: 'Удалить пункт', form: 'ФормаУдалитьПунктЧекЛиста', submit: 'Удалить', danger: true,
+    body: function () { return '<p class="dlg-text"' + a1c('Надпись', 'ДекорацияУдалитьПунктЧекЛиста') + '>Удалить пункт «' + esc(itemById('cl', dlgCtx().itemId).name) + '» из чек-листа?</p>'; },
+    apply: function (t) {
+      var c = itemById('cl', dlgCtx().itemId);
+      D.checklist = D.checklist.filter(function (x) { return x !== c; });
+      state.dialogStack = [];   // карточка пункта закрывается вместе с вопросом
+      toast('Пункт «' + c.name + '» удален');
     }
   };
 
@@ -5701,7 +5887,7 @@
       var head = '';
       var resp = dept(t.departmentId).responsibleId;
       if (internshipStaff(t.departmentId).some(function (u) { return u.id === resp; })) head = resp;
-      return { headId: head, mentorId: '', startDate: D.TODAY, durationMode: DURATION_DEFAULT, endDate: internshipEndDate(D.TODAY, DURATION_DEFAULT) };
+      return { headId: head, mentorId: '', workFormat: 'office', startDate: D.TODAY, durationMode: DURATION_DEFAULT, endDate: internshipEndDate(D.TODAY, DURATION_DEFAULT) };
     },
     cancelTextFn: function () { return dlgCtx().fromRequest ? 'Пропустить' : ''; },   // FT_44: HR откладывает решение — кандидат остается в «Ожидают решения»
     // Дата старта пересчитывает окончание (кроме «Произвольной даты»); ручная дата окончания включает «Произвольную дату»
@@ -5736,6 +5922,8 @@
           { error: e.headId, forId: 'f_headId', name: 'РуководительСтажировкиСтарт' }) +
         field('Наставник стажировки', selectOptions('mentorId', 'ПолеНаставникСтарт', opts('Не выбран'), ' data-rerender="1"'),
           { error: e.mentorId, forId: 'f_mentorId', name: 'НаставникСтарт' }) +
+        // FT_47: формат работы — под наставником, по умолчанию «В офисе»
+        field('Формат работы', toggle('ТумблерФорматРаботы', 'pendingWorkFormat', WORK_FORMATS, v.workFormat), { name: 'ФорматРаботы' }) +
         field('Дата старта стажировки', inputDate('startDate', 'ПолеДатаСтарта', D.TODAY), { required: true, error: se, forId: 'f_startDate', name: 'ДатаСтарта' }) +
         field('Длительность стажировки', toggle('ТумблерДлительностьСтажировки', 'pendingDuration', DURATION_MODES.map(function (m) {
           return { value: m.value, text: m.text, name: m.name };
@@ -5831,7 +6019,7 @@
     ctx = ctx || {};
     var lock = t ? editLock(t) : null;   // FT_10: формы вкладки «Задачи и уведомления» открываются без стажера
     if (lock && EDIT_DIALOGS.indexOf(type) >= 0) { toast(lock); return; }
-    if (t && checklistLock(t) && ['checklistItem', 'checklistFill'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
+    if (t && checklistLock(t) && ['checklistItem', 'clTplPick'].indexOf(type) >= 0) { toast(checklistLock(t)); return; }
     if (t && closureLock(t) && ['closureItem', 'close'].indexOf(type) >= 0) { toast(closureLock(t)); return; }
     if (t && type === 'sendToApproval' && !t.headId) { toast(NO_HEAD_TEXT); return; }   // FT_21
     if (type === 'task' && lock && !ctx.taskId && !ctx.templateId) { toast(lock); return; }
@@ -6380,6 +6568,28 @@
       if (back === 'started') { openDialog('internshipStarted', id); state.dialog.values.step = 'choose'; renderDialog(); }
       else openDialog('apMode', id);
     },
+    // FT_47: шаблоны дополнения чек-листа
+    clTplChoose: function (tr) { state.dialog.values.tplId = tr.getAttribute('data-id'); delete state.dialog.errors.tplId; renderDialog(); },
+    clTplNew: function () { openDialog('clTpl', state.dialog.traineeId, { isNew: true }, { stack: true }); },
+    clTplOpen: function (btn) { openDialog('clTpl', state.dialog.traineeId, { id: btn.getAttribute('data-id') }, { stack: true }); },
+    clTplDelete: function () { openDialog('clTplDelete', state.dialog.traineeId, { id: dlgCtx().id }, { stack: true }); },
+    clTplEditorDel: function (btn) { state.dialog.values.editorIds.splice(Number(btn.getAttribute('data-idx')), 1); renderDialog(); },
+    clTplItemAdd: function () {
+      var v = state.dialog.values;
+      v.items.push({ name: '', role: 'head', dueDays: '3', description: '' });
+      delete state.dialog.errors.items;
+      renderDialog();
+      var ins = topModal().querySelectorAll('[data-cltpl-k="name"]');
+      if (ins.length) ins[ins.length - 1].focus();
+    },
+    clTplItemDel: function (btn) { state.dialog.values.items.splice(Number(btn.getAttribute('data-idx')), 1); state.dialog.errors = {}; renderDialog(); },
+    clItemDelete: function () { openDialog('clItemDelete', state.dialog.traineeId, { itemId: dlgCtx().itemId }, { stack: true }); },
+    pendingWorkFormat: function (btn) {   // FT_47
+      state.dialog.values.workFormat = btn.getAttribute('data-value');
+      renderDialog();
+      var on = topModal().querySelector('[data-action="pendingWorkFormat"].on');
+      if (on) on.focus();
+    },
     pendingDuration: function (btn) {
       var v = state.dialog.values;
       v.durationMode = btn.getAttribute('data-value');
@@ -6558,6 +6768,7 @@
   }
   document.addEventListener('input', function (e) {
     if (e.target.hasAttribute && e.target.hasAttribute('data-brq-field') && e.target.type !== 'checkbox') { brqFieldInput(e.target); return; }
+    if (e.target.hasAttribute && e.target.hasAttribute('data-cltpl-i') && state.dialog) { cltplInput(e.target); return; }   // FT_47
     var f = e.target.getAttribute('data-field');
     if (f && state.dialog) {
       if (e.target.type !== 'checkbox') state.dialog.values[f] = e.target.value;
@@ -6613,6 +6824,7 @@
   document.addEventListener('change', function (e) {
     var tgt = e.target;
     if (tgt.hasAttribute('data-brq-field')) { brqFieldInput(tgt); return; }   // EXP_1
+    if (tgt.hasAttribute('data-cltpl-i') && state.dialog) { cltplInput(tgt); return; }   // FT_47
     var f = tgt.getAttribute('data-field');
     if (f && state.dialog) {
       state.dialog.values[f] = tgt.type === 'checkbox' ? tgt.checked : tgt.value;
