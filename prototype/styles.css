@@ -870,9 +870,11 @@ table.grid.exec-table td { vertical-align: middle; }
 .rc-table-box { flex: 1 1 auto; min-height: 0; }
 .rc-table { table-layout: fixed; }
 .rc-table col.w-mark { width: 44px; }
-.rc-table col.w-state { width: 140px; }
-.rc-table col.w-num { width: 110px; }
-.rc-table col.w-num-l { width: 130px; }
+.rc-table col.w-state { width: 130px; }   /* FT_42: было 140px — место под «Найденные сотрудники» */
+.rc-table col.w-num { width: 96px; }       /* FT_42: было 110px */
+.rc-table col.w-num-l { width: 110px; }    /* FT_42: было 130px */
+.rc-table col.w-people { width: 190px; }   /* FT_42: «Найденные сотрудники» */
+.rc-table .rc-people > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.grid.rc-table th { white-space: normal; vertical-align: bottom; }
 table.grid.rc-table td { vertical-align: middle; }
 .rc-table td > .ellipsis { display: block; }

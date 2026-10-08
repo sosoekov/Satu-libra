@@ -751,7 +751,8 @@
   ];
 
   /* ---------- FT_15: заявки на подбор персонала (вкладка «Подбор персонала», тестовые — модуля подбора в прототипе нет) ----------
-   * vacancyRequests: id, num, date, state ('new' | 'approval' | 'approved' | 'progress' | 'closed'), position (вакансия), deptId, authorId,
+   * vacancyRequests: id, num, date, state ('new' | 'approval' | 'approved' | 'progress' | 'awaiting' | 'closed'; FT_42: awaiting — «Ожидает выхода»),
+   * FT_42: hidden — заявка не выводится в таблице «Заявки в работе» и в счетчиках (в таблице — по одной в каждом состоянии), открывается из задач подбора; position (вакансия), deptId, authorId,
    *   qty (требуемое количество), candidates (кандидатов в проработке), found (найдено), unplanned (внеплановая), replacement (замена сотрудника),
    *   deadline (срок закрытия вакансии), closedAt (у закрытой).
    * Номера совпадают с документами задач подбора (recruitTasks.doc): ЗП-000036…ЗП-000044.
@@ -760,32 +761,33 @@
   var vacancyRequests = [
     // На согласовании
     { id: 'vr-41', num: 'ЗП-000041', date: '2026-07-20', state: 'approval', position: 'Системный аналитик',            deptId: 'd-report', authorId: 'u-glebov',       qty: 1, candidates: 0, found: 0, deadline: '2026-09-30' },
-    { id: 'vr-42', num: 'ЗП-000042', date: '2026-07-22', state: 'approval', position: 'Специалист по документообороту', deptId: 'd-doc',    authorId: 'u-podyniglazov', qty: 1, candidates: 0, found: 0, deadline: '2026-09-15', unplanned: true },
-    { id: 'vr-44', num: 'ЗП-000044', date: '2026-07-24', state: 'approval', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-01', replacement: true },
+    { id: 'vr-42', hidden: true, num: 'ЗП-000042', date: '2026-07-22', state: 'approval', position: 'Специалист по документообороту', deptId: 'd-doc',    authorId: 'u-podyniglazov', qty: 1, candidates: 0, found: 0, deadline: '2026-09-15', unplanned: true },
+    { id: 'vr-44', hidden: true, num: 'ЗП-000044', date: '2026-07-24', state: 'approval', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-01', replacement: true },
     // Согласована
-    { id: 'vr-30', num: 'ЗП-000030', date: '2026-06-01', state: 'approved', position: 'Функциональный архитектор',     deptId: 'd-cproj',  authorId: 'u-gavrilkina',   qty: 1, candidates: 0, found: 0, deadline: '2026-08-31', replacement: true },
-    { id: 'vr-31', num: 'ЗП-000031', date: '2026-06-05', state: 'approved', position: 'Системный аналитик',            deptId: 'd-report', authorId: 'u-glebov',       qty: 5, candidates: 1, found: 0, deadline: '2026-07-31', unplanned: true },
-    { id: 'vr-32', num: 'ЗП-000032', date: '2026-06-10', state: 'approved', position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 1, found: 1, deadline: '2026-08-15' },
-    { id: 'vr-33', num: 'ЗП-000033', date: '2026-06-15', state: 'approved', position: 'Веб-дизайнер',                  deptId: 'd-fed',    authorId: 'u-strygin',      qty: 1, candidates: 1, found: 1, deadline: '2026-08-20' },
-    { id: 'vr-34', num: 'ЗП-000034', date: '2026-06-22', state: 'approved', position: 'Системный аналитик',            deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 0, deadline: '2026-09-01' },
-    { id: 'vr-35', num: 'ЗП-000035', date: '2026-06-29', state: 'approved', position: 'Системный аналитик',            deptId: 'd-prod',   authorId: 'u-tsumankov',    qty: 2, candidates: 0, found: 0, deadline: '2026-09-15' },
+    { id: 'vr-30', hidden: true, num: 'ЗП-000030', date: '2026-06-01', state: 'approved', position: 'Функциональный архитектор',     deptId: 'd-cproj',  authorId: 'u-gavrilkina',   qty: 1, candidates: 0, found: 0, deadline: '2026-08-31', replacement: true },
+    { id: 'vr-31', hidden: true, num: 'ЗП-000031', date: '2026-06-05', state: 'approved', position: 'Системный аналитик',            deptId: 'd-report', authorId: 'u-glebov',       qty: 5, candidates: 1, found: 0, deadline: '2026-07-31', unplanned: true },
+    { id: 'vr-32', hidden: true, num: 'ЗП-000032', date: '2026-06-10', state: 'approved', position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 1, found: 1, deadline: '2026-08-15' },
+    { id: 'vr-33', hidden: true, num: 'ЗП-000033', date: '2026-06-15', state: 'approved', position: 'Веб-дизайнер',                  deptId: 'd-fed',    authorId: 'u-strygin',      qty: 1, candidates: 1, found: 1, deadline: '2026-08-20' },
+    { id: 'vr-34', hidden: true, num: 'ЗП-000034', date: '2026-06-22', state: 'approved', position: 'Системный аналитик',            deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 0, deadline: '2026-09-01' },
+    { id: 'vr-35', hidden: true, num: 'ЗП-000035', date: '2026-06-29', state: 'approved', position: 'Системный аналитик',            deptId: 'd-prod',   authorId: 'u-tsumankov',    qty: 2, candidates: 0, found: 0, deadline: '2026-09-15' },
     { id: 'vr-43', num: 'ЗП-000043', date: '2026-07-24', state: 'approved', position: 'Тестировщик',                   deptId: 'd-sub',    authorId: 'u-dryamin',      qty: 1, candidates: 0, found: 0, deadline: '2026-10-15' },
     // Выполняется
     { id: 'vr-39', num: 'ЗП-000039', date: '2026-07-14', state: 'progress', position: 'Руководитель проектов',         deptId: 'd-gov',    authorId: 'u-vorfolomeeva', qty: 2, candidates: 9, found: 1, deadline: '2026-09-01', unplanned: true },
-    { id: 'vr-36', num: 'ЗП-000036', date: '2026-07-01', state: 'progress', position: 'Системный аналитик',            deptId: 'd-oper',   authorId: 'u-kladova',      qty: 1, candidates: 1, found: 1, deadline: '2026-08-10', unplanned: true },
-    { id: 'vr-37', num: 'ЗП-000037', date: '2026-07-07', state: 'progress', position: 'Бизнес-аналитик',               deptId: 'd-report', authorId: 'u-glebov',       qty: 1, candidates: 2, found: 0, deadline: '2026-08-31', unplanned: true },
-    { id: 'vr-38', num: 'ЗП-000038', date: '2026-07-10', state: 'progress', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 3, found: 0, deadline: '2026-07-20' },
-    // FT_17: подбор по заявке завершен (HR нажал «Исполнено») — найденный кандидат ждет решения руководителя на вкладке «Адаптация персонала»
-    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'closed',   position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 1, deadline: '2026-09-15', closedAt: '2026-07-24' },
+    { id: 'vr-36', hidden: true, num: 'ЗП-000036', date: '2026-07-01', state: 'progress', position: 'Системный аналитик',            deptId: 'd-oper',   authorId: 'u-kladova',      qty: 1, candidates: 1, found: 1, deadline: '2026-08-10', unplanned: true },
+    { id: 'vr-37', hidden: true, num: 'ЗП-000037', date: '2026-07-07', state: 'progress', position: 'Бизнес-аналитик',               deptId: 'd-report', authorId: 'u-glebov',       qty: 1, candidates: 2, found: 0, deadline: '2026-08-31', unplanned: true },
+    { id: 'vr-38', hidden: true, num: 'ЗП-000038', date: '2026-07-10', state: 'progress', position: 'Аналитик ERP',                  deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 3, found: 0, deadline: '2026-07-20' },
+    // FT_17: подбор по заявке завершен (HR нажал «Исполнено») — найденный кандидат ждет решения руководителя на вкладке «Адаптация персонала»;
+    // FT_42: состояние «Ожидает выхода» (было «Закрыта»), найденный сотрудник — Ковалев Д.С.
+    { id: 'vr-40', num: 'ЗП-000040', date: '2026-07-17', state: 'awaiting', position: 'Программист',                   deptId: 'd-uss',    authorId: 'u-sizova',       qty: 1, candidates: 0, found: 1, deadline: '2026-09-15' },
     // Новая
     { id: 'vr-45', num: 'ЗП-000045', date: '2026-07-24', state: 'new',      position: 'Специалист по кадрам',          deptId: 'd-gpay',   authorId: 'u-gorbunova',    qty: 1, candidates: 0, found: 0, deadline: '2026-10-01', unplanned: true },
-    { id: 'vr-46', num: 'ЗП-000046', date: '2026-07-24', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-15' },
-    { id: 'vr-47', num: 'ЗП-000047', date: '2026-07-25', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 2, candidates: 0, found: 0, deadline: '2026-10-15', unplanned: true },
+    { id: 'vr-46', hidden: true, num: 'ЗП-000046', date: '2026-07-24', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 1, candidates: 0, found: 0, deadline: '2026-10-15' },
+    { id: 'vr-47', hidden: true, num: 'ЗП-000047', date: '2026-07-25', state: 'new',      position: 'Администратор проектов',        deptId: 'd-gadm',   authorId: 'u-kustavinova',  qty: 2, candidates: 0, found: 0, deadline: '2026-10-15', unplanned: true },
     // Закрыта — видны при «Показывать закрытые»
     { id: 'vr-26', num: 'ЗП-000026', date: '2026-05-12', state: 'closed',   position: 'Программист',                   deptId: 'd-doc',    authorId: 'u-podyniglazov', qty: 1, candidates: 0, found: 1, deadline: '2026-07-15', closedAt: '2026-07-10' },
-    { id: 'vr-27', num: 'ЗП-000027', date: '2026-05-18', state: 'closed',   position: 'Бухгалтер-консультант',         deptId: 'd-gacc',   authorId: 'u-mazurova',     qty: 2, candidates: 0, found: 2, deadline: '2026-07-01', closedAt: '2026-07-01', unplanned: true },
-    { id: 'vr-28', num: 'ЗП-000028', date: '2026-05-20', state: 'closed',   position: 'Аналитик',                      deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 0, found: 1, deadline: '2026-07-01', closedAt: '2026-06-30' },
-    { id: 'vr-29', num: 'ЗП-000029', date: '2026-05-25', state: 'closed',   position: 'Специалист по кадрам',          deptId: 'd-gpay',   authorId: 'u-gorbunova',    qty: 1, candidates: 0, found: 1, deadline: '2026-07-20', closedAt: '2026-07-15', replacement: true }
+    { id: 'vr-27', hidden: true, num: 'ЗП-000027', date: '2026-05-18', state: 'closed',   position: 'Бухгалтер-консультант',         deptId: 'd-gacc',   authorId: 'u-mazurova',     qty: 2, candidates: 0, found: 2, deadline: '2026-07-01', closedAt: '2026-07-01', unplanned: true },
+    { id: 'vr-28', hidden: true, num: 'ЗП-000028', date: '2026-05-20', state: 'closed',   position: 'Аналитик',                      deptId: 'd-oper',   authorId: 'u-maznichenko',  qty: 1, candidates: 0, found: 1, deadline: '2026-07-01', closedAt: '2026-06-30' },
+    { id: 'vr-29', hidden: true, num: 'ЗП-000029', date: '2026-05-25', state: 'closed',   position: 'Специалист по кадрам',          deptId: 'd-gpay',   authorId: 'u-gorbunova',    qty: 1, candidates: 0, found: 1, deadline: '2026-07-20', closedAt: '2026-07-15', replacement: true }
   ].map(function (r) { r.unplanned = !!r.unplanned; r.replacement = !!r.replacement; r.closedAt = r.closedAt || null; return r; });
   var resourcePlan = { year: 2026, approved: 20 };
 
