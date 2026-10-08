@@ -527,8 +527,14 @@
   }
   function decideLockText(t) { return canDecidePending(t) ? '' : 'Решение принимает автор заявки: ' + userName(requisitionAuthorId(t)); }
   // Найденные, ожидающие решения, видимые текущему пользователю; порядок — по дате «Исполнено» (сначала давние)
+  // FT_44: кандидат по заявке с формой документа (ЗП-000040) ждет HR: в «Ожидают решения» — только после того, как HR добавил его
+  // в «Трудоустроенные» и нажал «Пропустить» (при «Подтвердить» он сразу на этапе «Подготовка к выходу»)
+  function awaitsHr(t) {
+    var r = requisitionOf(t);
+    return !!(r && r.docForm && !(r.hired || []).some(function (h) { return h.traineeId === t.id; }));
+  }
   function myPending() {
-    return D.trainees.filter(function (t) { return isPendingDecision(t) && canSeePending(t); })
+    return D.trainees.filter(function (t) { return isPendingDecision(t) && canSeePending(t) && !awaitsHr(t); })
       .sort(function (a, b) { return a.foundAt.localeCompare(b.foundAt); });
   }
   // Событие «HR нажал «Исполнено» на задаче по подбору»: найденный появляется в «Ожидают решения», автору заявки — уведомление «Подбор».
@@ -698,6 +704,7 @@
       return;
     }
     if (!canSeePending(t)) { toast('Кандидат ' + t.fullName + ' ожидает решения автора заявки'); return; }
+    if (isPendingDecision(t) && awaitsHr(t)) { toast('Кандидат ' + t.fullName + ' ожидает оформления выхода HR-менеджером в заявке на подбор'); return; }   // FT_44
     if (activeDoc()) switchShell(null);
     state.topTab = 'adaptation';
     state.selectedTraineeId = null;
