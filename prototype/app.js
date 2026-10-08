@@ -512,9 +512,11 @@
   function requisitionOf(t) { return t.requisitionId ? byId(D.vacancyRequests, t.requisitionId) : null; }
   function requisitionAuthorId(t) { var r = requisitionOf(t); return r ? r.authorId : null; }
   // Видят: все, кто видит подразделение по правилам FT_9, и автор заявки на подбор
+  // FT_46: карточки кандидатов до подтверждения выхода («Ожидают решения» и отмененные кандидаты в «Отмененных») видят только
+  // HR-менеджер, курирующий подразделение кандидата, и Администратор (было — автор заявки и все, кто видит подразделение)
   function canSeePending(t) {
     if (isTraineeUser() || isKshUser()) return false;
-    return requisitionAuthorId(t) === D.CURRENT_USER_ID || seesByScope(t);
+    return isAdmin() || curatesDept(D.CURRENT_USER_ID, t.departmentId);
   }
   // Решение (старт или отмена) принимает автор заявки или заместитель руководителя ЦАС
   // FT_43: и HR-менеджер, который курирует подразделение кандидата (или вышестоящее)
@@ -714,7 +716,7 @@
       openTraineeFrom(t.id, null);
       return;
     }
-    if (!canSeePending(t)) { toast('Кандидат ' + t.fullName + ' ожидает решения автора заявки'); return; }
+    if (!canSeePending(t)) { toast('Кандидат ' + t.fullName + ': решение о выходе принимает HR-менеджер'); return; }   // FT_46
     if (isPendingDecision(t) && awaitsHr(t)) { toast('Кандидат ' + t.fullName + ' ожидает оформления выхода HR-менеджером в заявке на подбор'); return; }   // FT_44
     if (activeDoc()) switchShell(null);
     state.topTab = 'adaptation';
