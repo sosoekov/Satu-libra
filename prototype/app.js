@@ -517,7 +517,14 @@
     return requisitionAuthorId(t) === D.CURRENT_USER_ID || seesByScope(t);
   }
   // Решение (старт или отмена) принимает автор заявки или заместитель руководителя ЦАС
-  function canDecidePending(t) { return isAdmin() || D.CURRENT_USER_ID === requisitionAuthorId(t) || D.CURRENT_USER_ID === D.CAS_HEAD_ID; }
+  // FT_43: и HR-менеджер, который курирует подразделение кандидата (или вышестоящее)
+  function curatesDept(uid, deptId) {
+    var own = D.HR_CURATED[uid] || [];
+    return deptChain(deptId).some(function (d) { return own.indexOf(d.id) >= 0; });
+  }
+  function canDecidePending(t) {
+    return isAdmin() || D.CURRENT_USER_ID === requisitionAuthorId(t) || D.CURRENT_USER_ID === D.CAS_HEAD_ID || curatesDept(D.CURRENT_USER_ID, t.departmentId);
+  }
   function decideLockText(t) { return canDecidePending(t) ? '' : 'Решение принимает автор заявки: ' + userName(requisitionAuthorId(t)); }
   // Найденные, ожидающие решения, видимые текущему пользователю; порядок — по дате «Исполнено» (сначала давние)
   function myPending() {
@@ -4833,7 +4840,7 @@
   /* ---------- EXP_1: документ «Заявка на трудоустройство в Bitrix» ----------
    * Один на стажера. Открывается внутренней ссылкой e1cib/command/Документ.ЗаявкаНаТрудоустройствоВBitrix.Создать из задачи чек-листа
    * в своей вкладке окна: если документа еще нет — новый, заполненный из АП и физлица стажера.
-   * Страницы «Поля формы заявки СУП» и «Поля согласования ФЭС». «Записать» / «Записать и закрыть»; пункт чек-листа выполняют отдельно.
+   * Страницы «Поля формы заявки СУП» и «Поля согласования ФЭС». «Записать» / «Записать и отправить на согласование» (FT_43, было «Записать и закрыть»); пункт чек-листа выполняют отдельно.
    * Изменять может любой, кто открыл документ (экспериментальная наработка — права не настраивались)
    */
   var BRQ_EMPLOYMENT = [{ value: 'main', text: 'Основное место работы' }, { value: 'ext', text: 'Внешнее совместительство' }, { value: 'int', text: 'Внутреннее совместительство' }];
@@ -4963,7 +4970,8 @@
         brqField(tab, 'Комментарий от ФЭС', 'fesComment', 'ПолеКомментарийФЭС', 'textarea');
     return '<div class="col gap-4 brq-doc"' + a1c('ГруппаВертикальная', 'ГруппаДокументЗаявка') + '>' +
       '<div class="row command-bar"' + a1c('КоманднаяПанель', 'КоманднаяПанельЗаявки') + '>' +
-        button('Записать и закрыть', { cls: 'btn-primary', action: 'brqSave', data: { close: '1' }, name: 'КнопкаЗаписатьИЗакрыть' }) +
+        // FT_43: было «Записать и закрыть» — поведение прежнее (запись, при первой записи — вопрос об отправке в Bitrix, закрытие вкладки)
+        button('Записать и отправить на согласование', { cls: 'btn-primary', action: 'brqSave', data: { close: '1' }, name: 'КнопкаЗаписатьИОтправитьНаСогласование' }) +
         button('Записать', { action: 'brqSave', name: 'КнопкаЗаписать' }) + '</div>' +
       '<div class="row gap-4 brq-head"' + a1c('ГруппаГоризонтальная', 'ГруппаШапкаЗаявки') + '>' +
         '<span class="muted"' + a1c('Надпись', 'ДекорацияНомерЗаявки') + '>' + (r ? 'Номер ' + esc(r.number) + ' от ' + fmtDate(r.date) : 'Новый документ — номер присвоится при записи') + '</span>' +
