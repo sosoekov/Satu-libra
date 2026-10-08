@@ -5687,14 +5687,12 @@
   DIALOGS.pendingStart = {
     title: 'Подтверждение выхода', form: 'ФормаСтартСтажировки', submit: 'Подтвердить', wide: true,
     titleFn: function () { var t = trainee(state.dialog.traineeId); return 'Подтверждение выхода: ' + t.fullName; },   // FT_23: было «Старт стажировки»
-    // ASSUMPTION (ТЗ 11.4): руководитель стажировки и наставник по умолчанию не заполнены
-    // FT_44: из заявки на подбор (HR) — руководитель стажировки по умолчанию — руководитель подразделения кандидата (если он в списке)
-    init: function (t, ctx) {
+    // FT_44: руководитель стажировки по умолчанию — руководитель подразделения кандидата (если он в списке; было — не заполнен, ТЗ 11.4),
+    // и в «Ожидают решения», и в заявке на подбор (HR); наставник по умолчанию не заполнен
+    init: function (t) {
       var head = '';
-      if (ctx.fromRequest) {
-        var resp = dept(t.departmentId).responsibleId;
-        if (internshipStaff(t.departmentId).some(function (u) { return u.id === resp; })) head = resp;
-      }
+      var resp = dept(t.departmentId).responsibleId;
+      if (internshipStaff(t.departmentId).some(function (u) { return u.id === resp; })) head = resp;
       return { headId: head, mentorId: '', startDate: D.TODAY, durationMode: DURATION_DEFAULT, endDate: internshipEndDate(D.TODAY, DURATION_DEFAULT) };
     },
     cancelTextFn: function () { return dlgCtx().fromRequest ? 'Пропустить' : ''; },   // FT_44: HR откладывает решение — кандидат остается в «Ожидают решения»
